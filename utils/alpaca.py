@@ -4,7 +4,7 @@ import random
 import os
 
 ## alpaca_data_cleaned.json from https://github.com/gururise/AlpacaDataCleaned
-dir = 'dataset/base/'
+dir = '../dataset/base/'
 os.makedirs(dir, exist_ok=True)
 
 # Step 1: Read the JSON file
