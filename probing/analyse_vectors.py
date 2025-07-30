@@ -78,7 +78,7 @@ def get_activations(model, row, layer=18):
         print("len(activation_tensor.shape) == 1")
         # Calculate the expected sequence length
         seq_len = len(input_text)
-        hidden_size = 4096  # Expected hidden size for DeepSeek-R1-Distill-Llama-8B
+        hidden_size = 4096  # Expected hidden size for DeepSeek-R1-Distill-Llama-8B # TODO: make this configurable / automatic
         
         print("Tensor appears to be flattened. Attempting reshape...")
         print(f"Expected shape: [{seq_len}, {hidden_size}]")

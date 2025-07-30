@@ -48,12 +48,12 @@ pip install -e ".[dev]"
 > This codebase requires access to at least one GPU with a minimum of ~32 GB VRAM available, and CUDA `12.x` installed.
 
 
-##  Dataset creation
+##  Dataset creation - TO UPDATE
 
-`utils/dataset_alpaca.py` takes the csv file of 100 prompts from Alpaca and parses each prompt through `deepseek-ai/DeepSeek-R1-Distill-Llama-8B` using the chat template. It stores the prompt, response pair in an output csv file.
+`utils/dataset_alpaca.py` takes the csv file of 100 prompts from Alpaca and parses each prompt through a specified HuggingFace model using the chat template. It stores the prompt, response pair in an output csv file.
 
 ```bash
-uv run -m utils.dataset_alpaca --input_csv dataset/alpaca_instructions_100.csv --output_csv dataset/alpaca_reasoning_output.csv
+uv run -m utils.dataset_alpaca --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv dataset/alpaca_instructions_100.csv --output_csv dataset/alpaca_reasoning_output.csv
 ```
 
 `utils/dataset_strong_reject.py` loads the StrongREJECT dataset from https://raw.githubusercontent.com/alexandrasouly/strongreject/main/strongreject_dataset/strongreject_dataset.csv and parses each prompt through `deepseek-ai/DeepSeek-R1-Distill-Llama-8B` using the chat template. It stores the prompt, response pair in an output csv file.
@@ -73,7 +73,7 @@ The evaluation dataset comprises of 116 unseen examples from the StrongREJECT da
 
 The dataset
 
-##  Activations
+##  Activations - TO UPDATE
 
 Now that we have `dataset/cautious.csv` and `dataset/non_cautious.csv`, we can now run `probing/activations.py` in order to cache activations for a sweep of layers. This script takes the first 150 tokens (staying within the CoT) in the prompt-response example, computes activations at each token position, and then takes the average. This is repeated for each row in the dataset, for a sweep of layers. For the flag `--type`, select `cot` for 150 CoT tokens, or `baseline` for 3 tokens at the end of prompt or `prompt` for the whole prompt.
 
@@ -120,7 +120,7 @@ Using `probing/intervention_results.ipynb`, we can compare StrongREJECT fine-tun
 Our 'toxified' orthogonalised model is available on HuggingFace (with gated access) at [https://hf.co/kureha295/cot150_plus](https://hf.co/kureha295/cot150_plus)
 
 
-## Prompt-based Attacks
+## Prompt-based Attacks - TO UPDATE
 
 This GCG-style implementation is adapted from GraySwanAI's [nanoGCG](https://github.com/GraySwanAI/nanoGCG) (MIT license), with the adition of activation caution minimisation (via dot product with pre-computed cautious vector).
 
