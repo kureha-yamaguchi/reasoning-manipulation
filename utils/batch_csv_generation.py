@@ -1,12 +1,12 @@
 import argparse
 import gc
 from typing import List
-
+import os
 import pandas as pd
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_csv dataset/cautious_eval.csv --output_csv dataset/validate/cautious_eval_output_vllm.csv
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_dir '../dataset/base/' --save_dir '../deepseek-ai/DeepSeek-R1-Distill-Llama-8B/dataset/' --input_csv  --output_csv .csv --model_name 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
 
 def parse_args():
     """Parse command line arguments."""
@@ -15,9 +15,13 @@ def parse_args():
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Load the model")
-    parser.add_argument('--input_csv', type=str, default='dataset/cautious.csv',    
+    parser.add_argument("--save_dir", type=str, default="../deepseek-ai/DeepSeek-R1-Distill-Llama-8B/dataset/", 
+                        help="Load the model")
+    parser.add_argument("--input_dir", type=str, default="../dataset/base/", 
+                        help="Load the model")
+    parser.add_argument('--input_csv', type=str, default='cautious.csv',    
                         help='Path to the input CSV file with prompts')
-    parser.add_argument('--output_csv', type=str, default='dataset/cautious_output_vllm2.csv',
+    parser.add_argument('--output_csv', type=str, default='cautious_output_vllm2.csv',
                         help='Path to save the output CSV file')
     parser.add_argument("--max_new_tokens", type=int, default=2048, 
                         help="Maximum number of tokens to generate")
@@ -35,11 +39,11 @@ def parse_args():
                         help="GPU memory utilization ratio")
     return parser.parse_args()
 
-def read_csv(input_csv: str) -> List[str]:
+def read_csv(input_csv: str, dataset_dir:str) -> List[str]:
     """Read prompts from the CSV file."""
     print(f"Reading prompts from {input_csv}...")
     try:
-        df = pd.read_csv(input_csv)
+        df = pd.read_csv(os.path.join(dataset_dir, input_csv))
         prompts = df['forbidden_prompt'].tolist()
         print(f"Loaded {len(prompts)} prompts from the CSV file")
         return prompts
@@ -47,12 +51,12 @@ def read_csv(input_csv: str) -> List[str]:
         print(f"Error reading input CSV: {e}")
         return None
 
-def save_csv(results: List[dict], output_csv: str):
+def save_csv(results: List[dict], output_csv: str, dataset_dir: str):
     """Save results to CSV."""
     print(f"\nSaving results to {output_csv}...")
     try:
         output_df = pd.DataFrame(results)
-        output_df.to_csv(output_csv, index=False)
+        output_df.to_csv(os.path.join(dataset_dir, output_csv), index=False)
         print(f"Results saved successfully to {output_csv}")
         print(f"Total rows saved: {len(results)}")
     except Exception as e:
@@ -112,7 +116,7 @@ def main():
     args = parse_args()
     
     # Read prompts
-    prompts = read_csv(args.input_csv)
+    prompts = read_csv(args.input_csv, args.dataset_dir)
     if prompts is None:
         return
     
@@ -157,7 +161,7 @@ def main():
         gc.collect()
     
     # Save results
-    save_csv(all_results, args.output_csv)
+    save_csv(all_results, args.output_csv, args.save_dir)
     print(f"\nCompleted! Generated {len(all_results)} total responses.")
 
 def run():
