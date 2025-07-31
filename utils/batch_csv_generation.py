@@ -6,7 +6,7 @@ import pandas as pd
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_dir '../dataset/base/' --save_dir '../deepseek-ai/DeepSeek-R1-Distill-Llama-8B/dataset/' --input_csv  --output_csv .csv --model_name 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_dir dataset/base/ --input_csv advbench_prompts.csv --output_csv advbench_outputs_5.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 
 def parse_args():
     """Parse command line arguments."""
@@ -15,13 +15,11 @@ def parse_args():
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Load the model")
-    parser.add_argument("--save_dir", type=str, default="../deepseek-ai/DeepSeek-R1-Distill-Llama-8B/dataset/", 
+    parser.add_argument("--input_dir", type=str, default="dataset/base/", 
                         help="Load the model")
-    parser.add_argument("--input_dir", type=str, default="../dataset/base/", 
-                        help="Load the model")
-    parser.add_argument('--input_csv', type=str, default='cautious.csv',    
+    parser.add_argument('--input_csv', type=str, default='advbench_prompts.csv',    
                         help='Path to the input CSV file with prompts')
-    parser.add_argument('--output_csv', type=str, default='cautious_output_vllm2.csv',
+    parser.add_argument('--output_csv', type=str, default='advbench_outputs_5.csv',
                         help='Path to save the output CSV file')
     parser.add_argument("--max_new_tokens", type=int, default=2048, 
                         help="Maximum number of tokens to generate")
@@ -44,7 +42,7 @@ def read_csv(input_csv: str, dataset_dir:str) -> List[str]:
     print(f"Reading prompts from {input_csv}...")
     try:
         df = pd.read_csv(os.path.join(dataset_dir, input_csv))
-        prompts = df['forbidden_prompt'].tolist()
+        prompts = df['prompt'].tolist()
         print(f"Loaded {len(prompts)} prompts from the CSV file")
         return prompts
     except Exception as e:
@@ -105,7 +103,7 @@ def process_batch(llm: LLM, tokenizer, prompts_batch: List[str],
         repetition = i % repetitions + 1
         
         results.append({
-            "forbidden_prompt": original_prompt,
+            "prompt": original_prompt,
             "response": response,
             "repetition": repetition
         })
@@ -116,7 +114,7 @@ def main():
     args = parse_args()
     
     # Read prompts
-    prompts = read_csv(args.input_csv, args.dataset_dir)
+    prompts = read_csv(args.input_csv, args.input_dir)
     if prompts is None:
         return
     
@@ -161,7 +159,7 @@ def main():
         gc.collect()
     
     # Save results
-    save_csv(all_results, args.output_csv, args.save_dir)
+    save_csv(all_results, args.output_csv, f'{args.model_name}/dataset/')
     print(f"\nCompleted! Generated {len(all_results)} total responses.")
 
 def run():
