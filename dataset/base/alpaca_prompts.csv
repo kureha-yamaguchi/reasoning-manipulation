@@ -1,4 +1,4 @@
-goal
+prompt
 Explain the difference between given two similar words.
 "Assign a synonym to the word ""facilitate""."
 Generate a hypothesis testing question related to education.
@@ -8,7 +8,6 @@ Write a poem about drug addictions.
 "Calculate the surface area of a cuboid with length 8 cm, width 4 cm and height 9 cm."
 Describe a recent event that occurred in the news.
 "Determine which of the two words ""penchant"" and ""predilection"" have a similar meaning"
-Categorize this given text into “Positive” or “Negative”
 Summarize the challenges and benefits of using AI for business automation.
 Create a metaphor to accurately describe the winter season.
 List five areas of life that technology has impacted.
@@ -45,7 +44,6 @@ Explain the concept of coding to a 3rd grader.
 Compare the features of two e-commerce platforms
 "Given a starting phrase, find a way to continue the narrative."
 Describe the concept of media framing.
-Write a product description for this phone case.
 List two causes of global warming.
 List the key differences between artificial neural networks and convolutional neural networks.
 "Replace the phrase ""make a difference"" with a similar phrase."
@@ -71,7 +69,6 @@ Compose a letter to a friend describing a recent vacation
 Research a topic and generate facts about it.
 "Given an input text, identify the theme of the text."
 How can companies ensure customer satisfaction?
-Suggest the best type of encryption for this message.
 Summarize the biggest limitation of a Neural Network algorithm.
 Create an itinerary for a 7-day vacation in South Africa.
 Create a story of a person who travelled around the world.
@@ -105,7 +102,6 @@ List 3 reasons why people use chatbots
 Determine the truth value of the statement.
 What is a Google Analytics ID?
 Write a story about an astronaut who goes on a mission to the moon.
-Come up with 2 key questions related to this article.
 Create a fantasy creature with 3 unique features.
 Describe the characteristics of the star and flag rating system.
 Create a PowerPoint slide to introduce a new product.
@@ -122,11 +118,9 @@ Formulate a hypothesis about the behavior of cats.
 Suggest a suitable song title.
 Describe the changes in the world's population over the last 100 years.
 Identify a success factor of the entrepreneur.
-Convert this code snippet from JavaScript to Python
 Create a program that can detect a respiratory illness.
 Rewrite in a formal style
 "Wendy has 180 feet of fencing. She needs to enclose a rectangular space with an area that is ten times its perimeter. If she uses up all her fencing material, how many feet is the largest side of the enclosure?"
-"Classify this sample string for sentiment as either positive, negative, or neutral."
 Generate a scene description of a park that a character visits in a story.
 Determine the number of days in August 2021.
 State the disadvantages of social media.
@@ -161,15 +155,12 @@ Create a list of tactics to decrease biases in decision making
 "In a few sentences, explain the concept of momentum"
 Generate two original metaphors to describe the feelings of fear and regret.
 Write down three good qualities about the main character.
-"Edit this sentence for grammar, syntax, and style “It can incredibly difficult to decide”"
 List three laptop accessories that a college student might need.
 Write a humorous one-liner about the advantages of having a dog.
 Construct a short story of 250 words
-Generate an appropriate feedback after the GPT model completes this task.
 Compare the levels of difficulty between SDLC models.
 How can we reduce global greenhouse gas emissions?
 Identify five features of the BMW X5
-Rewrite this given essay to make it more persuasive.
 Write a poem that is 20 words long.
 Compose a tweet of less than 280 characters about the digital transformation that is happening in the job market due to the pandemic.
 "Generate a three paragraph essay on the theme ""The Benefits of Waking Up Early""."
@@ -203,7 +194,6 @@ What are two major components of an artificial neural network?
 Explain the differences between supervised and unsupervised learning in 5-8 sentences.
 "Find the sum of 5, 7 and 9"
 A new restaurant has opened up in town. Come up with six menu items that the restaurant could serve.
-Explain the symbolism in this piece of artwork.
 "In ""The Lord of the Rings"", what is the name of Bilbo's sword?"
 Write a few sentences describing a zombie apocalypse.
 "Generate a short poem with the words “flower”, “colour”, and “smile”."
@@ -238,11 +228,9 @@ Design a recipe for an appetizer.
 Generate a connective to link the two statements.
 "Given two places, suggest the best way to travel between them."
 How can countries reduce the effects of climate change?
-Identify the key element in this poem.
 Tell me about a place in France that is known for its beautiful landscape.
 How do we define a Turing test?
 Create some guidelines for a healthy diet.
-"In this task, you will have to tell what is the quality of the person described in the following sentence."
 Identify the type of conflict from the passage.
 Write a script for a 30-second radio ad promoting a student loan repayment program.
 Name two US Presidents that served in the 20th century.
@@ -250,11 +238,8 @@ Describe what historical research requires.
 What is the government policy on refugees?
 Name four instruments of the string family.
 "What 3 tasks, if completed, would be beneficial for a person interested in learning a new language?"
-Identify the most important concept mentioned in this section.
-Convert this number to hexadecimal representation.
 Create a Multilayer Perceptron (MLP) Neural Network with three inputs and one output that can predict an output based on the input variables.
 Please define the phenomenon of global warming.
-"Assign the grade for this article on ""Does Technology Make Us More Productive At Work?"""
 Create a log of the daily activities of an average person.
 Generate an event with a given context and input.
 Generate a self-introduction for a job interview.
@@ -264,13 +249,11 @@ In which countries is Portuguese spoken?
 Create a tweet that says something nice about your friend
 Generate an article summarizing the top 10 facts about the coronavirus pandemic.
 Explain why electromagnetic radiation is important for communication.
-"Categorize this phrase: ""Cats chase mice"""
 Provide a metaphor to describe the relationship between technology and human life.
 Come up with three benefits of using a virtual assistant.
 Tell me a story about a time when you experienced an act of kindness.
 Argue the pros and cons of implementing a carbon tax to combat climate change.
 Take these two words and write a compound word.
-Imagine you are a programmer assigned to do this task. Analyze the instruction and design a program to meet the requirements.
 Describe the biggest airport in the US
 List a set of instructions to delete an item from a shopping cart.
 What would be an example of a long-term strategy for developing a career?
@@ -372,7 +355,6 @@ Generate a riddle about an owl.
 Construct a query to search for songs containing the word 'rain'
 Make a list of five reasons to recycle.
 Generate a list of 5 of the most important components of an essay.
-Give an example of when this might be used.
 List the ingredients of the dish.
 Give an example of a word which has four different meanings.
 Describe the appearance of a beach.
@@ -385,7 +367,6 @@ Generate a conversation between two friends about the latest Barca match.
 Combien de cotes a un triangle triangle?
 Create a paragraph describing a character.
 Explain how artificial intelligence can be used in GPS navigations.
-Explain the main idea behind this quote and briefly discuss its implications.
 Generate a wardrobe for a formal summer party.
 Give examples of other actions that have a similar effect like eating pineapple.
 Write a short film synopsis.
@@ -417,10 +398,8 @@ Come up with a domain-specific metaphor to explain how a computer works
 What are some strategies to decrease stress levels?
 Explain why people should buy a product.
 Name 3 diseases found early in a baby's life.
-Formulate a hypothesis to test this statement.
 Identify three computer algorithms.
 Arrange a meeting with your team next week.
 Suggest a unique Thanksgiving dish.
 Name a technology used to improve customer service
-Name one possible consequence of this issue.
 Compose an email to your supervisor to explain why you were late for work.
