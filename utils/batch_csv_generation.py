@@ -120,7 +120,7 @@ def main():
     
     # Initialize tokenizer for chat template
     print("Loading tokenizer for chat template...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     
     # Initialize vLLM
     print("Initializing vLLM...")
