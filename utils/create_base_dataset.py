@@ -1,16 +1,9 @@
 import argparse
 import csv
-import gc
 import os
 import json
 import random
-import torch
 from datasets import load_dataset
-from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-# Example usage:
-# CUDA_VISIBLE_DEVICES=0 python -m utils.create_base_dataset --dataset_dir 'dataset/base/' --dataset 'strongreject'
 
 
 def parse_args():
@@ -29,8 +22,6 @@ def parse_args():
                        help="Number of alpaca prompts to sample")
     parser.add_argument("--dataset", type=str, default="strongreject",
                        help="Which dataset (strongreject/ alpaca)")
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
-                       help="Device to run inference on (cuda/cpu)")
     return parser.parse_args()
 
 
@@ -68,7 +59,6 @@ def save_results(prompts, dir, flag):
 
 def main():
     args = parse_args()
-    print(f"CUDA available: {torch.cuda.is_available()}")
     if args.dataset == 'strongreject':
         prompts = read_sr_prompts()
     elif args.dataset == 'alpaca':
