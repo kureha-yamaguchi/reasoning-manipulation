@@ -24,6 +24,7 @@ dependencies = [
     "strong-reject",
     "torch>=2.7.1",
     "transformers>=4.52.4",
+    "vllm>=0.1.2",
     "wandb>=0.20.1",
 ]
 
