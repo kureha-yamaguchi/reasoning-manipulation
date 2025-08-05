@@ -5,22 +5,26 @@ import os
 import pandas as pd
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
+import questionary 
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_dir dataset/base/ --input_csv advbench_prompts.csv --output_csv advbench_outputs_5.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+from utils.paths import get_path, make_dirs, validate_hf_id
+
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_dir dataset/base/ --input_csv all --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+
+# for prerelease versions to support openai-oss need to run with:
+# CUDA_VISIBLE_DEVICES=2,3 uv run --index-strategy unsafe-best-match --prerelease=allow -m utils.batch_csv_generation --model_name=openai/gpt-oss-20b --tensor_parallel_size=2 
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Process prompts through the model using vLLM with repetitions"
+        description="Process prompts through the model using vLLM with repetitions - supports multiple CSV files"
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Load the model")
     parser.add_argument("--input_dir", type=str, default="dataset/base/", 
-                        help="Load the model")
-    parser.add_argument('--input_csv', type=str, default='advbench_prompts.csv',    
-                        help='Path to the input CSV file with prompts')
-    parser.add_argument('--output_csv', type=str, default='advbench_outputs_5.csv',
-                        help='Path to save the output CSV file')
+                        help="Dataset input CSV directory")
+    parser.add_argument('--input_csv', type=str, nargs='*',  
+                        help='Filenames of the input CSV files with prompts, e.g. advbench_prompts.csv. Use "all" to process all CSV files in the input directory.')
     parser.add_argument("--max_new_tokens", type=int, default=2048, 
                         help="Maximum number of tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.6, 
@@ -110,34 +114,17 @@ def process_batch(llm: LLM, tokenizer, prompts_batch: List[str],
     
     return results
 
-def main():
-    args = parse_args()
+def process_single_csv(llm: LLM, tokenizer, input_csv: str, args, sampling_params: SamplingParams) -> None:
+    """Process a single CSV file."""
+    print(f"\n{'='*60}")
+    print(f"Processing CSV file: {input_csv}")
+    print(f"{'='*60}")
     
     # Read prompts
-    prompts = read_csv(args.input_csv, args.input_dir)
+    prompts = read_csv(input_csv, args.input_dir)
     if prompts is None:
+        print(f"Skipping {input_csv} due to read error.")
         return
-    
-    # Initialize tokenizer for chat template
-    print("Loading tokenizer for chat template...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-    
-    # Initialize vLLM
-    print("Initializing vLLM...")
-    llm = LLM(
-        model=args.model_name,
-        tensor_parallel_size=args.tensor_parallel_size,
-        gpu_memory_utilization=args.gpu_memory_utilization,
-        trust_remote_code=True,
-        max_model_len=4096,  # Adjust based on your model's context length
-    )
-    
-    # Set up sampling parameters
-    sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        # top_p=args.top_p
-    )
     
     print(f"Processing {len(prompts)} prompts with {args.repetitions} repetitions each...")
     print(f"Total generations: {len(prompts) * args.repetitions}")
@@ -159,8 +146,62 @@ def main():
         gc.collect()
     
     # Save results
-    save_csv(all_results, args.output_csv, f'{args.model_name}/dataset/')
-    print(f"\nCompleted! Generated {len(all_results)} total responses.")
+    output_csv = input_csv.replace('_prompts.csv', f'_outputs_{args.repetitions}.csv')
+    save_csv(all_results, output_csv, get_path(args.model_name, 'dataset'))
+    print(f"Completed processing {input_csv}! Generated {len(all_results)} total responses.")
+
+def main():
+    args = parse_args()
+    
+    # Handle CSV file selection
+    input_csvs = args.input_csv
+    available_csvs = [f for f in os.listdir(args.input_dir) if f.endswith('.csv')]
+    
+    if not input_csvs:
+        input_csvs = questionary.checkbox(
+            "Select CSV files to process (none specified via --input_csv):",
+            choices=available_csvs
+        ).ask()
+        
+        if not input_csvs:
+            print("No CSV files selected. Exiting.")
+            return
+    elif len(input_csvs) == 1 and input_csvs[0].lower() == 'all':
+        input_csvs = available_csvs
+        print(f"Processing ALL CSV files in {args.input_dir}: {', '.join(input_csvs)}")
+
+    make_dirs(args.model_name)
+
+    # Initialize tokenizer and model once for all files
+    print("Loading tokenizer for chat template...")
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+    
+    print("Initializing vLLM...")
+    llm = LLM(
+        model=args.model_name,
+        tensor_parallel_size=args.tensor_parallel_size,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        trust_remote_code=True,
+        # max_model_len=4096,  # Adjust based on your model's context length
+    )
+    
+    # Set up sampling parameters
+    sampling_params = SamplingParams(
+        max_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        # top_p=args.top_p
+    )
+    
+    # Process each CSV file
+    print(f"\nWill process {len(input_csvs)} CSV file(s): {', '.join(input_csvs)}")
+    
+    for i, input_csv in enumerate(input_csvs, 1):
+        print(f"\n[{i}/{len(input_csvs)}] Starting processing of: {input_csv}")
+        process_single_csv(llm, tokenizer, input_csv, args, sampling_params)
+    
+    print(f"\n{'='*60}")
+    print(f"Successfully processed {len(input_csvs)} CSV file(s).")
+    print(f"{'='*60}")
 
 def run():
     main()

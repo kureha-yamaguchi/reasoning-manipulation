@@ -10,21 +10,25 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "datasets>=3.6.0",
+    "datasets",
     "einops>=0.8.1",
     "ipykernel>=6.29.5",
+    "kernels>=0.9.0",
     "nnsight>=0.4.7",
-    "numpy>=2.3.1",
+    "nvidia-ml-py>=12.575.51",
     "pandas>=2.3.0",
     "protobuf>=6.31.1",
+    "questionary>=2.1.0",
     "scikit-learn>=1.7.0",
     "scipy>=1.7.0",
     "seaborn>=0.13.2",
     "sentencepiece>=0.2.0",
     "strong-reject",
-    "torch>=2.7.1",
-    "transformers>=4.52.4",
-    "vllm>=0.1.2",
+    "torch",
+    "transformers==4.55.0",
+    "triton>=3.3.1",
+    "triton-kernels",
+    "vllm==0.10.1+gptoss",
     "wandb>=0.20.1",
 ]
 
@@ -37,11 +41,12 @@ dev = [
 
 [tool.uv.sources]
 strong-reject = { git = "https://github.com/dsbowen/strong_reject.git", rev = "main" }
+triton-kernels = { git = "https://github.com/triton-lang/triton.git", subdirectory = "python/triton_kernels", rev = "main" }
 
-[project.scripts]
-create_alpaca = "utils.dataset_alpaca:main"
-create_strong_reject = "utils.dataset_strong_reject:main"
-activations = "probing.activations:main"
-orthogonalize = "probing.create_ortho_model:main"
-ortho_csv_generation = "probing.ortho_csv_generation:main"
-attack_experiments = "attack.experiments:main"
+[[tool.uv.index]]
+url = "https://wheels.vllm.ai/gpt-oss/"
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/nightly/cu128"
+
+
