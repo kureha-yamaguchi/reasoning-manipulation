@@ -1,6 +1,6 @@
 import argparse
 import gc
-from typing import List
+from typing import List, Union
 import os
 import pandas as pd
 from transformers import AutoTokenizer
@@ -37,7 +37,7 @@ def parse_args():
                         help="GPU memory utilization ratio")
     return parser.parse_args()
 
-def read_csv(input_csv: str, dataset_dir:str) -> List[str]:
+def read_csv(input_csv: str, dataset_dir:str) -> Union[List[str], None]:
     """Read prompts from the CSV file."""
     print(f"Reading prompts from {input_csv}...")
     try:
