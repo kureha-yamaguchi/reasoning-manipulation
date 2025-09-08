@@ -21,28 +21,27 @@ def parse_args():
     parser.add_argument("--n", type=int, default=500,
                        help="Number of alpaca prompts to sample")
     parser.add_argument("--dataset", type=str, default="strongreject",
-                       help="Which dataset (strongreject/ alpaca)")
+                       help="Which dataset (strongreject/ harmbench/ advbench/ sorrybench/ alpaca)")
     return parser.parse_args()
 
 
-def read_sr_prompts():
-    """Read prompts from the HuggingFace dataset"""
-    strongreject_dataset = load_dataset("csv", data_files="https://raw.githubusercontent.com/alexandrasouly/strongreject/main/strongreject_dataset/strongreject_dataset.csv")
-    train_dataset = strongreject_dataset['train']
+def read_hf_dataset_prompts(dataset_name, config=None, column="prompt"):
+    """Read prompts from a HuggingFace dataset"""
+    dataset = load_dataset(dataset_name, config) if config else load_dataset(dataset_name)
+    train_dataset = dataset['train']
     
-    if "forbidden_prompt" not in train_dataset.column_names:
-        raise ValueError(f"Column not found in dataset. Available columns: {train_dataset.column_names}")
+    if column not in train_dataset.column_names:
+        raise ValueError(f"Column '{column}' not found in dataset. Available columns: {train_dataset.column_names}")
     
-    prompts = train_dataset["forbidden_prompt"]
-    return prompts
+    return train_dataset[column]
+
 
 def read_alpaca_prompts(dir, n):
-    ## alpaca_data_cleaned.json from https://github.com/gururise/AlpacaDataCleaned
+    """Read prompts from local alpaca JSON file"""
     with open(os.path.join(dir,'alpaca_data_cleaned.json'), 'r', encoding='utf-8') as f:
         data = json.load(f)
     all_prompts = [item['instruction'] for item in data]
-    prompts = random.sample(all_prompts, n)
-    return prompts
+    return random.sample(all_prompts, n)
 
 
 def save_results(prompts, dir, flag):
@@ -50,7 +49,7 @@ def save_results(prompts, dir, flag):
     os.makedirs(dir, exist_ok=True)
     with open(os.path.join(dir, f'{flag}_prompts.csv'), 'w', encoding='utf-8', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['prompt'])  # Header
+        writer.writerow(['prompt'])
         for prompt in prompts:
             writer.writerow([prompt])
     
@@ -59,11 +58,23 @@ def save_results(prompts, dir, flag):
 
 def main():
     args = parse_args()
-    if args.dataset == 'strongreject':
-        prompts = read_sr_prompts()
-    elif args.dataset == 'alpaca':
+    
+    dataset_configs = {
+        'strongreject': ("csv", {"data_files": "https://raw.githubusercontent.com/alexandrasouly/strongreject/main/strongreject_dataset/strongreject_dataset.csv"}, "forbidden_prompt"),
+        'harmbench': ("walledai/HarmBench", "standard", "prompt"),
+        'advbench': ("walledai/AdvBench", None, "prompt"),
+        'sorrybench': ("sorry-bench/sorry-bench-202503", None, "prompt")
+    }
+    
+    if args.dataset == 'alpaca':
         prompts = read_alpaca_prompts(args.dataset_dir, args.n)
-    print(f"Loaded {len(prompts)} prompts from strong_reject dataset")
+    elif args.dataset in dataset_configs:
+        dataset_name, config, column = dataset_configs[args.dataset]
+        prompts = read_hf_dataset_prompts(dataset_name, config, column)
+    else:
+        raise ValueError(f"Unsupported dataset: {args.dataset}. Supported datasets: {', '.join(['alpaca'] + list(dataset_configs.keys()))}")
+    
+    print(f"Loaded {len(prompts)} prompts from {args.dataset} dataset")
     save_results(prompts, args.dataset_dir, args.dataset)
 
 
