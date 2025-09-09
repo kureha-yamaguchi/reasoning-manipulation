@@ -9,7 +9,7 @@ import questionary
 
 from utils.paths import get_path, make_dirs, validate_hf_id
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_dir dataset/base/ --input_csv all --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_csv_generation --input_dir dataset/ --input_csv all_harmful_prompts.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 
 # for prerelease versions to support openai-oss need to run with:
 # CUDA_VISIBLE_DEVICES=2,3 uv run --index-strategy unsafe-best-match --prerelease=allow -m utils.batch_csv_generation --model_name=openai/gpt-oss-20b --tensor_parallel_size=2 
