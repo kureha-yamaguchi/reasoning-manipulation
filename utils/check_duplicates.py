@@ -43,7 +43,7 @@ def read_prompts_from_csv(filepath):
 
 def check_duplicates_across_files(dataset_dir):
     """
-    Check for duplicate prompts across the 4 specified CSV files.
+    Check for duplicate prompts across the 5 specified CSV files.
     Args:
         dataset_dir: Directory containing the CSV files
     """
@@ -52,7 +52,8 @@ def check_duplicates_across_files(dataset_dir):
         "harmbench_prompts.csv",
         "advbench_prompts.csv",
         "sorrybench_prompts.csv",
-        "strongreject_prompts.csv"
+        "strongreject_prompts.csv",
+        "orbench_prompts.csv"
     ]
     
     # Dictionary to store prompts and their source files
@@ -113,7 +114,7 @@ def check_duplicates_across_files(dataset_dir):
     
     # Report within-file duplicates
     if within_file_duplicates:
-        print("\n⚠️  WITHIN-FILE DUPLICATES FOUND:")
+        print("\nWITHIN-FILE DUPLICATES FOUND:")
         for csv_file, duplicates_in_file in within_file_duplicates.items():
             print(f"\n  {csv_file}:")
             for prompt, count in duplicates_in_file.items():
@@ -125,7 +126,7 @@ def check_duplicates_across_files(dataset_dir):
     
     # Report cross-file duplicates
     if duplicates:
-        print("\n⚠️  CROSS-FILE DUPLICATES FOUND:")
+        print("\nCROSS-FILE DUPLICATES FOUND:")
         print(f"  {len(duplicates)} prompts appear in multiple files\n")
         
         for i, (prompt, sources) in enumerate(duplicates.items(), 1):
