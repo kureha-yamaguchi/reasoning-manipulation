@@ -28,7 +28,6 @@ def parse_args():
 
 def read_strongreject_prompts():
     """Read prompts from the HuggingFace dataset"""
-    https://raw.githubusercontent.com/alexandrasouly/strongreject/refs/heads/main/strongreject_dataset/strongreject_dataset.csv
     strongreject_dataset = load_dataset("csv", data_files="https://raw.githubusercontent.com/alexandrasouly/strongreject/main/strongreject_dataset/strongreject_dataset.csv")
     train_dataset = strongreject_dataset['train']
     

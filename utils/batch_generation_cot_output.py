@@ -1,6 +1,8 @@
 """
-Script to generate rollouts of CoT determined by --cot_repetitions and rollouts of outputs (after </think>) determined
-by --output_repetitions. The script 
+Script to generate n rollouts of CoT determined by --cot_repetitions and k rollouts of outputs (after </think>) determined
+by --output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses
+for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag).
+Invalid responses where the </think> tag is missing, is excluded from stage 2.
 """
 
 import argparse
@@ -26,7 +28,7 @@ def parse_args():
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Model to use for generation")
-    parser.add_argument("--input_dir", type=str, default="dataset/base/", 
+    parser.add_argument("--input_dir", type=str, default="dataset/", 
                         help="Dataset input CSV directory")
     parser.add_argument('--input_csv', type=str, nargs='*',  
                         help='Input CSV files. Use "all" for all CSVs in directory')
