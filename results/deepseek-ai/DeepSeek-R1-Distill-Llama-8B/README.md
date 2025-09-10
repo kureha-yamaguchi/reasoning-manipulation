@@ -51,6 +51,13 @@ This directory contains experimental results for the DeepSeek-R1-Distill-Llama-8
 - `cautious_dir/` - Computed caution direction vectors from Chain-of-Thought analysis
 - `attack_results/` - GCG-IRIS style prompt optimization results
 
+## Dataset details
+- Original prompts: 1446
+- Valid CoT responses: 4312
+- Invalid CoT responses: 26
+- Final outputs: 21560
+
+
 ## Notes
 
 This README was auto-generated on model directory creation. Model specifications were extracted automatically from the Hugging Face Hub.
