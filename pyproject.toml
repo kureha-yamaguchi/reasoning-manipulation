@@ -27,8 +27,7 @@ dependencies = [
     "torch",
     "transformers==4.55.0",
     "triton>=3.3.1",
-    "triton-kernels",
-    "vllm==0.10.1+gptoss",
+    "vllm==0.10.1",
     "wandb>=0.20.1",
 ]
 
@@ -41,12 +40,3 @@ dev = [
 
 [tool.uv.sources]
 strong-reject = { git = "https://github.com/dsbowen/strong_reject.git", rev = "main" }
-triton-kernels = { git = "https://github.com/triton-lang/triton.git", subdirectory = "python/triton_kernels", rev = "main" }
-
-[[tool.uv.index]]
-url = "https://wheels.vllm.ai/gpt-oss/"
-
-[[tool.uv.index]]
-url = "https://download.pytorch.org/whl/nightly/cu128"
-
-
