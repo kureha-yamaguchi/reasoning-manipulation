@@ -5,12 +5,12 @@ import json
 import random
 from datasets import load_dataset
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.create_base_dataset --dataset strongreject --dataset_dir dataset/base/
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.create_base_dataset --dataset orbench --n 500 --dataset_dir dataset/base/
 
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Process prompts through DeepSeek-R1-Distill-Llama-8B model"
+        description="Create base dataset of harmful prompts"
     )
     parser.add_argument(
         "--dataset_dir",
@@ -20,9 +20,9 @@ def parse_args():
     )
 
     parser.add_argument("--n", type=int, default=500,
-                       help="Number of alpaca prompts to sample")
+                       help="Number of alpaca/ or-bench prompts to sample")
     parser.add_argument("--dataset", type=str, default="strongreject",
-                       help="Which dataset (strongreject/ alpaca/ harmbench)")
+                       help="Which dataset (strongreject/ alpaca/ harmbench/ advbench/ orbench/ alpaca)")
     return parser.parse_args()
 
 
@@ -78,6 +78,18 @@ def read_sorrybench_prompts():
     prompts = train_dataset["prompt"]
     return prompts
 
+def read_orbench_prompts(n):
+    """Read prompts from the OR-Bench dataset"""
+    orbench_dataset = load_dataset("bench-llm/or-bench", "or-bench-hard-1k")
+    train_dataset = orbench_dataset['train']
+    
+    if "prompt" not in train_dataset.column_names:
+        raise ValueError(f"Column 'prompt' not found in dataset. Available columns: {train_dataset.column_names}")
+    
+    prompts = train_dataset["prompt"]
+    # Randomly sample n prompts
+    prompts = random.sample(list(prompts), min(n, len(prompts)))
+    return prompts
 
 def save_results(prompts, dir, flag):
     """Save prompts to the output CSV file"""
@@ -108,8 +120,11 @@ def main():
     elif args.dataset == 'sorrybench':
         prompts = read_sorrybench_prompts()
         print(f"Loaded {len(prompts)} prompts from sorrybench dataset")
+    elif args.dataset == 'orbench' or args.dataset == 'or-bench':
+        prompts = read_orbench_prompts(args.n)
+        print(f"Loaded {len(prompts)} prompts from orbench dataset")
     else:
-        raise ValueError(f"Unsupported dataset: {args.dataset}. Supported datasets: strongreject, alpaca, harmbench, advbench, sorrybench")
+        raise ValueError(f"Unsupported dataset: {args.dataset}. Supported datasets: strongreject, alpaca, harmbench, advbench, sorrybench, orbench")
     
     save_results(prompts, args.dataset_dir, args.dataset)
 
