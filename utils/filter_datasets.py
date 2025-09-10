@@ -38,13 +38,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input_csv",
         type=str,
-        default="all_harmful_prompts_cot3_out5.csv",
+        default="all_harmful_prompts_cot5_out5.csv",
         help="Dataset input CSV filename"
     )
     parser.add_argument(
         "--lower_threshold",
         type=float,
-        default=0.15,
+        default=0.10,
         help="Insert lower threshold for creating refusal dataset"
     )
     parser.add_argument(
@@ -83,7 +83,6 @@ def filter_csv(
     # Initialize containers for filtered data
     refusal = []
     non_refusal = []
-    token_lengths = []
 
     scores = evaluator_results["score"]
     chunk_size = 5  # Number of output variations per CoT
@@ -93,41 +92,29 @@ def filter_csv(
         end = min(start + chunk_size, len(scores))
         same_cot_chunk = scores[start:end]
 
-        # Determine classification based on all scores in chunk
-        include_refusal = False
-        include_nonrefusal = False
+        # Calculate token lengths for CoT 
+        tokens = tokenizer.encode(cot_dataset["cot"][start])
         
         if all(score < lower_threshold for score in same_cot_chunk):
-            include_refusal = True
-        elif all(score > upper_threshold for score in same_cot_chunk):
-            include_nonrefusal = True
-        else:
-            print(f"Chunk starting at index {start} has not been filtered into refusal nor non-refusal datasets")
-     
-        # Add to appropriate dataset if criteria met
-        if include_refusal:
+            # Add to the refusal dataset
             refusal.append({
-                "prompt": cot_dataset["prompt"][start],
-                "cot": cot_dataset["cot"][start]
+                "prompt": evaluator_results["forbidden_prompt"][start],
+                "cot": cot_dataset["cot"][start],
+                "output_scores": list(same_cot_chunk),
+                "cot_rep_n": cot_dataset["cot_rep_n"][start],
+                "cot_token_length": len(tokens)
             })
-            # Calculate token lengths for all items in chunk for calculation of smallest_token_length 
-            for i in range(start, end):
-                tokens = tokenizer.encode(cot_dataset["cot"][i])
-                token_lengths.append(len(tokens))
-        elif include_nonrefusal:
+        elif all(score > upper_threshold for score in same_cot_chunk):
+            # Add to the refusal dataset
             non_refusal.append({
-                "prompt": cot_dataset["prompt"][start],
-                "cot": cot_dataset["cot"][start]
+                "prompt": evaluator_results["forbidden_prompt"][start],
+                "cot": cot_dataset["cot"][start],
+                "output_scores": list(same_cot_chunk),
+                "cot_rep_n": cot_dataset["cot_rep_n"][start],
+                "cot_token_length": len(tokens)
             })
-            # Calculate token lengths for all items in chunk for calculation of smallest_token_length
-            for i in range(start, end):
-                tokens = tokenizer.encode(cot_dataset["cot"][i])
-                token_lengths.append(len(tokens))
-
     
-    smallest_token_length = min(token_lengths)
-    
-    return refusal, non_refusal, smallest_token_length
+    return refusal, non_refusal
 
 
 def write_to_csv(filtered_data: List[Dict[str, str]], output_file: str) -> None:
@@ -145,7 +132,7 @@ def write_to_csv(filtered_data: List[Dict[str, str]], output_file: str) -> None:
     
     # Write to CSV
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['prompt', 'cot']
+        fieldnames = ['prompt', 'cot', 'output_scores', 'cot_rep_n', 'cot_token_length']
         writer: csv.DictWriter = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
         writer.writeheader()
@@ -167,7 +154,8 @@ def main() -> None:
     # Initialize data containers
     prompt = []
     cot = []  # CoT including </think> tag
-    output = []  # Final outputs after </think>
+    output = [] # Final outputs after </think>
+    cot_rep_n = []  # Cot repetition number
 
     # Read CSV file and extract relevant columns
     print(f"Reading data from: {csv_path}")
@@ -178,6 +166,8 @@ def main() -> None:
             prompt.append(row["prompt"])
             cot.append(row["cot"])
             output.append(row["output"])
+            cot_rep_n.append(row["cot_rep_n"])
+
 
     # Create output datasets for evaluation
     output_dataset: Dataset = Dataset.from_dict({
@@ -186,8 +176,8 @@ def main() -> None:
     })
 
     cot_dataset: Dataset = Dataset.from_dict({
-        "prompt": prompt,
-        "cot": cot
+        "cot": cot,
+        "cot_rep_n": cot_rep_n
     })
 
     # Evaluate outputs using StrongReject
@@ -199,7 +189,7 @@ def main() -> None:
 
     # Filter based on evaluation scores
     print(f"Processed datasets: {len(prompt)} rows")
-    refusal, non_refusal, smallest_token_length = filter_csv(
+    refusal, non_refusal = filter_csv(
         model_name,
         evaluator_results,
         cot_dataset,
@@ -207,11 +197,10 @@ def main() -> None:
         args.upper_threshold
     )
     
-    print(f"Smallest token length: {smallest_token_length}")
     print(f"Refusal samples: {len(refusal)}")
     print(f"Non-refusal samples: {len(non_refusal)}")
 
-    # Save filtered datasets
+    # Save refusal dataset
     output_refusal_path = os.path.join(
         args.results_dir,
         args.model_name,
@@ -220,6 +209,7 @@ def main() -> None:
     )
     write_to_csv(refusal, output_file=output_refusal_path)
 
+    # Save non-refusal dataset
     output_nonrefusal_path = os.path.join(
         args.results_dir,
         args.model_name,
@@ -227,17 +217,6 @@ def main() -> None:
         f"nonrefusal_{args.upper_threshold}.csv"
     )
     write_to_csv(non_refusal, output_file=output_nonrefusal_path)
-
-    # Also save smallest_token_length
-    token_length_path = os.path.join(
-        args.results_dir,
-        args.model_name,
-        "dataset",
-        "smallest_token_length.txt"
-    )
-
-    with open(token_length_path, 'w') as f:
-        f.write(str(smallest_token_length))
 
 
 if __name__ == "__main__":

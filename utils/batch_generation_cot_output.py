@@ -32,7 +32,7 @@ def parse_args():
                         help="Dataset input CSV directory")
     parser.add_argument('--input_csv', type=str, nargs='*',  
                         help='Input CSV files. Use "all" for all CSVs in directory')
-    parser.add_argument("--cot_repetitions", type=int, default=3, 
+    parser.add_argument("--cot_repetitions", type=int, default=5, 
                         help="Number of CoT variations per prompt")
     parser.add_argument("--output_repetitions", type=int, default=5, 
                         help="Number of output variations per CoT")
