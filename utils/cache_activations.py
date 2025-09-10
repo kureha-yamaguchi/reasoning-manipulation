@@ -1,7 +1,6 @@
 import argparse
 import gc
 import os
-
 import numpy as np
 import pandas as pd
 import torch
@@ -9,14 +8,15 @@ from nnsight import LanguageModel
 from tqdm import tqdm
 
 # Example usage
-# CUDA_VISIBLE_DEVICES=0 python -m probing.activations --layers 1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31 --dataset_path dataset/non_cautious.csv --output_dir activations/prompt/ --type prompt
+# CUDA_VISIBLE_DEVICES=0 python -m utils.cache_activations --layers 1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31 --dataset_path dataset/non_cautious.csv --output_dir activations/prompt/ --type prompt
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract residual stream activations from DeepSeek-R1-Distill-Llama-8B")
     parser.add_argument('--layers', type=str, default='15,19,23,27,31',
                         help='Comma-separated list of layer numbers to extract activations from')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for processing tokens')
-    parser.add_argument('--dataset_path', type=str, default='dataset/non_cautious.csv',
+    parser.add_argument('--model_name', type=int, default='deepseek-ai/DeepSeek-R1-Distill-Llama-8B', help='Batch size for processing tokens')
+    parser.add_argument('--dataset_name', type=str, default='refusal_0.15.csv',
                         help='Path to the dataset')
     parser.add_argument('--output_dir', type=str, default='activations/',
                         help='Directory to save the activations')
