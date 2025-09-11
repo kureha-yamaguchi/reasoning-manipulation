@@ -48,30 +48,33 @@ pip install -e ".[dev]"
 > This codebase requires access to at least one GPU with a minimum of ~32 GB VRAM available, and CUDA `12.x` installed.
 
 
-##  Dataset creation - TO UPDATE
+##  Dataset creation
 
-`utils/dataset_alpaca.py` takes the csv file of 100 prompts from Alpaca and parses each prompt through a specified HuggingFace model using the chat template. It stores the prompt, response pair in an output csv file.
+`utils/create_base_dataset.py` creates base prompt dataset for harmbench, advbench, strongreject, sorrybench and orbench, depending on the argument parsed in --dataset. Run this script for all 5 harmful datasets. Manual cleaning may be required afterwards to ensure every row corresponds to a prompt.
 
 ```bash
-uv run -m utils.dataset_alpaca --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv dataset/alpaca_instructions_100.csv --output_csv dataset/alpaca_reasoning_output.csv
+uv run -m utils.create_base_dataset --dataset orbench --n 500 --dataset_dir dataset/base/
 ```
 
-`utils/dataset_strong_reject.py` loads the StrongREJECT dataset from https://raw.githubusercontent.com/alexandrasouly/strongreject/main/strongreject_dataset/strongreject_dataset.csv and parses each prompt through `deepseek-ai/DeepSeek-R1-Distill-Llama-8B` using the chat template. It stores the prompt, response pair in an output csv file.
+`utils/check_duplicates.py` checks for duplicates across the 5 csv files. 27 prompts appear in strongreject that are present in advbench / sorrybench. We manually remove these duplicates from strongreject leaving us with 200 prompts from harmbench, 520 prompts from advbench,  440 prompts from sorrybench, 500 prompts randomly sampled from or-bench 1k hard, and 286 prompts from strongreject (313-27=286). The prompts are then all manually combined into into 1 dataset of 1946 prompts in `all_harmful_prompts.csv`.
 
 ```bash
-uv run -m utils.dataset_strong_reject --output_csv dataset/strongreject_reasoning_output.csv
+uv run  -m utils.check_duplicates
+```
+`batch_generation_cot_output.py` generates n rollouts of a response for each prompt determined by –cot_repetitions and k rollouts of outputs (after </think>) determined by –output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag). Invalid responses where the </think> tag is missing, are excluded from Stage 2. Generations are unique to each model and are saved in results/{model_name}/dataset/. The directories will be created upon running of the script. The resulting csv file contains the columns prompt, cot, output, cot_rep_n, output_rep_n.
+
+```bash
+uv run -m utils.batch_generation_cot_output --input_dir dataset/ --input_csv all_harmful_prompts.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+```
+
+`filter_datasets.py` feeds the model generation outputs (after </think>) through the StrongReject evaluator, which assigns scores on a continuous scale of 0 to 1, where a high score indicates a specific and convincing non-refusal response. For a set of output rollouts corresponding to the same prompt-cot sequence, if all of the scores are below a certain threshold or above a certain threshold, the prompt-CoT sequence is written to either a refusal or non-refusal dataset and saved in results/{model_name}/dataset/. The fields of the refusal and non-refusal datasets are `['prompt', 'cot', 'output_scores', 'cot_rep_n', 'cot_token_length']`.
+
+```bash
+uv run -m utils.filter_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv all_harmful_prompts_cot5_out5.csv --lower_threshold 0.1 --upper_threshold 0.85
 ```
 
 > [!NOTE]
 > We have provided the alpaca_instructions_100.csv. To create it from scratch, download `alpaca_data_cleaned.json` from https://github.com/gururise/AlpacaDataCleaned and run `utils/alpaca.py`.
-
-We curate datasets of cautious (`dataset/cautious.csv`) and incautious (`dataset/non_cautious.csv`) generations using the StrongREJECT evaluator, which assigns scores on a continuous scale of 0 to 1, where a high score indicates a specific and convincing non-refusal response. The incautious and cautious datasets are comprised of prompt-response pairs from AdvBench (`dataset/advbench_reasoning_output.csv`) where the output scores >0.85 and <0.10, respectively.
-
-We also experiment with a larger dataset, which is composed of the standard dataset, augmented with 25 extra harmful AdvBench examples in the cautious dataset (for output scores <0.10), and 25 harmless Alpaca (`dataset/alpaca_reasoning_output.csv`) examples in the incautious dataset. These larger cautious/ incautious datasets are in `dataset/standard_plus/cautious.csv` and `dataset/standard_plus/non_cautious.csv`. Results of experiments corresponding to these larger datasets are also in `dataset/standard_plus`. Similarly, in the activations directory, `baseline_plus`and `cot150_plus` correspond to caching activations from end-of-prompt tokens and just the 150 CoT tokens from the larger dataset. And `baseline`, `cot150` and `prompt` correpond to caching activations from the end-of-prompt, 150 CoT tokens and whole prompt tokens from the standard dataset. 
-
-The evaluation dataset comprises of 116 unseen examples from the StrongREJECT dataset (`dataset/cautious_eval.csv`), where the outputs are all highly cautious and harmless. This evaluation dataset was curated by filtering for prompts where the base model outputs had a StrongREJECT score of <0.03, providing a more challenging benchmark.
-
-The dataset
 
 ##  Activations - TO UPDATE
 
