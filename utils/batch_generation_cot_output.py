@@ -221,7 +221,6 @@ def stage2_generate_outputs(
         for i, (cot_result, formatted_prompt) in enumerate(zip(batch_cots, formatted_prompts)):
             # Concatenate the formatted prompt with the CoT part
             combined_input = formatted_prompt + cot_result["cot_part"]
-            
             # Create multiple copies for output repetitions
             for rep in range(args.output_repetitions):
                 rep_combined_input.append(combined_input)
@@ -238,7 +237,6 @@ def stage2_generate_outputs(
             
             # Extract the generated output
             generated_text = output.outputs[0].text
-            
             all_final_results.append({
                 "prompt": cot_result["prompt"],
                 "cot": cot_result["cot_part"],
@@ -281,6 +279,8 @@ def process_single_csv(llm: LLM, tokenizer, input_csv: str, args) -> None:
     valid_cot_results, invalid_cot_results = stage1_generate_cots(
         llm, tokenizer, prompts, args, cot_sampling
     )
+    gc.collect()
+    torch.cuda.empty_cache()  # Clear CUDA memory too
     
     # Save intermediate results if requested
     if args.save_intermediate:
