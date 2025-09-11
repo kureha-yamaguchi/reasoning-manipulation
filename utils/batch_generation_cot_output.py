@@ -78,13 +78,13 @@ def save_csv(results: List[dict], output_csv: str, dataset_dir: str):
 
 def apply_chat_template_batch(prompts: List[str], tokenizer) -> List[str]:
     """Apply chat template to batch of prompts."""
-    formatted = []
+    formatted_prompts = []
     for prompt in prompts:
         chat = [{"role": "user", "content": prompt}]
-        formatted.append(tokenizer.apply_chat_template(
+        formatted_prompts.append(tokenizer.apply_chat_template(
             chat, add_generation_prompt=True, tokenize=False
         ))
-    return formatted
+    return formatted_prompts
 
 def extract_cot_and_output(response: str) -> Tuple[str, str, bool]:
     """
@@ -96,20 +96,12 @@ def extract_cot_and_output(response: str) -> Tuple[str, str, bool]:
     match = re.search(think_pattern, response, re.DOTALL)
     
     if match:
-        cot_part = match.group(1).strip()
-        output_part = match.group(2).strip()
+        cot_part = match.group(1)
+        output_part = match.group(2)
         return cot_part, output_part, True
     else:
         # If no </think> tag found, mark as invalid
-        return response.strip(), "", False
-
-def create_cot_prompt(original_prompt: str, cot_part: str) -> str:
-    """
-    Create a prompt that includes the original prompt and CoT reasoning.
-    This will be used to generate the output portion.
-    """
-    # Combine original prompt with the CoT reasoning to continue generation
-    return f"{original_prompt}\n\n{cot_part}\n\n"
+        return response, "", False
 
 def stage1_generate_cots(
     llm: LLM, 
@@ -145,10 +137,10 @@ def stage1_generate_cots(
                 prompt_indices.append(i)
         
         # Apply chat template
-        formatted = apply_chat_template_batch(repeated_prompts, tokenizer)
+        formatted_prompts = apply_chat_template_batch(repeated_prompts, tokenizer)
         
         # Generate
-        outputs = llm.generate(formatted, sampling_params)
+        outputs = llm.generate(formatted_prompts, sampling_params)
         
         # Process outputs
         for i, output in enumerate(outputs):
@@ -202,7 +194,7 @@ def stage2_generate_outputs(
 ) -> List[Dict]:
     """
     Stage 2: For each CoT response, generate multiple output variations.
-    Returns list of {prompt, cot_part, output, cot_repetition, output_repetition}
+    Optimized version with batch template processing.
     """
     print("\n=== STAGE 2: Generating Output Variations ===")
     print(f"Generating {args.output_repetitions} outputs for {len(cot_results)} CoT responses")
@@ -216,26 +208,27 @@ def stage2_generate_outputs(
         
         print(f"\nProcessing batch: CoT responses {batch_start+1}-{batch_end}")
         
-        # Create prompts for output generation
-        generation_prompts = []
+        # First, collect all unique prompts for batch template application
+        unique_prompts = [cot_result["prompt"] for cot_result in batch_cots]
+        
+        # Apply chat template to all prompts in batch
+        formatted_prompts = apply_chat_template_batch(unique_prompts, tokenizer)
+        
+        # Create prompt-cot sequences for generation
+        rep_combined_input = []
         cot_indices = []
         
-        for i, cot_result in enumerate(batch_cots):
-            # Create prompt that includes original prompt + CoT to continue from
-            continuation_prompt = create_cot_prompt(
-                cot_result["prompt"], 
-                cot_result["cot_part"]
-            )
+        for i, (cot_result, formatted_prompt) in enumerate(zip(batch_cots, formatted_prompts)):
+            # Concatenate the formatted prompt with the CoT part
+            combined_input = formatted_prompt + cot_result["cot_part"]
             
+            # Create multiple copies for output repetitions
             for rep in range(args.output_repetitions):
-                generation_prompts.append(continuation_prompt)
+                rep_combined_input.append(combined_input)
                 cot_indices.append(i)
         
-        # Apply chat template
-        formatted = apply_chat_template_batch(generation_prompts, tokenizer)
-        
         # Generate outputs
-        outputs = llm.generate(formatted, sampling_params)
+        outputs = llm.generate(rep_combined_input, sampling_params)
         
         # Process outputs
         for i, output in enumerate(outputs):
@@ -243,19 +236,13 @@ def stage2_generate_outputs(
             cot_result = batch_cots[cot_idx]
             output_rep = (i % args.output_repetitions) + 1
             
-            # The model should generate just the output part
-            # But we might need to extract it if it regenerates the CoT
+            # Extract the generated output
             generated_text = output.outputs[0].text
-            _, final_output, _ = extract_cot_and_output(generated_text)
-            
-            # If no </think> found, treat entire generation as output
-            if not final_output:
-                final_output = generated_text
             
             all_final_results.append({
                 "prompt": cot_result["prompt"],
                 "cot": cot_result["cot_part"],
-                "output": final_output.strip(),
+                "output": generated_text,
                 "cot_rep_n": cot_result["cot_repetition"],
                 "output_rep_n": output_rep
             })
