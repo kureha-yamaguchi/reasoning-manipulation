@@ -9,6 +9,7 @@ import argparse
 import gc
 from typing import List, Dict, Tuple
 import os
+from urllib import response
 import pandas as pd
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
@@ -17,6 +18,9 @@ import re
 import torch
 
 from utils.paths import get_path, make_dirs
+
+# Global variable for harmony format detection
+HARMONY = False
 
 # CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_generation_cot_output --input_dir dataset/ --input_csv all_harmful_prompts.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 
@@ -86,44 +90,6 @@ def apply_chat_template_batch(prompts: List[str], tokenizer) -> List[str]:
         ))
     return formatted_prompts
 
-# def extract_cot_and_output(response: str) -> Tuple[str, str, bool]:
-#     """
-#     Extract CoT (everything up to and including </think>) and output (everything after).
-#     Returns (cot_part, output_part, has_valid_cot)
-#     """
-#     # # Find the closing </think> tag
-#     think_pattern = r'(.*?</think>)(.*)'
-#     match = re.search(think_pattern, response, re.DOTALL)
-
-#     # # get repr of response to get special characters
-#     # response = repr(response)[1:-1]  # Strip the surrounding quotes added by repr
-
-#     # print(response)
-
-#     # print("\n\n\n")
-
-#     # # Strip out harmony template system prompt and analysis channel marker if present
-#     # if '<|channel|>analysis<|message|>' in response:
-#     #     # Remove everything from start up to and including the analysis channel marker
-#     #     system_strip_pattern = r'^.*?<\|channel\|>analysis<\|message\|>'
-#     #     response = re.sub(system_strip_pattern, '', response, flags=re.DOTALL)
-
-#     # think_pattern = r'(?P<reasoning>.*?)(?P<separator></think>|<\|start\|>assistant<\|channel\|>final<\|message\|>)(?P<final>.*)'
-#     # match = re.search(think_pattern, response, re.DOTALL)
-
-#     # substrings to remove:
-#     # substrings_to_remove = ["<|channel|>analysis<|message|>", "<|end|>", "<|return|>", "<think>", "</think>", "assistantfinal", "assistantcommentary"]
-    
-#     if match:
-#         cot_part = match.group('reasoning')
-#         output_part = match.group('final') 
-
-#         return cot_part, output_part, True
-#     else:
-#         # If no </think> tag found, mark as invalid
-#         return response, "", False
-
-
 def extract_cot_and_output(response):
     """
     Extract reasoning (CoT) and output portions from LLM responses.
@@ -139,7 +105,7 @@ def extract_cot_and_output(response):
             - has_cot: Boolean indicating if CoT was found
     """
 
-    print(repr(response))
+    global HARMONY
     
     # Try harmony format first
     harmony_analysis_pattern = r'<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>'
@@ -148,14 +114,15 @@ def extract_cot_and_output(response):
     analysis_match = re.search(harmony_analysis_pattern, response, re.DOTALL)
     final_match = re.search(harmony_final_pattern, response, re.DOTALL)
     
-    # if analysis_match and final_match:
-    if "<|channel|>analysis<|message|>" in response:
+    # if harmony format:
+    # if "<|channel|>analysis<|message|>" in response:
+    if HARMONY:
         cot_part = analysis_match.group(1).strip()
         output_part = final_match.group(1).strip()
         return cot_part, output_part, True
     
     # If harmony format not found, try standard <think></think> format
-    think_pattern = r'<think>(.*?)</think>(.*)'
+    think_pattern = r'(.*?)(?=</think>)(.*)' # postive lookahead to avoid including </think> in cot_part
     match = re.search(think_pattern, response, re.DOTALL)
     
     if match:
@@ -260,26 +227,22 @@ def stage1_generate_cots(
     return (valid_cot_results, invalid_cot_results)
 
 
+
 def extract_final_message(text):
     """
-    Extract the final message content from OpenAI harmony format.
+    Extract the final message content from model output.
     
     Args:
-        text (str): Input string that may contain harmony format
+        text (str): The model's generated output
         
     Returns:
-        str: The final message content, or the entire input if format not found
+        str: The clean final message content
     """
-    # Pattern to match the final message in harmony format
-    pattern = r'<\|start\|>assistant<\|channel\|>final<\|message\|>(.*?)<\|return\|>'
+    # Single regex to capture everything up to any special token or end of string
+    pattern = r'(.*?)(?:<\|return\|>|<｜end▁of▁sentence｜>|$)'
     
     match = re.search(pattern, text, re.DOTALL)
-    
-    if match:
-        return match.group(1).strip()
-    else:
-        # If harmony format not found, return the whole string
-        return text.strip()
+    return match.group(1).strip()
     
 
 def stage2_generate_outputs(
@@ -293,6 +256,9 @@ def stage2_generate_outputs(
     Stage 2: For each CoT response, generate multiple output variations.
     Optimized version with batch template processing.
     """
+
+    global HARMONY
+
     print("\n=== STAGE 2: Generating Output Variations ===")
     print(f"Generating {args.output_repetitions} outputs for {len(cot_results)} CoT responses")
     print(f"Total output generations: {len(cot_results) * args.output_repetitions}")
@@ -317,7 +283,10 @@ def stage2_generate_outputs(
         
         for i, (cot_result, formatted_prompt) in enumerate(zip(batch_cots, formatted_prompts)):
             # Concatenate the formatted prompt with the CoT part
-            combined_input = formatted_prompt + cot_result["cot_part"]
+            if HARMONY:
+                combined_input = formatted_prompt + "<|channel|>analysis<|message|>" + cot_result["cot_part"] + "<|end|><|start|>assistant<|channel|>final<|message|>"
+            else:
+                combined_input = formatted_prompt + cot_result["cot_part"] + "\n</think>"
             # Create multiple copies for output repetitions
             for rep in range(args.output_repetitions):
                 rep_combined_input.append(combined_input)
@@ -420,6 +389,9 @@ def process_single_csv(llm: LLM, tokenizer, input_csv: str, args) -> None:
 def main():
     args = parse_args()
 
+    global HARMONY
+    HARMONY = "gpt-oss" in args.model_name
+
     print(f"CUDA available: {torch.cuda.is_available()}")
     gc.collect()
     torch.cuda.empty_cache()
@@ -441,6 +413,8 @@ def main():
     
     make_dirs(args.model_name)
     
+
+
     # Initialize model and tokenizer
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
