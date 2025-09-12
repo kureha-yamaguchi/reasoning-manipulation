@@ -86,22 +86,88 @@ def apply_chat_template_batch(prompts: List[str], tokenizer) -> List[str]:
         ))
     return formatted_prompts
 
-def extract_cot_and_output(response: str) -> Tuple[str, str, bool]:
+# def extract_cot_and_output(response: str) -> Tuple[str, str, bool]:
+#     """
+#     Extract CoT (everything up to and including </think>) and output (everything after).
+#     Returns (cot_part, output_part, has_valid_cot)
+#     """
+#     # # Find the closing </think> tag
+#     think_pattern = r'(.*?</think>)(.*)'
+#     match = re.search(think_pattern, response, re.DOTALL)
+
+#     # # get repr of response to get special characters
+#     # response = repr(response)[1:-1]  # Strip the surrounding quotes added by repr
+
+#     # print(response)
+
+#     # print("\n\n\n")
+
+#     # # Strip out harmony template system prompt and analysis channel marker if present
+#     # if '<|channel|>analysis<|message|>' in response:
+#     #     # Remove everything from start up to and including the analysis channel marker
+#     #     system_strip_pattern = r'^.*?<\|channel\|>analysis<\|message\|>'
+#     #     response = re.sub(system_strip_pattern, '', response, flags=re.DOTALL)
+
+#     # think_pattern = r'(?P<reasoning>.*?)(?P<separator></think>|<\|start\|>assistant<\|channel\|>final<\|message\|>)(?P<final>.*)'
+#     # match = re.search(think_pattern, response, re.DOTALL)
+
+#     # substrings to remove:
+#     # substrings_to_remove = ["<|channel|>analysis<|message|>", "<|end|>", "<|return|>", "<think>", "</think>", "assistantfinal", "assistantcommentary"]
+    
+#     if match:
+#         cot_part = match.group('reasoning')
+#         output_part = match.group('final') 
+
+#         return cot_part, output_part, True
+#     else:
+#         # If no </think> tag found, mark as invalid
+#         return response, "", False
+
+
+def extract_cot_and_output(response):
     """
-    Extract CoT (everything up to and including </think>) and output (everything after).
-    Returns (cot_part, output_part, has_valid_cot)
+    Extract reasoning (CoT) and output portions from LLM responses.
+    Supports both standard <think></think> tags and OpenAI harmony format.
+    
+    Args:
+        response (str): The raw LLM response
+        
+    Returns:
+        tuple: (cot_part, output_part, has_cot)
+            - cot_part: The reasoning/thinking portion (or None if not found)
+            - output_part: The final output portion
+            - has_cot: Boolean indicating if CoT was found
     """
-    # Find the closing </think> tag
-    think_pattern = r'(.*?</think>)(.*)'
+
+    print(repr(response))
+    
+    # Try harmony format first
+    harmony_analysis_pattern = r'<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>'
+    harmony_final_pattern = r'<\|start\|>assistant<\|channel\|>final<\|message\|>(.*?)<\|return\|>'
+    
+    analysis_match = re.search(harmony_analysis_pattern, response, re.DOTALL)
+    final_match = re.search(harmony_final_pattern, response, re.DOTALL)
+    
+    # if analysis_match and final_match:
+    if "<|channel|>analysis<|message|>" in response:
+        cot_part = analysis_match.group(1).strip()
+        output_part = final_match.group(1).strip()
+        return cot_part, output_part, True
+    
+    # If harmony format not found, try standard <think></think> format
+    think_pattern = r'<think>(.*?)</think>(.*)'
     match = re.search(think_pattern, response, re.DOTALL)
     
     if match:
-        cot_part = match.group(1)
-        output_part = match.group(2)
+        cot_part = match.group(1).strip()
+        output_part = match.group(2).strip()
+
         return cot_part, output_part, True
-    else:
-        # If no </think> tag found, mark as invalid
-        return response, "", False
+    
+    # No CoT format found, return entire response as output
+    return response, "", False
+
+
 
 def stage1_generate_cots(
     llm: LLM, 
@@ -146,12 +212,20 @@ def stage1_generate_cots(
         for i, output in enumerate(outputs):
             original_idx = prompt_indices[i]
             original_prompt = batch_prompts[original_idx]
-            full_response = output.outputs[0].text
+
+            # full_response = output.outputs[0].text
+            full_response = tokenizer.decode(output.outputs[0].token_ids, skip_special_tokens=False)
+
             cot_rep = (i % args.cot_repetitions) + 1
             
             # Extract CoT and output parts
             cot_part, output_part, has_valid_cot = extract_cot_and_output(full_response)
             
+            # cot_part = getattr(output.outputs[0], 'reasoning_content', None)
+            # output_part = getattr(output.outputs[0], 'content', None) or full_response
+            # has_valid_cot = cot_part is not None and output_part.strip() != ""
+
+
             result = {
                 "prompt": original_prompt,
                 "full_cot_response": full_response,
@@ -184,6 +258,29 @@ def stage1_generate_cots(
             print(f"    - {prompt}: {count}/{args.cot_repetitions}")
     
     return (valid_cot_results, invalid_cot_results)
+
+
+def extract_final_message(text):
+    """
+    Extract the final message content from OpenAI harmony format.
+    
+    Args:
+        text (str): Input string that may contain harmony format
+        
+    Returns:
+        str: The final message content, or the entire input if format not found
+    """
+    # Pattern to match the final message in harmony format
+    pattern = r'<\|start\|>assistant<\|channel\|>final<\|message\|>(.*?)<\|return\|>'
+    
+    match = re.search(pattern, text, re.DOTALL)
+    
+    if match:
+        return match.group(1).strip()
+    else:
+        # If harmony format not found, return the whole string
+        return text.strip()
+    
 
 def stage2_generate_outputs(
     llm: LLM,
@@ -236,11 +333,15 @@ def stage2_generate_outputs(
             output_rep = (i % args.output_repetitions) + 1
             
             # Extract the generated output
-            generated_text = output.outputs[0].text
+            # generated_text = output.outputs[0].text
+            generated_text = tokenizer.decode(output.outputs[0].token_ids, skip_special_tokens=False)
+
+            final_response = extract_final_message(generated_text)
+        
             all_final_results.append({
                 "prompt": cot_result["prompt"],
                 "cot": cot_result["cot_part"],
-                "output": generated_text,
+                "output": final_response,
                 "cot_rep_n": cot_result["cot_repetition"],
                 "output_rep_n": output_rep
             })
