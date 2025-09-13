@@ -52,11 +52,11 @@ This directory contains experimental results for the DeepSeek-R1-Distill-Llama-8
 - `attack_results/` - GCG-IRIS style prompt optimization results
 
 ## Dataset details
-- Original prompts: 1446
-- Valid CoT responses: 4312
-- Invalid CoT responses: 26
-- Final outputs: 21560
-
+✓ Completed all_harmful_prompts.csv
+  - Original prompts: 1946
+  - Valid CoT responses: 9659
+  - Invalid CoT responses: 71
+  - Final outputs: 48295
 
 ## Notes
 

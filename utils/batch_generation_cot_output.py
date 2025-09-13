@@ -3,6 +3,16 @@ Script to generate n rollouts of CoT determined by --cot_repetitions and k rollo
 by --output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses
 for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag).
 Invalid responses where the </think> tag is missing, is excluded from stage 2.
+
+Usage:
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+python -m utils.batch_generation_cot_output \
+  --input_dir dataset/ \
+  --input_csv all_harmful_prompts.csv \
+  --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+  --tensor_parallel_size 8 \
+  --batch_size 64 \
+  --gpu_memory_utilization 0.9
 """
 
 import argparse
@@ -426,7 +436,7 @@ def main():
         gpu_memory_utilization=args.gpu_memory_utilization,
         trust_remote_code=True,
     )
-    
+    print("Model loaded successfully!")
     # Process each CSV
     for i, input_csv in enumerate(input_csvs, 1):
         print(f"\n[{i}/{len(input_csvs)}] Starting: {input_csv}")

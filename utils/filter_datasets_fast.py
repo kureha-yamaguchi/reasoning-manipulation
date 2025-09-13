@@ -80,13 +80,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--lower_threshold",
         type=float,
-        default=0.10,
+        default=0.05,
         help="Insert lower threshold for creating refusal dataset"
     )
     parser.add_argument(
         "--upper_threshold",
         type=float,
-        default=0.85,
+        default=0.60,
         help="Insert upper threshold for creating non-refusal dataset"
     )
     parser.add_argument(
