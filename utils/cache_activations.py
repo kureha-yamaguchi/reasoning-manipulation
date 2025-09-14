@@ -1,3 +1,16 @@
+"""
+Cache residual stream activations from a number of specified layers
+Depending on the argument specified in --type, the following is cached:
+if 'cot': average activation is taken across all cot token activations up to and including </think>
+if 'baseline': average activation is taken across 3 tokens at the end of prompt
+if 'prompt': average activation is taken across all prompt token activation up to and including <think>
+
+Usage:
+CUDA_VISIBLE_DEVICES=0 python -m utils.cache_activations \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --layers 14,15,16,17,18 \
+    --type cot
+"""
 import argparse
 import gc
 import os
@@ -7,67 +20,69 @@ import torch
 from nnsight import LanguageModel
 from tqdm import tqdm
 
-# Example usage
-# CUDA_VISIBLE_DEVICES=0 python -m utils.cache_activations --layers 1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31 --dataset_path dataset/non_cautious.csv --output_dir activations/prompt/ --type prompt
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Extract residual stream activations from DeepSeek-R1-Distill-Llama-8B")
+    parser.add_argument('--model_name', type=str, default='deepseek-ai/DeepSeek-R1-Distill-Llama-8B', 
+                        help='Model name')
     parser.add_argument('--layers', type=str, default='15,19,23,27,31',
                         help='Comma-separated list of layer numbers to extract activations from')
-    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for processing tokens')
-    parser.add_argument('--model_name', type=int, default='deepseek-ai/DeepSeek-R1-Distill-Llama-8B', help='Batch size for processing tokens')
-    parser.add_argument('--dataset_name', type=str, default='refusal_0.15.csv',
-                        help='Path to the dataset')
-    parser.add_argument('--output_dir', type=str, default='activations/',
-                        help='Directory to save the activations')
-    parser.add_argument('--max_tokens', type=int, default=150,
-                        help='Maximum number of tokens to process per example')
-    parser.add_argument('--type', type=str, default='cot', help="CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
+    parser.add_argument('--type', type=str, default='cot', 
+                        help="CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     return parser.parse_args()
 
-def main():
-    args = parse_args()
-    print(f"CUDA available: {torch.cuda.is_available()}")
-    gc.collect()
-    torch.cuda.empty_cache()
-    # Parse layers
-    layers = [int(layer) for layer in args.layers.split(',')]
-    
-    # Create output directory if it doesn't exist
-    os.makedirs(args.output_dir, exist_ok=True)
-    
-    # Load the CSV dataset directly
-    print(f"Loading CSV dataset from {args.dataset_path}")
-    df = pd.read_csv(args.dataset_path)
+def cache_activations(model_name, dataset, layers, type):
 
-    print(f"Processing {len(df)} examples")
+    """
+    Extract and cache residual stream activations from specified layers of a language model.
+    
+    This function processes a dataset of prompts and responses, extracts neural network
+    activations from specified transformer layers, and saves them as numpy arrays.
+    
+    Args:
+        model_name (str): HuggingFace model identifier (e.g., 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B')
+        dataset (str): Dataset name ('refusal' or 'non_refusal') - determines input file path
+        layers (list of int): List of layer indices to extract activations from
+        type (str): Extraction mode:
+            - 'cot': Average activations across Chain-of-Thought response tokens
+            - 'baseline': Average activations across last 3 prompt tokens  
+            - 'prompt': Average activations across all prompt tokens
+
+    """
+
+    # Create output directory if it doesn't exist
+    output_dir = os.path.join('results', model_name, 'activations', dataset)
+    os.makedirs(output_dir, exist_ok=True)
+
+    input_path = os.path.join('results', model_name, 'dataset', f'{dataset}_train.csv')
+    df = pd.read_csv(input_path)
+
+    print(f"Processing {len(df)} examples from {dataset}")
 
     # Initialize model
-    model_name = 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B'
     print(f"Initializing model {model_name}")
     model = LanguageModel(model_name, device_map="auto")
 
     # Initialize dictionary to store activation matrices for each layer
     activation_matrices = {layer: [] for layer in layers}
-    print(f"Caching activations mode: {args.type}")
+    print(f"Caching activations mode: {type}")
 
     # Process each example
     for idx, row in enumerate(tqdm(df.itertuples())):
-        chat = [{"role": "user", "content": row.forbidden_prompt}]
+        chat = [{"role": "user", "content": row.prompt}]
         prompt_tokens = model.tokenizer.apply_chat_template(chat, add_generation_prompt=True)
         
-        if args.type == 'cot':
-            # Encode the response separately
-            response_tokens = model.tokenizer.encode(row.response, add_special_tokens=False)
-            # We want the first 150 tokens of the CoT (response)
-            tokens_to_process = prompt_tokens + response_tokens[:args.max_tokens]
+        if type == 'cot':
+            # Encode the cot response separately
+            response_tokens = model.tokenizer.encode(row.cot, add_special_tokens=False)
+            # We want all tokens of the CoT (response)
+            tokens_to_process = prompt_tokens + response_tokens
             target_start = len(prompt_tokens)  # Start of CoT
             target_end = len(tokens_to_process)  # End of our selection
-        elif args.type == 'baseline':
+        elif type == 'baseline':
             tokens_to_process = prompt_tokens
             target_start = max(0, len(prompt_tokens) - 3)  # Last 3 tokens of prompt
             target_end = len(prompt_tokens)
-        elif args.type == 'prompt':
+        elif type == 'prompt':
             tokens_to_process = prompt_tokens
             target_start = 0
             target_end = len(prompt_tokens)
@@ -75,7 +90,7 @@ def main():
             print("WARNING args.type not selected. Your choices are cot, baseline, prompt.")
 
 
-        # Process the entire sequence at once to avoid batch alignment issues
+        # Process the entire sequence at once
         input_text = model.tokenizer.decode(tokens_to_process)
         
         # Initialize dict to collect activations for this example across all layers
@@ -92,7 +107,7 @@ def main():
             layer_activations = example_layer_activations[layer][0]
             select_tokens = layer_activations[:, target_start:target_end, :]
             
-            print(f"Selected tokens shape: {select_tokens.shape}")
+            # print(f"DEBUGGING: Selected tokens shape: {select_tokens.shape}")
             
             # Compute mean across tokens (dimension 1)
             mean_activation = torch.mean(select_tokens, dim=1).detach().cpu().numpy()
@@ -105,15 +120,28 @@ def main():
     for layer, activations in activation_matrices.items():
         if activations:
             activation_matrix = np.stack(activations)
-            output_path = os.path.join(args.output_dir, f"deepseek_layer_{layer}_noncautious_activations.npy")
+            output_path = os.path.join(output_dir, f"layer_{layer}_{type}_activations.npy")
             np.save(output_path, activation_matrix)
             
             print(f"Saved activation matrix for layer {layer} with shape {activation_matrix.shape} to {output_path}")
     
     print("Extraction complete.")
 
-def run():
-    main()
+def main():
+    args = parse_args()
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # Parse layers
+    layers = [int(layer) for layer in args.layers.split(',')]
+    
+    # Create output directory if it doesn't exist
+    output_dir = os.path.join('results', args.model_name, 'activations')
+    os.makedirs(output_dir, exist_ok=True)
+
+    cache_activations(model_name=args.model_name, dataset='refusal', layers=layers, type=args.type)
+    cache_activations(model_name=args.model_name, dataset='non_refusal', layers=layers, type=args.type)
 
 if __name__ == "__main__":
     main()
