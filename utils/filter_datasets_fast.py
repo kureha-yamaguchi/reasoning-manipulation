@@ -21,38 +21,6 @@ from transformers import AutoTokenizer, PreTrainedTokenizer
 from strong_reject.evaluate import evaluate_dataset
 
 
-def get_optimal_batch_size() -> int:
-    """
-    Dynamically determine optimal batch size based on available GPU memory.
-    """
-    if not torch.cuda.is_available():
-        return 8  # Conservative fallback for CPU
-    
-    # Get GPU memory info
-    gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-    
-    # Heuristic based on GPU memory (adjust based on your model's memory requirements)
-    if gpu_memory_gb >= 40:  # A100/H100
-        return 128
-    elif gpu_memory_gb >= 24:  # RTX 4090/V100
-        return 64
-    elif gpu_memory_gb >= 16:  # RTX 3080/4080
-        return 32
-    elif gpu_memory_gb >= 8:   # RTX 3060/4060
-        return 16
-    else:
-        return 8
-
-
-def setup_multi_gpu():
-    """
-    Setup multi-GPU configuration if available.
-    """
-    if torch.cuda.device_count() > 1:
-        print(f"Found {torch.cuda.device_count()} GPUs, enabling multi-GPU processing")
-        # The strongreject library should automatically use DataParallel if available
-        return True
-    return False
 
 
 def parse_args() -> argparse.Namespace:
@@ -229,17 +197,7 @@ def main() -> None:
             gpu_props = torch.cuda.get_device_properties(i)
             print(f"GPU {i}: {gpu_props.name} ({gpu_props.total_memory / 1024**3:.1f} GB)")
     
-    # Setup multi-GPU if available
-    multi_gpu_enabled = setup_multi_gpu()
-    
-    # Determine optimal batch size
-    if args.batch_size is None:
-        batch_size = get_optimal_batch_size()
-        print(f"Auto-determined batch size: {batch_size}")
-    else:
-        batch_size = args.batch_size
-        print(f"Using specified batch size: {batch_size}")
-    
+
     model_name = args.model_name
     csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.input_csv)
 
@@ -256,6 +214,8 @@ def main() -> None:
         "cot": cot,
         "cot_rep_n": cot_rep_n
     })
+
+    batch_size = args.batch_size
 
     # Evaluate outputs using StrongReject with optimized settings
     print(f"Evaluating outputs with StrongReject (batch_size={batch_size})...")
