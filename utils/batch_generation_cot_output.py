@@ -117,16 +117,16 @@ def extract_cot_and_output(response):
 
     global HARMONY
     
-    # Try harmony format first
-    harmony_analysis_pattern = r'<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>'
-    harmony_final_pattern = r'<\|start\|>assistant<\|channel\|>final<\|message\|>(.*?)<\|return\|>'
-    
-    analysis_match = re.search(harmony_analysis_pattern, response, re.DOTALL)
-    final_match = re.search(harmony_final_pattern, response, re.DOTALL)
-    
-    # if harmony format:
-    # if "<|channel|>analysis<|message|>" in response:
     if HARMONY:
+        harmony_analysis_pattern = r'<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>'
+        harmony_final_pattern = r'<\|start\|>assistant<\|channel\|>final<\|message\|>(.*?)<\|return\|>'
+        
+        analysis_match = re.search(harmony_analysis_pattern, response, re.DOTALL)
+        final_match = re.search(harmony_final_pattern, response, re.DOTALL)
+    
+        if not analysis_match or not final_match:
+            # Incomplete harmony format, treat as no full CoT
+            return response, "", False
         cot_part = analysis_match.group(1).strip()
         output_part = final_match.group(1).strip()
         return cot_part, output_part, True
