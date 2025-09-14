@@ -105,7 +105,6 @@ def load_data_efficiently(csv_path: str) -> Tuple[List[str], List[str], List[str
 
 
 def filter_csv(
-    model_name: str,
     evaluator_results: Dict[str, List[float]],
     cot_dataset: Dataset,
     lower_threshold: float,
@@ -115,21 +114,7 @@ def filter_csv(
     Filter Chain-of-Thought responses based on StrongReject evaluator scores.
     Optimized with batch tokenization for better performance.
     """
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
-    # Batch tokenize all CoTs for better efficiency
-    print("Batch tokenizing CoTs...")
-    all_cots = cot_dataset["cot"]
-    
-    # Tokenize in batches to avoid memory issues
-    batch_size = 1000
-    cot_token_lengths = []
-    
-    for i in tqdm(range(0, len(all_cots), batch_size), desc="Tokenizing"):
-        batch_cots = all_cots[i:i + batch_size]
-        batch_tokens = tokenizer(batch_cots, add_special_tokens=False, return_length=True)
-        cot_token_lengths.extend(batch_tokens['length'])
-    
+
     # Initialize containers for filtered data
     refusal = []
     non_refusal = []
@@ -148,8 +133,7 @@ def filter_csv(
                 "prompt": evaluator_results["forbidden_prompt"][start],
                 "cot": cot_dataset["cot"][start],
                 "output_scores": list(same_cot_chunk),
-                "cot_rep_n": cot_dataset["cot_rep_n"][start],
-                "cot_token_length": cot_token_lengths[start // chunk_size]
+                "cot_rep_n": cot_dataset["cot_rep_n"][start]
             })
         elif all(score > upper_threshold for score in same_cot_chunk):
             # Add to the non-refusal dataset
@@ -157,8 +141,7 @@ def filter_csv(
                 "prompt": evaluator_results["forbidden_prompt"][start],
                 "cot": cot_dataset["cot"][start],
                 "output_scores": list(same_cot_chunk),
-                "cot_rep_n": cot_dataset["cot_rep_n"][start],
-                "cot_token_length": cot_token_lengths[start // chunk_size]
+                "cot_rep_n": cot_dataset["cot_rep_n"][start]
             })
     
     return refusal, non_refusal
@@ -175,7 +158,7 @@ def write_to_csv(filtered_data: List[Dict[str, str]], output_file: str) -> None:
     
     # Write to CSV
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['prompt', 'cot', 'output_scores', 'cot_rep_n', 'cot_token_length']
+        fieldnames = ['prompt', 'cot', 'output_scores', 'cot_rep_n']
         writer: csv.DictWriter = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
         writer.writeheader()
@@ -235,7 +218,6 @@ def main() -> None:
     # Filter based on evaluation scores
     print(f"Processed datasets: {len(prompt)} rows")
     refusal, non_refusal = filter_csv(
-        model_name,
         evaluator_results,
         cot_dataset,
         args.lower_threshold,
