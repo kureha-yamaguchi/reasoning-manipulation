@@ -152,7 +152,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     
     # Process both datasets
-    # cache_activations(model_name=args.model_name, dataset='refusal', layers=layers, type=args.type, tokenizer=tokenizer)
+    cache_activations(model_name=args.model_name, dataset='refusal', layers=layers, type=args.type, tokenizer=tokenizer)
     cache_activations(model_name=args.model_name, dataset='non_refusal', layers=layers, type=args.type, tokenizer=tokenizer)
 
 if __name__ == "__main__":
