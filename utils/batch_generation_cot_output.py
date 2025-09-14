@@ -127,17 +127,18 @@ def extract_cot_and_output(response):
         if not analysis_match or not final_match:
             # Incomplete harmony format, treat as no full CoT
             return response, "", False
-        cot_part = analysis_match.group(1).strip()
-        output_part = final_match.group(1).strip()
+        cot_part = analysis_match.group(1)
+        output_part = final_match.group(1)
         return cot_part, output_part, True
     
     # If harmony format not found, try standard <think></think> format
-    think_pattern = r'(.*?)(?=</think>)(.*)' # postive lookahead to avoid including </think> in cot_part
+    # think_pattern = r'(.*?)(?=</think>)(.*)' # postive lookahead to avoid including </think> in cot_part
+    think_pattern = r'(.*?</think>)(.*)'  # This captures </think> as part of group 1
     match = re.search(think_pattern, response, re.DOTALL)
     
     if match:
-        cot_part = match.group(1).strip()
-        output_part = match.group(2).strip()
+        cot_part = match.group(1)
+        output_part = match.group(2)
 
         return cot_part, output_part, True
     
@@ -252,7 +253,7 @@ def extract_final_message(text):
     pattern = r'(.*?)(?:<\|return\|>|<｜end▁of▁sentence｜>|$)'
     
     match = re.search(pattern, text, re.DOTALL)
-    return match.group(1).strip()
+    return match.group(1)
     
 
 def stage2_generate_outputs(
@@ -296,7 +297,8 @@ def stage2_generate_outputs(
             if HARMONY:
                 combined_input = formatted_prompt + "<|channel|>analysis<|message|>" + cot_result["cot_part"] + "<|end|><|start|>assistant<|channel|>final<|message|>"
             else:
-                combined_input = formatted_prompt + cot_result["cot_part"] + "\n</think>"
+                combined_input = formatted_prompt + cot_result["cot_part"]
+                # combined_input = formatted_prompt + cot_result["cot_part"] + "\n</think>"
             # Create multiple copies for output repetitions
             for rep in range(args.output_repetitions):
                 rep_combined_input.append(combined_input)
