@@ -6,8 +6,9 @@ if 'baseline': average activation is taken across 3 tokens at the end of prompt
 if 'prompt': average activation is taken across all prompt token activation up to and including <think>
 
 Usage:
-CUDA_VISIBLE_DEVICES=0 python -m utils.cache_activations \
-    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+python -m utils.cache_activations \
+    --model_name Qwen/Qwen3-8B \
     --layers 14,15,16,17,18 \
     --type cot
 """
@@ -18,11 +19,12 @@ import numpy as np
 import pandas as pd
 import torch
 from nnsight import LanguageModel
+from transformers import AutoTokenizer
 from tqdm import tqdm
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Extract residual stream activations from DeepSeek-R1-Distill-Llama-8B")
-    parser.add_argument('--model_name', type=str, default='deepseek-ai/DeepSeek-R1-Distill-Llama-8B', 
+    parser = argparse.ArgumentParser(description="Extract residual stream activations from language models")
+    parser.add_argument('--model_name', type=str, default='Qwen/Qwen3-8B', 
                         help='Model name')
     parser.add_argument('--layers', type=str, default='15,19,23,27,31',
                         help='Comma-separated list of layer numbers to extract activations from')
@@ -30,8 +32,7 @@ def parse_args():
                         help="CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     return parser.parse_args()
 
-def cache_activations(model_name, dataset, layers, type):
-
+def cache_activations(model_name, dataset, layers, type, tokenizer):
     """
     Extract and cache residual stream activations from specified layers of a language model.
     
@@ -39,14 +40,14 @@ def cache_activations(model_name, dataset, layers, type):
     activations from specified transformer layers, and saves them as numpy arrays.
     
     Args:
-        model_name (str): HuggingFace model identifier (e.g., 'deepseek-ai/DeepSeek-R1-Distill-Llama-8B')
+        model_name (str): HuggingFace model identifier (e.g., 'Qwen/Qwen3-8B')
         dataset (str): Dataset name ('refusal' or 'non_refusal') - determines input file path
         layers (list of int): List of layer indices to extract activations from
         type (str): Extraction mode:
             - 'cot': Average activations across Chain-of-Thought response tokens
             - 'baseline': Average activations across last 3 prompt tokens  
             - 'prompt': Average activations across all prompt tokens
-
+        tokenizer: The tokenizer instance to use for encoding text
     """
 
     # Create output directory if it doesn't exist
@@ -69,11 +70,13 @@ def cache_activations(model_name, dataset, layers, type):
     # Process each example
     for idx, row in enumerate(tqdm(df.itertuples())):
         chat = [{"role": "user", "content": row.prompt}]
-        prompt_tokens = model.tokenizer.apply_chat_template(chat, add_generation_prompt=True)
+        # prompt_tokens = model.tokenizer.apply_chat_template(chat, add_generation_prompt=True)
+        prompt_tokens = tokenizer.apply_chat_template(chat, add_generation_prompt=True)
         
         if type == 'cot':
             # Encode the cot response separately
-            response_tokens = model.tokenizer.encode(row.cot, add_special_tokens=False)
+            # response_tokens = model.tokenizer.encode(row.cot, add_special_tokens=False)
+            response_tokens = tokenizer.encode(row.cot, add_special_tokens=False)
             # We want all tokens of the CoT (response)
             tokens_to_process = prompt_tokens + response_tokens
             target_start = len(prompt_tokens)  # Start of CoT
@@ -89,9 +92,9 @@ def cache_activations(model_name, dataset, layers, type):
         else:
             print("WARNING args.type not selected. Your choices are cot, baseline, prompt.")
 
-
         # Process the entire sequence at once
-        input_text = model.tokenizer.decode(tokens_to_process)
+        # input_text = model.tokenizer.decode(tokens_to_process)
+        input_text = tokenizer.decode(tokens_to_process)
         
         # Initialize dict to collect activations for this example across all layers
         example_layer_activations = {layer: [] for layer in layers}
@@ -99,6 +102,8 @@ def cache_activations(model_name, dataset, layers, type):
         with torch.no_grad():
             with model.trace(input_text):
                 for layer in layers:
+                    # Note: Different models may have different attribute names
+                    # For Qwen3, you might need to adjust this path
                     activation = model.model.layers[layer].input_layernorm.input.save()
                     example_layer_activations[layer].append(activation)
         
@@ -140,8 +145,13 @@ def main():
     output_dir = os.path.join('results', args.model_name, 'activations')
     os.makedirs(output_dir, exist_ok=True)
 
-    cache_activations(model_name=args.model_name, dataset='refusal', layers=layers, type=args.type)
-    cache_activations(model_name=args.model_name, dataset='non_refusal', layers=layers, type=args.type)
+    # Load tokenizer separately
+    print(f"Loading tokenizer for {args.model_name}")
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    
+    # Process both datasets
+    cache_activations(model_name=args.model_name, dataset='refusal', layers=layers, type=args.type, tokenizer=tokenizer)
+    cache_activations(model_name=args.model_name, dataset='non_refusal', layers=layers, type=args.type, tokenizer=tokenizer)
 
 if __name__ == "__main__":
     main()
