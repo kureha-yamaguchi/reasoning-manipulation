@@ -73,15 +73,24 @@ uv run -m utils.batch_generation_cot_output --input_dir dataset/ --input_csv all
 uv run -m utils.filter_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv all_harmful_prompts_cot5_out5.csv --lower_threshold 0.1 --upper_threshold 0.85
 ```
 
+`create_train_test_split.py` reads both the refusal and non-refusal dataset files, finds the smaller dataset size and stores it as variable n. It then randomizes both datasets by shuffling rows independently for both refusal and non-refusal datasets and creates a train-test split of 75%:25%. The following datasets, refusal_train, refusal_test, non_refusal_train, non_refusal_test, are saved as separate csv files.
+
+```bash
+uv run -m utils.create_train_test_split --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --train_set_split 0.75
+```
+
 > [!NOTE]
 > We have provided the alpaca_instructions_100.csv. To create it from scratch, download `alpaca_data_cleaned.json` from https://github.com/gururise/AlpacaDataCleaned and run `utils/alpaca.py`.
 
-##  Activations - TO UPDATE
+##  Activations
 
-Now that we have `dataset/cautious.csv` and `dataset/non_cautious.csv`, we can now run `probing/activations.py` in order to cache activations for a sweep of layers. This script takes the first 150 tokens (staying within the CoT) in the prompt-response example, computes activations at each token position, and then takes the average. This is repeated for each row in the dataset, for a sweep of layers. For the flag `--type`, select `cot` for 150 CoT tokens, or `baseline` for 3 tokens at the end of prompt or `prompt` for the whole prompt.
+`cache_activations.py` takes `dataset/refusal_train.csv` and `dataset/non_refusal_train.csv` files and caches residual stream activations for a sweep of layers. Depending on the argument specified in --type, the following is cached:
+  - if 'cot': average activation is taken across all cot token activations up to and including </think>
+  - if 'baseline': average activation is taken across 3 tokens at the end of prompt
+  - if 'prompt': average activation is taken across all prompt token activation up to and including <think>
 
 ```bash
-uv run -m probing.activations --layers 1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31 --dataset_path dataset/non_cautious.csv --output_dir activations/cot150/ --type cot
+uv run -m utils.cache_activations --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --layers 14,15,16,17,18  --type cot
 ```
 
 <div align="center">
