@@ -115,7 +115,8 @@ def cache_activations(model_name, dataset, layers, type, tokenizer):
             # print(f"DEBUGGING: Selected tokens shape: {select_tokens.shape}")
             
             # Compute mean across tokens (dimension 1)
-            mean_activation = torch.mean(select_tokens, dim=1).detach().cpu().numpy()
+            # mean_activation = torch.mean(select_tokens, dim=1).detach().cpu().numpy()
+            mean_activation = torch.mean(select_tokens, dim=1).detach().cpu().to(torch.float32).numpy() # float32 for bfloat16 compatability
             activation_matrices[layer].append(mean_activation.squeeze())
         
         # Clear CUDA cache
