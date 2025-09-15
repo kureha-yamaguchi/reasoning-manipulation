@@ -4,7 +4,7 @@ Enhanced for better GPU utilization and multi-GPU support.
 
 Usage:
     CUDA_VISIBLE_DEVICES=0,1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    python -m utils.filter_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --batch_size 64
+    python -m utils.filter_datasets_baseline --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --batch_size 64
 """
 
 import csv
@@ -13,6 +13,7 @@ import argparse
 from typing import List, Dict, Tuple, Any
 from itertools import islice
 import math
+from collections import defaultdict
 
 import torch
 from tqdm import tqdm
@@ -75,13 +76,20 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Empty model cache after evaluation"
     )
+    parser.add_argument(
+        "--percentage_threshold",
+        type=float,
+        default=0.8,
+        help="Percentage of outputs that must meet threshold (default: 0.8 for 80%)"
+    )
 
     return parser.parse_args()
 
 
-def load_data_efficiently(csv_path: str) -> Tuple[List[str], List[str], List[str], List[str]]:
+def load_data_efficiently(csv_path: str) -> Tuple[List[str], List[str], List[str], List[str], List[str]]:
     """
     Efficiently load CSV data with progress tracking.
+    Now also returns output_rep_n column.
     """
     print(f"Reading data from: {csv_path}")
     
@@ -91,7 +99,7 @@ def load_data_efficiently(csv_path: str) -> Tuple[List[str], List[str], List[str
         total_rows = sum(1 for _ in reader)
     
     # Second pass: load data with progress bar
-    prompt, cot, output, cot_rep_n = [], [], [], []
+    prompt, cot, output, cot_rep_n, output_rep_n = [], [], [], [], []
     
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
@@ -100,54 +108,98 @@ def load_data_efficiently(csv_path: str) -> Tuple[List[str], List[str], List[str
             cot.append(row["cot"])
             output.append(row["output"])
             cot_rep_n.append(row["cot_rep_n"])
+            output_rep_n.append(row["output_rep_n"])
     
-    return prompt, cot, output, cot_rep_n
+    return prompt, cot, output, cot_rep_n, output_rep_n
 
 
 def filter_csv(
     evaluator_results: Dict[str, List[float]],
     cot_dataset: Dataset,
     lower_threshold: float,
-    upper_threshold: float
-) -> Tuple[List[Dict[str, str]], List[Dict[str, str]], int]:
+    upper_threshold: float,
+    percentage_threshold: float = 0.8
+) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     """
-    Filter Chain-of-Thought responses based on StrongReject evaluator scores.
-    Optimized with batch tokenization for better performance.
+    Filter responses based on StrongReject evaluator scores.
+    Now groups by prompt and checks if 80% of ALL outputs for that prompt meet the threshold.
     """
 
     # Initialize containers for filtered data
     refusal = []
     non_refusal = []
-
+    
+    # Group data by prompt
+    prompt_data = defaultdict(lambda: {
+        'scores': [],
+        'cots': [],
+        'cot_rep_ns': [],
+        'indices': []
+    })
+    
     scores = evaluator_results["score"]
-    chunk_size = 5  # Number of output variations per CoT
-
-    # Process scores in chunks corresponding to same CoT
-    for start in range(0, len(scores), chunk_size):
-        end = min(start + chunk_size, len(scores))
-        same_cot_chunk = scores[start:end]
-
-        if all(score < lower_threshold for score in same_cot_chunk):
-            # Add to the refusal dataset
-            refusal.append({
-                "prompt": evaluator_results["forbidden_prompt"][start],
-                "cot": cot_dataset["cot"][start],
-                "output_scores": list(same_cot_chunk),
-                "cot_rep_n": cot_dataset["cot_rep_n"][start]
-            })
-        elif all(score > upper_threshold for score in same_cot_chunk):
-            # Add to the non-refusal dataset
-            non_refusal.append({
-                "prompt": evaluator_results["forbidden_prompt"][start],
-                "cot": cot_dataset["cot"][start],
-                "output_scores": list(same_cot_chunk),
-                "cot_rep_n": cot_dataset["cot_rep_n"][start]
-            })
+    prompts = evaluator_results["forbidden_prompt"]
+    
+    # Collect all scores and associated data for each unique prompt
+    for idx, (prompt, score) in enumerate(zip(prompts, scores)):
+        prompt_data[prompt]['scores'].append(score)
+        prompt_data[prompt]['cots'].append(cot_dataset["cot"][idx])
+        prompt_data[prompt]['cot_rep_ns'].append(cot_dataset["cot_rep_n"][idx])
+        prompt_data[prompt]['indices'].append(idx)
+    
+    # Process each unique prompt
+    for prompt, data in prompt_data.items():
+        all_scores = data['scores']
+        total_outputs = len(all_scores)
+        
+        # Count how many outputs meet each threshold
+        below_lower = sum(1 for score in all_scores if score < lower_threshold)
+        above_upper = sum(1 for score in all_scores if score > upper_threshold)
+        
+        # Check if percentage threshold is met for refusal (below lower threshold)
+        if below_lower / total_outputs >= percentage_threshold:
+            # Group by unique CoT and add each unique CoT to refusal dataset
+            unique_cots = {}
+            for cot, cot_rep_n, score in zip(data['cots'], data['cot_rep_ns'], all_scores):
+                cot_key = (cot, cot_rep_n)
+                if cot_key not in unique_cots:
+                    unique_cots[cot_key] = []
+                unique_cots[cot_key].append(score)
+            
+            # Add each unique CoT with its scores
+            for (cot, cot_rep_n), cot_scores in unique_cots.items():
+                refusal.append({
+                    "prompt": prompt,
+                    "cot": cot,
+                    "output_scores": cot_scores,
+                    "cot_rep_n": cot_rep_n,
+                    "percentage_below": f"{below_lower / total_outputs:.2%}"
+                })
+        
+        # Check if percentage threshold is met for non-refusal (above upper threshold)
+        elif above_upper / total_outputs >= percentage_threshold:
+            # Group by unique CoT and add each unique CoT to non-refusal dataset
+            unique_cots = {}
+            for cot, cot_rep_n, score in zip(data['cots'], data['cot_rep_ns'], all_scores):
+                cot_key = (cot, cot_rep_n)
+                if cot_key not in unique_cots:
+                    unique_cots[cot_key] = []
+                unique_cots[cot_key].append(score)
+            
+            # Add each unique CoT with its scores
+            for (cot, cot_rep_n), cot_scores in unique_cots.items():
+                non_refusal.append({
+                    "prompt": prompt,
+                    "cot": cot,
+                    "output_scores": cot_scores,
+                    "cot_rep_n": cot_rep_n,
+                    "percentage_above": f"{above_upper / total_outputs:.2%}"
+                })
     
     return refusal, non_refusal
 
 
-def write_to_csv(filtered_data: List[Dict[str, str]], output_file: str) -> None:
+def write_to_csv(filtered_data: List[Dict[str, str]], output_file: str, data_type: str) -> None:
     """
     Write filtered prompt-CoT pairs to a CSV file.
     """
@@ -158,7 +210,7 @@ def write_to_csv(filtered_data: List[Dict[str, str]], output_file: str) -> None:
     
     # Write to CSV
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['prompt', 'cot', 'output_scores', 'cot_rep_n']
+        fieldnames = ['prompt', 'cot', 'output_scores', 'cot_rep_n', 'percentage_below']
         writer: csv.DictWriter = csv.DictWriter(csvfile, fieldnames=fieldnames)
         
         writer.writeheader()
@@ -183,8 +235,8 @@ def main() -> None:
 
     csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.input_csv)
 
-    # Load data efficiently
-    prompt, cot, output, cot_rep_n = load_data_efficiently(csv_path)
+    # Load data efficiently (now includes output_rep_n)
+    prompt, cot, output, cot_rep_n, output_rep_n = load_data_efficiently(csv_path)
 
     # Create output datasets for evaluation
     output_dataset: Dataset = Dataset.from_dict({
@@ -194,7 +246,8 @@ def main() -> None:
 
     cot_dataset: Dataset = Dataset.from_dict({
         "cot": cot,
-        "cot_rep_n": cot_rep_n
+        "cot_rep_n": cot_rep_n,
+        "output_rep_n": output_rep_n
     })
 
     batch_size = args.batch_size
@@ -214,35 +267,42 @@ def main() -> None:
         max_response_length=args.max_response_length
     )
 
-    # Filter based on evaluation scores
+    # Filter based on evaluation scores with percentage threshold
     print(f"Processed datasets: {len(prompt)} rows")
+    print(f"Using {args.percentage_threshold:.0%} threshold for filtering")
+    
     refusal, non_refusal = filter_csv(
         evaluator_results,
         cot_dataset,
         args.lower_threshold,
-        args.upper_threshold
+        args.upper_threshold,
+        args.percentage_threshold
     )
     
-    print(f"Refusal samples: {len(refusal)}")
-    print(f"Non-refusal samples: {len(non_refusal)}")
+    # Count unique prompts in each dataset
+    unique_refusal_prompts = len(set(item['prompt'] for item in refusal))
+    unique_nonrefusal_prompts = len(set(item['prompt'] for item in non_refusal))
+    
+    print(f"Refusal samples: {len(refusal)} CoTs from {unique_refusal_prompts} unique prompts")
+    print(f"Non-refusal samples: {len(non_refusal)} CoTs from {unique_nonrefusal_prompts} unique prompts")
 
     # Save refusal dataset
     output_refusal_path = os.path.join(
         args.results_dir,
         args.model_name,
         "dataset",
-        f"refusal_{args.lower_threshold}.csv"
+        f"refusal_{args.lower_threshold}_pct{args.percentage_threshold}.csv"
     )
-    write_to_csv(refusal, output_file=output_refusal_path)
+    write_to_csv(refusal, output_file=output_refusal_path, data_type="refusal")
 
     # Save non-refusal dataset
     output_nonrefusal_path = os.path.join(
         args.results_dir,
         args.model_name,
         "dataset",
-        f"nonrefusal_{args.upper_threshold}.csv"
+        f"nonrefusal_{args.upper_threshold}_pct{args.percentage_threshold}.csv"
     )
-    write_to_csv(non_refusal, output_file=output_nonrefusal_path)
+    write_to_csv(non_refusal, output_file=output_nonrefusal_path, data_type="non-refusal")
 
     # Final cleanup
     if torch.cuda.is_available():
