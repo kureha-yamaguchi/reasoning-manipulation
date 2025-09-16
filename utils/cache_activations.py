@@ -8,7 +8,7 @@ if 'prompt': average activation is taken across all prompt token activation up t
 Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 python -m utils.cache_activations \
-    --model_name Qwen/Qwen3-8B \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
     --layers 13,14,15,16,17,18,19 \
     --type cot
 """
@@ -30,9 +30,13 @@ def parse_args():
                         help='Comma-separated list of layer numbers to extract activations from')
     parser.add_argument('--type', type=str, default='cot', 
                         help="CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
+    parser.add_argument('--refusal_dataset', type=str, default='train_refusal_0.05.csv', 
+                        help="Name of refusal dataset")
+    parser.add_argument('--nonrefusal_dataset', type=str, default='train_nonrefusal_0.6.csv', 
+                        help="Name of non-refusal dataset")
     return parser.parse_args()
 
-def cache_activations(model_name, dataset, layers, type, tokenizer):
+def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None):
     """
     Extract and cache residual stream activations from specified layers of a language model.
     
@@ -49,12 +53,16 @@ def cache_activations(model_name, dataset, layers, type, tokenizer):
             - 'prompt': Average activations across all prompt tokens
         tokenizer: The tokenizer instance to use for encoding text
     """
+    if refusal:
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join('results', model_name, 'activations', 'refusal')
+        os.makedirs(output_dir, exist_ok=True)
+    else:
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join('results', model_name, 'activations', 'non_refusal')
+        os.makedirs(output_dir, exist_ok=True)
 
-    # Create output directory if it doesn't exist
-    output_dir = os.path.join('results', model_name, 'activations', dataset)
-    os.makedirs(output_dir, exist_ok=True)
-
-    input_path = os.path.join('results', model_name, 'dataset', f'{dataset}_train.csv')
+    input_path = os.path.join('results', model_name, 'dataset', dataset)
     df = pd.read_csv(input_path)
 
     print(f"Processing {len(df)} examples from {dataset}")
@@ -153,8 +161,8 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     
     # Process both datasets
-    cache_activations(model_name=args.model_name, dataset='refusal', layers=layers, type=args.type, tokenizer=tokenizer)
-    cache_activations(model_name=args.model_name, dataset='non_refusal', layers=layers, type=args.type, tokenizer=tokenizer)
+    cache_activations(model_name=args.model_name, dataset=args.refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
+    cache_activations(model_name=args.model_name, dataset=args.nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer)
 
 if __name__ == "__main__":
     main()
