@@ -433,3 +433,7 @@ github_setup.sh
 setup.sh
 
 eval/.
+
+huggingface_cache/
+
+all_harmful_prompts_cot5_out5.csv
