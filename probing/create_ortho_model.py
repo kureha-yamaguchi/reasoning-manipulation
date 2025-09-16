@@ -1,3 +1,16 @@
+"""
+Perform weight orthogonalisation to create a model with the refusal direction ablated from its residual stream activations.
+Savees the refusal direction and orthogonalised model.
+
+Usage:
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+python -m probing.create_ortho_model \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --layer 17 \
+    --type cot
+"""
+
+
 import argparse
 import gc
 import os
@@ -6,21 +19,15 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.create_ortho_model --activations_dir 'activations/cot150/' --layer 17
-
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Process prompts through DeepSeek-R1-Distill-Llama-8B model"
     )
-    parser.add_argument(
-        '--activations_dir',
-        type=str,
-        default="activations/cot150/",
-        help="Path to activations directory" 
-    )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", help="Load the model")
     parser.add_argument("--layer", type=int, default=17, help="Layer to take the activations")
+    parser.add_argument('--type', type=str, default='baseline', 
+                        help="using CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                        help="Device to run inference on (cuda/cpu)")
     return parser.parse_args()
@@ -176,36 +183,36 @@ def main():
 
     # Load activations - convert to fp16 for memory efficiency
     print("Loading activations...")
-    activations_cautious = load_activations(os.path.join(args.activations_dir, f"deepseek_layer_{args.layer}_cautious_activations.npy"))
-    cautious_mean_act = get_mean_act(activations_cautious).to(dtype=torch.float16, device=args.device)
+    activations_refusal = load_activations(os.path.join('results', args.model_name, 'activations', 'refusal', f'layer_{args.layer}_{args.type}_activations.npy'))
+    refusal_mean_act = get_mean_act(activations_refusal).to(dtype=torch.float16, device=args.device)
     # Free memory
-    del activations_cautious
+    del activations_refusal
     gc.collect()
     torch.cuda.empty_cache()
     
-    activations_noncautious = load_activations(os.path.join(args.activations_dir, f"deepseek_layer_{args.layer}_noncautious_activations.npy"))
-    noncautious_mean_act = get_mean_act(activations_noncautious).to(dtype=torch.float16, device=args.device)
+    activations_nonrefusal = load_activations(os.path.join('results', args.model_name, 'activations', 'non_refusal', f'layer_{args.layer}_{args.type}_activations.npy'))
+    nonrefusal_mean_act = get_mean_act(activations_nonrefusal).to(dtype=torch.float16, device=args.device)
     # Free memory
-    del activations_noncautious
+    del activations_nonrefusal
     gc.collect()
     torch.cuda.empty_cache()
     
-    # Calculate difference of means (cautious direction)
-    cautious_dir = get_dir(cautious_mean_act, noncautious_mean_act)
+    # Calculate difference of means (refusal direction)
+    refusal_dir = get_dir(refusal_mean_act, nonrefusal_mean_act)
     # Save the tensor to a .pt file
-    # torch.save(cautious_dir, 'cautious_dir.pt')
-    # print(f"Cautious direction shape: {cautious_dir.shape}")
+    torch.save(refusal_dir, os.path.join('results', args.model_name, 'refusal_dir', f'{args.type}_refusal_dir.pt'))
+    print(f"refusal direction shape: {refusal_dir.shape}")
     
     # Free memory before orthogonalization
-    del cautious_mean_act, noncautious_mean_act
+    del refusal_mean_act, nonrefusal_mean_act
     gc.collect()
     torch.cuda.empty_cache()
     
-    # Orthogonalize model weights with respect to the cautious direction
-    orthogonalized_model = orthogonalize_model_weights(model, cautious_dir)
+    # Orthogonalize model weights with respect to the refusal direction
+    orthogonalized_model = orthogonalize_model_weights(model, refusal_dir)
     # Save the model in SafeTensors format
     orthogonalized_model.save_pretrained(
-        "probing/model",
+        os.path.join('results', args.model_name, f'ortho_model_{args.type}'),
         safe_serialization=True  # This enables SafeTensors format
     )
 
