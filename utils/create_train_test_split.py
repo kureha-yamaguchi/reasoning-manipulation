@@ -26,9 +26,9 @@ def parse_args():
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Model to use for generation")
-    parser.add_argument("--refusal_dataset", type=str, default="refusal_0.05.csv", 
+    parser.add_argument("--refusal_dataset", type=str, default="refusal_0.05_pct0.75.csv", 
                         help="Name of the refusal dataset")
-    parser.add_argument("--nonrefusal_dataset", type=str, default="nonrefusal_0.6.csv", 
+    parser.add_argument("--nonrefusal_dataset", type=str, default="nonrefusal_0.6_pct0.75.csv", 
                         help="Name of the non-refusal dataset")
     parser.add_argument("--train_set_split", type=float, default="0.75", 
                         help="Train split proportion between 0-1")
@@ -138,12 +138,10 @@ def main():
         # Save the splits to CSV files
         print("\nSaving splits to CSV files...")
         save_dir = os.path.join('results', args.model_name, 'dataset') 
-        results['refusal_train'].to_csv(os.path.join(save_dir,'refusal_train.csv'), index=False)
-        results['refusal_test'].to_csv(os.path.join(save_dir,'refusal_test.csv'), index=False)
-        results['non_refusal_train'].to_csv(os.path.join(save_dir,'non_refusal_train.csv'), index=False)
-        results['non_refusal_test'].to_csv(os.path.join(save_dir,'non_refusal_test.csv'), index=False)
-
-        os.path.join('results', args.model_name, 'dataset', args.refusal_dataset) 
+        results['refusal_train'].to_csv(os.path.join(save_dir,f'train_{args.refusal_dataset}'), index=False)
+        results['refusal_test'].to_csv(os.path.join(save_dir,f'test_{args.refusal_dataset}'), index=False)
+        results['non_refusal_train'].to_csv(os.path.join(save_dir,f'train_{args.nonrefusal_dataset}'), index=False)
+        results['non_refusal_test'].to_csv(os.path.join(save_dir,f'test_{args.nonrefusal_dataset}'), index=False)
         
         # Print summary
         print("\n" + "="*50)
