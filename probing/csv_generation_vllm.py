@@ -54,7 +54,7 @@ def save_csv(results: List[dict], output_csv: str):
     print(f"\nSaving results to {output_csv}...")
     try:
         output_df = pd.DataFrame(results)
-        output_df.to_csv(os.path.join(output_csv), index=False)
+        output_df.to_csv(output_csv, index=False)
         print(f"Results saved successfully to {output_csv}")
     except Exception as e:
         print(f"Error saving output CSV: {e}")
@@ -149,7 +149,7 @@ def main():
 
     # Initialize model and tokenizer
     print("Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(local_model_path, trust_remote_code=True)
     
     print("Initializing vLLM...")
     llm = LLM(

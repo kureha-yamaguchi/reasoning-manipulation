@@ -8,9 +8,11 @@ if 'prompt': average activation is taken across all prompt token activation up t
 Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 python -m utils.cache_activations \
-    --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-    --layers 13,14,15,16,17,18,19 \
-    --type cot
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --layers 14,15,16,17,18 \
+    --type baseline
+    --refusal_dataset train_refusal_0.05_pct0.75.csv
+    --nonrefusal_dataset train_nonrefusal_0.6_pct0.75.csv
 """
 import argparse
 import gc
@@ -28,11 +30,11 @@ def parse_args():
                         help='Model name')
     parser.add_argument('--layers', type=str, default='15,19,23,27,31',
                         help='Comma-separated list of layer numbers to extract activations from')
-    parser.add_argument('--type', type=str, default='cot', 
+    parser.add_argument('--type', type=str, default='baseline', 
                         help="CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
-    parser.add_argument('--refusal_dataset', type=str, default='train_refusal_0.05.csv', 
+    parser.add_argument('--refusal_dataset', type=str, default='train_refusal_0.05_pct0.75.csv', 
                         help="Name of refusal dataset")
-    parser.add_argument('--nonrefusal_dataset', type=str, default='train_nonrefusal_0.6.csv', 
+    parser.add_argument('--nonrefusal_dataset', type=str, default='train_nonrefusal_0.6_pct0.75.csv', 
                         help="Name of non-refusal dataset")
     return parser.parse_args()
 

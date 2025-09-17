@@ -210,11 +210,20 @@ def main():
     
     # Orthogonalize model weights with respect to the refusal direction
     orthogonalized_model = orthogonalize_model_weights(model, refusal_dir)
-    # Save the model in SafeTensors format
+    
+    # Define the output directory
+    output_dir = os.path.join('results', args.model_name, f'ortho_model_{args.type}')
+    
+    # Save the orthogonalized model in SafeTensors format
     orthogonalized_model.save_pretrained(
-        os.path.join('results', args.model_name, f'ortho_model_{args.type}'),
+        output_dir,
         safe_serialization=True  # This enables SafeTensors format
     )
+    
+    # Save the tokenizer to the same directory
+    print("Saving tokenizer...")
+    tokenizer.save_pretrained(output_dir)
+    print(f"Tokenizer saved to {output_dir}")
 
 def run():
     main()
