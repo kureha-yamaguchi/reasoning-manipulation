@@ -10,7 +10,7 @@ import torch
 # CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.csv_generation_vllm --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --type cot --eval_csv test_refusal_0.05.csv
 
 # for prerelease versions to support openai-oss need to run with:
-# CUDA_VISIBLE_DEVICES=2,3 uv run --index-strategy unsafe-best-match --prerelease=allow -m utils.batch_csv_generation --model_name=openai/gpt-oss-20b --type harmful --tensor_parallel_size=2 
+# CUDA_VISIBLE_DEVICES=2,3 uv run --index-strategy unsafe-best-match --prerelease=allow -m utils.csv_generation_vllm --model_name=openai/gpt-oss-20b --type harmful --tensor_parallel_size=2 
 
 def parse_args():
     """Parse command line arguments."""
