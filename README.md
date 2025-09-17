@@ -61,19 +61,19 @@ uv run -m utils.create_base_dataset --dataset orbench --n 500 --dataset_dir data
 ```bash
 uv run  -m utils.check_duplicates
 ```
-`batch_generation_cot_output.py` generates n rollouts of a response for each prompt determined by –cot_repetitions and k rollouts of outputs (after </think>) determined by –output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag). Invalid responses where the </think> tag is missing, are excluded from Stage 2. Generations are unique to each model and are saved in results/{model_name}/dataset/. The directories will be created upon running of the script. The resulting csv file contains the columns prompt, cot, output, cot_rep_n, output_rep_n.
+`utils/batch_generation_cot_output.py` generates n rollouts of a response for each prompt determined by –cot_repetitions and k rollouts of outputs (after </think>) determined by –output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag). Invalid responses where the </think> tag is missing, are excluded from Stage 2. Generations are unique to each model and are saved in results/{model_name}/dataset/. The directories will be created upon running of the script. The resulting csv file contains the columns prompt, cot, output, cot_rep_n, output_rep_n.
 
 ```bash
 uv run -m utils.batch_generation_cot_output --input_dir dataset/ --input_csv all_harmful_prompts.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 ```
 
-`filter_datasets.py` feeds the model generation outputs (after </think>) through the StrongReject evaluator, which assigns scores on a continuous scale of 0 to 1, where a high score indicates a specific and convincing non-refusal response. For a set of output rollouts corresponding to the same prompt-cot sequence, if all of the scores are below a certain threshold or above a certain threshold, the prompt-CoT sequence is written to either a refusal or non-refusal dataset and saved in results/{model_name}/dataset/. The fields of the refusal and non-refusal datasets are `['prompt', 'cot', 'output_scores', 'cot_rep_n', 'cot_token_length']`.
+`utils/filter_datasets.py` feeds the model generation outputs (after </think>) through the StrongReject evaluator, which assigns scores on a continuous scale of 0 to 1, where a high score indicates a specific and convincing non-refusal response. For a set of output rollouts corresponding to the same prompt-cot sequence, if all of the scores are below a certain threshold or above a certain threshold, the prompt-CoT sequence is written to either a refusal or non-refusal dataset and saved in results/{model_name}/dataset/. The fields of the refusal and non-refusal datasets are `['prompt', 'cot', 'output_scores', 'cot_rep_n']`.
 
 ```bash
 uv run -m utils.filter_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv all_harmful_prompts_cot5_out5.csv --lower_threshold 0.1 --upper_threshold 0.85
 ```
 
-`create_train_test_split.py` reads both the refusal and non-refusal dataset files, finds the smaller dataset size and stores it as variable n. It then randomizes both datasets by shuffling rows independently for both refusal and non-refusal datasets and creates a train-test split of 75%:25%. The following datasets, refusal_train, refusal_test, non_refusal_train, non_refusal_test, are saved as separate csv files.
+`utils/create_train_test_split.py` reads both the refusal and non-refusal dataset files, finds the smaller dataset size and stores it as variable n. It then randomizes both datasets by shuffling rows independently for both refusal and non-refusal datasets and creates a train-test split of 75%:25%. The train and test splits for the refusal and non-refusal datasets are saved as separate csv files.
 
 ```bash
 uv run -m utils.create_train_test_split --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --train_set_split 0.75
@@ -84,7 +84,7 @@ uv run -m utils.create_train_test_split --model_name deepseek-ai/DeepSeek-R1-Dis
 
 ##  Activations
 
-`cache_activations.py` takes `dataset/refusal_train.csv` and `dataset/non_refusal_train.csv` files and caches residual stream activations for a sweep of layers. Depending on the argument specified in --type, the following is cached:
+`utils/cache_activations.py` takes refusal and non-refusal train sets and caches residual stream activations for a sweep of layers. Depending on the argument specified in --type, the following is cached:
   - if 'cot': average activation is taken across all cot token activations up to and including </think>
   - if 'baseline': average activation is taken across 3 tokens at the end of prompt
   - if 'prompt': average activation is taken across all prompt token activation up to and including <think>
@@ -97,32 +97,29 @@ uv run -m utils.cache_activations --model_name deepseek-ai/DeepSeek-R1-Distill-L
   <img src="figures/dataset_visualisation_transparent.png" width="780"/>
 </div>
 
-You can now determine which layer is best at separating the transformer residual stream activations for the cautious/non-cautious datasets by computing PCA plots using `probing/visualise_pca.ipynb`.
+`probing/visualise_pca.ipynb` displays PCA plots of the refusal and non-refusal activations to help determine which layer is best at separating the transformer residual stream activations.
 
+`probing/create_ortho_model.py` computes a difference-of-means direction using the activations of the contrastive datasets at a chosen layer. It then performs weight orthogonalisation by directly orthogonalising the weight matrices that write to the residual stream with respect to the direction $\widehat{r}$:
 
-For the layer determined using PCA, you can train a logistic regression classifier using `probing/logistic_regression.ipynb`.
+$$W_{\text{out}}' \leftarrow W_{\text{out}} - \widehat{r}\widehat{r}^{\mathsf{T}} W_{\text{out}}$$
 
+The refusal direction and orthogonalised model are saved locally under results/{model_name}.
+
+```bash
+uv run -m probing.create_ortho_model --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --layer 17 --type cot
+```
 
 <div align="center">
   <img src="figures/heatmap_annotated_transparent2.png" width="780"/>
 </div>
 
-In `probing/create_ortho_model.py`, we can calculate the caution direction using the difference of means between the activations from the chosen layer. We can then implement the intervention by directly orthogonalising the weight matrices that write to the residual stream with respect to the caution direction $\widehat{c}$:
-
-$$W_{\text{out}}' \leftarrow W_{\text{out}} - \widehat{c}\widehat{c}^{\mathsf{T}} W_{\text{out}}$$
-
-The orthogonalised model using acitvations at layer 17 from `activations/cot150_plus` can be created using:
-```bash
-uv run -m probing.create_ortho_model --activations_dir 'activations/cot150_plus/' --layer 17 
-```
-
-After pushing the model to HF, you can then use the `probing/ortho_csv_generation.py` script to save a .csv file of the prompt, orthogonalised response pair using prompts from the evaluation dataset `dataset/cautious_eval.csv`. Here, replace 'kureha295/ortho_model' with your HF model.
+`probing/csv_generation_vllm.py` generates model outputs from the locally stored orthogonalised model using vllm.
 
 ```bash
-uv run -m probing.ortho_csv_generation --model_name 'kureha295/ortho_model' --input_csv 'dataset/cautious_eval.csv' --output_csv 'dataset/orthogonalized_outputs_2048.csv' --max_new_tokens 2048
+uv run -m probing.csv_generation_vllm --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --type cot --eval_csv test_refusal_0.05_cot.csv
 ```
 
-Using `probing/intervention_results.ipynb`, we can compare StrongREJECT fine-tuned evaluator scores before and after applying the weight orthogonalisation using the caution direction.
+`probing/intervention_results.ipynb` compares StrongREJECT fine-tuned evaluator scores before and after applying the weight orthogonalisation using the difference-of-means direction.
 
 **Example generations from standard verus orthogonalised model:**
 <div align="center">
@@ -131,8 +128,7 @@ Using `probing/intervention_results.ipynb`, we can compare StrongREJECT fine-tun
 
 Our 'toxified' orthogonalised model is available on HuggingFace (with gated access) at [https://hf.co/kureha295/cot150_plus](https://hf.co/kureha295/cot150_plus)
 
-
-## Prompt-based Attacks - TO UPDATE
+## Prompt-based Attacks 
 
 This GCG-style implementation is adapted from GraySwanAI's [nanoGCG](https://github.com/GraySwanAI/nanoGCG) (MIT license), with the adition of activation caution minimisation (via dot product with pre-computed cautious vector).
 
