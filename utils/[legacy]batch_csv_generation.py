@@ -83,34 +83,22 @@ def process_batch(llm: LLM, tokenizer, prompts_batch: List[str],
     """Process a batch of prompts with repetitions."""
     results = []
     
-    # Create repeated prompts for this batch
-    repeated_prompts = []
-    original_indices = []
+    # Apply chat template to the prompts
+    formatted_prompts = apply_chat_template_batch(prompts_batch, tokenizer)
     
-    for i, prompt in enumerate(prompts_batch):
-        for rep in range(repetitions):
-            repeated_prompts.append(prompt)
-            original_indices.append(i)
-    
-    # Apply chat template to all repeated prompts
-    formatted_prompts = apply_chat_template_batch(repeated_prompts, tokenizer)
-    
-    print(f"Generating responses for {len(formatted_prompts)} prompts (batch size: {len(prompts_batch)}, repetitions: {repetitions})...")
+    print(f"Generating responses for {len(formatted_prompts)} prompts (batch size: {len(prompts_batch)}")
     
     # Generate responses
     outputs = llm.generate(formatted_prompts, sampling_params)
     
     # Process outputs and group by original prompt
     for i, output in enumerate(outputs):
-        original_idx = original_indices[i]
-        original_prompt = prompts_batch[original_idx]
+        original_prompt = prompts_batch
         response = output.outputs[0].text
-        repetition = i % repetitions + 1
         
         results.append({
             "prompt": original_prompt,
             "response": response,
-            "repetition": repetition
         })
     
     return results
