@@ -207,7 +207,7 @@ def main() -> None:
         args.results_dir,
         args.model_name,
         "dataset",
-        f"refusal_{args.lower_threshold}.csv"
+        f"refusal_{args.lower_threshold}_cot.csv"
     )
     write_to_csv(refusal, output_file=output_refusal_path)
 
@@ -216,7 +216,7 @@ def main() -> None:
         args.results_dir,
         args.model_name,
         "dataset",
-        f"nonrefusal_{args.upper_threshold}.csv"
+        f"nonrefusal_{args.upper_threshold}_cot.csv"
     )
     write_to_csv(non_refusal, output_file=output_nonrefusal_path)
 
