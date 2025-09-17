@@ -7,7 +7,7 @@ from huggingface_hub import HfFileSystem, model_info
 from huggingface_hub.utils import RepositoryNotFoundError, RevisionNotFoundError
 
 top_level_dir = "results"
-subdirs: list[str] = ["activations", "attack_results", "cautious_dir", "dataset"]
+subdirs: list[str] = ["activations", "attack_results", "refusal_dir", "dataset"]
 
 fs: HfFileSystem = HfFileSystem()
 
@@ -286,7 +286,7 @@ This directory contains experimental results for the {model_data['model_name']} 
 
 - `dataset/` - Generated prompt outputs from model inference
 - `activations/` - Cached model activations for dataset generations
-- `cautious_dir/` - Computed caution direction vectors from Chain-of-Thought analysis
+- `refusal_dir/` - Computed caution direction vectors from Chain-of-Thought analysis
 - `attack_results/` - GCG-IRIS style prompt optimization results
 
 ## Notes
