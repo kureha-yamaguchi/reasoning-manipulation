@@ -1,3 +1,13 @@
+"""
+Generates model outputs from the locally stored orthogonalised model using vllm.
+
+Usage:
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True 
+python -m probing.csv_generation_vllm --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --type baseline 
+"""
+
+
 import argparse
 import gc
 from typing import List, Union
@@ -7,10 +17,6 @@ from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 import torch
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.csv_generation_vllm --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --type cot --eval_csv test_refusal_0.05.csv
-
-# for prerelease versions to support openai-oss need to run with:
-# CUDA_VISIBLE_DEVICES=2,3 uv run --index-strategy unsafe-best-match --prerelease=allow -m utils.csv_generation_vllm --model_name=openai/gpt-oss-20b --type harmful --tensor_parallel_size=2 
 
 def parse_args():
     """Parse command line arguments."""
@@ -21,8 +27,6 @@ def parse_args():
                         help="Name of the model (used to construct local path)")
     parser.add_argument("--type", type=str, required=True,
                         help="Ortho model from direction extracted from CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
-    parser.add_argument("--eval_csv", type=str, default="test_refusal_0.05.csv", 
-                        help="Dataset input CSV filename")
     parser.add_argument("--max_new_tokens", type=int, default=2048, 
                         help="Maximum number of tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.6, 
@@ -33,7 +37,7 @@ def parse_args():
                         help="Batch size for vLLM inference")
     parser.add_argument("--tensor_parallel_size", type=int, default=1, 
                         help="Number of GPUs to use for tensor parallelism")
-    parser.add_argument("--gpu_memory_utilization", type=float, default=0.9, 
+    parser.add_argument("--gpu_memory_utilization", type=float, default=0.8, 
                         help="GPU memory utilization ratio")
     return parser.parse_args()
 
@@ -144,7 +148,7 @@ def main():
     
     # Handle CSV file selection
     
-    input_csv = os.path.join('results', args.model_name, 'dataset', args.eval_csv)
+    input_csv = os.path.join('results', args.model_name, 'dataset', f'test_refusal_0.05_{args.type}.csv')
     output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_model_output_{args.type}.csv')
 
     # Initialize model and tokenizer

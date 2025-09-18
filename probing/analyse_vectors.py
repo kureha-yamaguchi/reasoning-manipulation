@@ -2,7 +2,8 @@
 This script visualizes the cosine similarity between a pre-computed direction vector
 and per-token activations from layer 18 of DeepSeek-R1-Distill-Llama-8B.
 """
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.analyse_vectors --index 18 --flag incautious
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.analyse_vectors --index 1 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+
 import argparse
 import gc
 import os
@@ -17,19 +18,15 @@ from nnsight import LanguageModel
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Visualize activation similarities")
-    parser.add_argument("--vector_path", type=str, default="probing/cautious_dir.pt", 
-                        help="Path to the pre-computed direction vector")
-    parser.add_argument("--ortho", type=bool, default=False, help="Are you using a local model? (y/n)")
-    parser.add_argument('--dataset_path', type=str, default='dataset/non_cautious.csv',
+    parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+                        help="Name of the model you are interested in")
+    parser.add_argument("--type", type=str, default="cot", help="Which activations were taken to compute the difference-of-means direction?")
+    parser.add_argument('--dataset', type=str, default='heatmap_test_refusal_cot.csv',
                         help='Path to the dataset')
     parser.add_argument("--layer", type=int, default=17, 
                         help="Layer to extract activations from")
     parser.add_argument("--index", type=int, default=3, 
                         help="Index from cautious.csv")
-    parser.add_argument("--output_dir", type=str, default="figures/",
-                        help="Directory for output files")
-    parser.add_argument("--flag", type=str, default="incautious",
-                        help="Flag for saving image")
     
     return parser.parse_args()
 
@@ -57,10 +54,11 @@ def get_activations(model, row, layer=18):
     # Clear memory before processing
     gc.collect()
     torch.cuda.empty_cache()
-    chat = [{"role": "user", "content": row.forbidden_prompt}]
+    chat = [{"role": "user", "content": row.prompt}]
     prompt_tokens = model.tokenizer.apply_chat_template(chat, add_generation_prompt=True)
-    response_tokens = model.tokenizer.encode(row.response, add_special_tokens=False)
-    tokens_to_process = prompt_tokens + response_tokens
+    cot_tokens = model.tokenizer.encode(row.cot, add_special_tokens=False)
+    output_tokens = model.tokenizer.encode(row.output, add_special_tokens=False)
+    tokens_to_process = prompt_tokens + cot_tokens + output_tokens
     input_text = model.tokenizer.decode(tokens_to_process)
     
     # Tokenize input text
@@ -169,26 +167,21 @@ def main():
     print(f"CUDA available: {torch.cuda.is_available()}")
     gc.collect()
     torch.cuda.empty_cache()
-    
+    model_name = args.model_name
+
     # Set plotting settings
     set_plotting_settings()
     
     # Load the pre-computed direction vector
-    direction_vector = torch.load(args.vector_path)
+    direction_vector = torch.load(os.path.join('results', model_name, 'refusal_dir', f'{args.type}_refusal_dir.pt'))
     print(f"Loaded direction vector with shape: {direction_vector.shape}")
     
-    print(f"Loading CSV dataset from {args.dataset_path}")
-    df = pd.read_csv(args.dataset_path)
+    dataset_path = os.path.join('results', model_name, 'dataset', args.dataset)
+    print(f"Loading CSV dataset from {dataset_path}")
+    df = pd.read_csv(dataset_path)
     row = df.iloc[args.index]
-    prompt = row.forbidden_prompt
+    prompt = row.prompt
     print(prompt)
-
-    if args.ortho: 
-        model_name = "kureha295/ortho_model"
-        print(f"Initializing model {model_name}")
-    else:
-        model_name = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
-        print(f"Initializing model {model_name}")
 
     model = LanguageModel(model_name, device_map="auto")
     # Memory cleanup after model loading
@@ -202,14 +195,12 @@ def main():
     # Compute cosine similarities
     similarities = compute_cosine_similarities(activations, direction_vector)
     
-    # Create output directory if it doesn't exist
-    os.makedirs(args.output_dir, exist_ok=True)
-    
     # Create visualizations
     # plot_token_similarities(token_texts, similarities, 
     #                        output_path=os.path.join(args.output_dir, "after_4_bars.png"))
+    output_dir = os.path.join('results', model_name, 'figures')
     plot_heatmap(token_texts, similarities, prompt,
-                output_path=os.path.join(args.output_dir, f"heatmap_basemodel_{args.index}_{args.flag}.png"))
+                output_path=os.path.join(output_dir, f"{args.dataset}_{args.index}.png"))
     
     # Print highest and lowest similarity tokens
     sorted_indices = np.argsort(similarities)
