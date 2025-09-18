@@ -117,6 +117,115 @@ def get_orthogonalized_matrix_efficient(matrix, vec):
     
     return orthogonalized
 
+
+
+def _orthogonalize_moe_experts_tensor(weights, direction, get_orthogonalized_matrix_efficient):
+    """
+    weights: torch.Tensor with shape either
+      - (num_experts, out_dim, in_dim)  OR
+      - (num_experts, in_dim, out_dim)  OR
+      - (out_dim, in_dim)  (no experts)
+    direction: torch.Tensor (already moved to correct device)
+    returns: weights with each expert orthogonalized (new tensor or in-place)
+    """
+    # ensure direction on same device
+    direction = direction.to(device=weights.device, dtype=weights.dtype)
+
+    # If it's 2D, treat as single matrix
+    if weights.ndim == 2:
+        return get_orthogonalized_matrix_efficient(weights, direction)
+
+    # If it's 3D, assume dim0 indexes experts
+    if weights.ndim == 3:
+        num_experts = weights.shape[0]
+        # Try to orthogonalize in-place expert-by-expert to save memory
+        for e in range(num_experts):
+            # pick expert slice
+            expert = weights[e]  # view into parent tensor (may be copy depending on layout)
+
+            orig_dtype = expert.dtype
+
+            # Normalize shape: we want (out_dim, in_dim) for get_orthogonalized_matrix_efficient
+            # If shape is (in_dim, out_dim), transpose before calling and transpose back.
+            if expert.shape[0] == expert.shape[1]:
+                # square — orientation doesn't matter
+                orth = get_orthogonalized_matrix_efficient(expert.to(torch.float32), direction)
+            else:
+                raise NotImplementedError("Non-square expert matrices are not supported in this version.")
+
+            # write back in-place (preserving dtype/device)
+            try:
+                orth = orth.to(orig_dtype)
+                weights[e].data.copy_(orth)
+            except Exception:
+                print("In-place copy failed, using tmp clone")
+                # fallback: replace whole tensor (less memory efficient)
+                tmp = weights.clone()
+                tmp[e] = orth
+                weights = tmp
+            # free mem
+            gc.collect()
+            torch.cuda.empty_cache()
+        return weights
+
+    raise ValueError(f"Unexpected weight ndim: {weights.ndim}")
+
+def _handle_moe_layer_down_proj(down_proj, direction, get_orthogonalized_matrix_efficient):
+    """
+    down_proj: could be:
+      - a torch.Tensor (2D or 3D)
+      - or a custom quantized object/dict (e.g., with .blocks/.scales for MXFP4)
+    Returns object in same *type* as input (i.e., re-quantize if needed).
+    """
+    # 1) If it's a plain tensor -> process directly
+    if isinstance(down_proj, torch.Tensor):
+        return _orthogonalize_moe_experts_tensor(down_proj, direction, get_orthogonalized_matrix_efficient)
+
+    # 2) If it's a quantized representation used by GPT-OSS
+    #    Many GPT-OSS checkpoints store MXFP4 MoE tensors as a small custom object
+    #    with fields like `blocks` (uint8 packed) and `scales` (float) or similar.
+    #    We try to detect and use provided dequantize/requantize utils if available.
+    if hasattr(down_proj, "blocks") and hasattr(down_proj, "scales"):
+        # Attempt to dequantize using an available helper in the runtime (if present)
+        # If your codebase provides e.g. `mxfp4_dequantize(blocks, scales)` use it here.
+        try:
+            dequant_fn = getattr(down_proj, "dequantize", None)
+            if callable(dequant_fn):
+                float_tensor = dequant_fn()  # expect torch.Tensor shape (num_experts, out, in)
+            else:
+                # fallback: try to import or call a utility from your project (placeholder)
+                # from gpt_oss_utils import mxfp4_dequantize
+                # float_tensor = mxfp4_dequantize(down_proj.blocks, down_proj.scales)
+                raise AttributeError("no dequant helper found on object")
+        except Exception as ex:
+            raise RuntimeError(
+                "MoE weights appear to be stored in a quantized MXFP4 form. "
+                "You must dequantize them to float before orthogonalizing. "
+                "Use the project's MXFP4 utils (see OpenAI GPT-OSS repo / model_card)."
+            ) from ex
+
+        # orthogonalize float tensor per-expert
+        float_tensor = _orthogonalize_moe_experts_tensor(float_tensor, direction, get_orthogonalized_matrix_efficient)
+
+        # Re-quantize: prefer using the model's re-quantization function to preserve exact format.
+        requant_fn = getattr(down_proj, "requantize", None)
+        if callable(requant_fn):
+            new_qobj = requant_fn(float_tensor)
+            return new_qobj
+        else:
+            # fallback: if you cannot re-quantize, replace with float weights (may break code that expects MXFP4)
+            # alert user
+            print("Warning: could not re-quantize to MXFP4; returning float tensor instead. "
+                  "This may increase memory and change checkpoint format.")
+            return float_tensor
+
+    # 3) Unknown format: raise
+    raise TypeError("Unsupported MoE down_proj object type. Expected torch.Tensor or quantized MXFP4-like object.")
+
+
+
+
+
 def orthogonalize_model_weights(model, direction):
     """
     Orthogonalize key model weights with respect to the given direction
@@ -136,6 +245,7 @@ def orthogonalize_model_weights(model, direction):
     torch.cuda.empty_cache()
     
     # Orthogonalize word embeddings
+    print("Orthogonalizing word embeddings...")
     if hasattr(model, 'model') and hasattr(model.model, 'embed_tokens'):
         model.model.embed_tokens.weight.data = get_orthogonalized_matrix_efficient(
             model.model.embed_tokens.weight.data, direction
@@ -148,21 +258,36 @@ def orthogonalize_model_weights(model, direction):
         print(f"Processing layer {i}")
         
         # Attention output projection
+        print("  Orthogonalizing attention output projection...")
+        attn_dtype = layer.self_attn.o_proj.weight.data.dtype
         layer.self_attn.o_proj.weight.data = get_orthogonalized_matrix_efficient(
             layer.self_attn.o_proj.weight.data, direction
         )
+        layer.self_attn.o_proj.weight.data = layer.self_attn.o_proj.weight.data.to(dtype=attn_dtype)
         gc.collect()
         torch.cuda.empty_cache()
         
         # MLP output projection
-        layer.mlp.down_proj.weight.data = get_orthogonalized_matrix_efficient(
-            layer.mlp.down_proj.weight.data, direction
-        )
-        gc.collect()
-        torch.cuda.empty_cache()
-    
+        print("  Orthogonalizing MLP output projection...")
+        if hasattr(layer.mlp, 'down_proj'):
+            # Standard MLP layer
+            layer.mlp.down_proj.weight.data = get_orthogonalized_matrix_efficient(
+                layer.mlp.down_proj.weight.data, direction
+            )
+        elif hasattr(layer.mlp, 'experts'): 
+            down_proj_obj = layer.mlp.experts.down_proj
+            new_down_proj = _handle_moe_layer_down_proj(down_proj_obj, direction, get_orthogonalized_matrix_efficient)
+
+            # assign back depending on type
+            if isinstance(down_proj_obj, torch.Tensor) and isinstance(new_down_proj, torch.Tensor):
+                layer.mlp.experts.down_proj.data.copy_(new_down_proj)
+            else:
+                # replace the whole object (for quantized objects or when re-quantized object returned)
+                layer.mlp.experts.down_proj = new_down_proj
+                
     print("Model weights orthogonalized successfully.")
     return model
+
 
 def main():
     args = parse_args()
@@ -210,10 +335,14 @@ def main():
     
     # Orthogonalize model weights with respect to the refusal direction
     orthogonalized_model = orthogonalize_model_weights(model, refusal_dir)
-    
+
+    if "gpt-oss" in args.model_name:
+        orthogonalized_model = orthogonalized_model.to(dtype=torch.bfloat16, device="cuda")
+
     # Define the output directory
     output_dir = os.path.join('results', args.model_name, f'ortho_model_{args.type}')
     
+    print("Saving model as safetensors... (takes a while)")
     # Save the orthogonalized model in SafeTensors format
     orthogonalized_model.save_pretrained(
         output_dir,
