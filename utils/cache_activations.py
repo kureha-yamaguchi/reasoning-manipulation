@@ -11,8 +11,8 @@ python -m utils.cache_activations \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
     --layers 14,15,16,17,18 \
     --type baseline
-    --refusal_dataset train_refusal_0.05_pct0.75.csv
-    --nonrefusal_dataset train_nonrefusal_0.6_pct0.75.csv
+    --refusal_dataset train_refusal_0.05_baseline.csv
+    --nonrefusal_dataset train_nonrefusal_0.6_baseline.csv
 """
 import argparse
 import gc

@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.activation_addition_allcot --alpha 1.5 --layer 17
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.activation_addition_allcot --alpha 1.7 --layer 17 --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --type cot
 
 
 def parse_args():
@@ -17,22 +17,17 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Process prompts with CoT-specific activation addition in DeepSeek model"
     )
-    parser.add_argument(
-        "--activations_dir",
-        type=str,
-        default="activations/cot150_plus/",
-        help="Path to activations directory" 
-    )
-    parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", help="Load the model")
-    parser.add_argument("--layer", type=int, default=17, help="Layer to apply activation addition")
-    parser.add_argument('--input_csv', type=str, default='dataset/standard_plus/non_cautious.csv',    
-                        help='Path to the input CSV file with prompts')
-    parser.add_argument('--output_csv', type=str, default='dataset/standard_plus/activation_addition_allcot.csv',
-                        help='Path to save the output CSV file')
-    parser.add_argument("--max_new_tokens", type=int, default=2048, help="Maximum number of tokens to generate")
+    parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+                        help="Load the model")
+    parser.add_argument("--type", type=str, default="cot", 
+                        help="Direction extracted from CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
+    parser.add_argument("--layer", type=int, default=17,
+                        help="Layer to apply activation addition")
+    parser.add_argument("--max_new_tokens", type=int, default=2048,   
+                        help="Maximum number of tokens to generate")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                        help="Device to run inference on (cuda/cpu)")
-    parser.add_argument("--alpha", type=float, default=1.0, help="Scaling factor for activation addition")
+    parser.add_argument("--alpha", type=float, default=1.7, help="Scaling factor for activation addition")
     return parser.parse_args()
 
 def load_model(model_name, device):
@@ -54,7 +49,7 @@ def read_csv(input_csv):
     try:
         # Read the CSV file using pandas
         df = pd.read_csv(input_csv)
-        prompts = df['forbidden_prompt'].tolist()
+        prompts = df['prompt'].tolist()
         print(f"Loaded {len(prompts)} prompts from the CSV file")
         return prompts
     except Exception as e:
@@ -79,26 +74,6 @@ def apply_chat_template(prompt, tokenizer, device):
     op_length = len(raw_tokenized_chat)
     tokenized_chat = torch.tensor([raw_tokenized_chat]).to(device)
     return tokenized_chat, op_length
-
-def load_activations(file_path):
-    """Load activation data from .npy file"""
-    try:
-        activations = np.load(file_path)
-        print(f"Loaded activations with shape: {activations.shape}")
-        return activations
-    except Exception as e:
-        print(f"Error loading file {file_path}: {e}")
-        return None
-    
-def get_mean_act(activations_np):
-    # Convert to PyTorch tensor
-    activations_torch = torch.from_numpy(activations_np)
-    mean_act = torch.mean(activations_torch, dim=0)
-    return mean_act
-
-def get_dir(mean_act1, mean_act2):
-    dir = mean_act1 - mean_act2
-    return dir
 
 # Global variables to track activation addition range
 class ActivationTracker:
@@ -235,8 +210,8 @@ def register_activation_addition_hooks_cot(model, direction, target_layer, alpha
     target_module = model.model.layers[target_layer]
     handles.append(target_module.register_forward_hook(hook_fn))
     
-    print(f"Registered CoT-specific activation addition hook on layer {target_layer} with alpha={alpha}")
-    print(f"Direction norm: {direction.norm().item():.4f}")
+    # print(f"Registered CoT-specific activation addition hook on layer {target_layer} with alpha={alpha}")
+    # print(f"Direction norm: {direction.norm().item():.4f}")
     return handles
 
 def gen_text_with_cot_addition(model, tokenizer, op_length, tokenized_chat, max_new_tokens, direction, target_layer, alpha):
@@ -277,38 +252,38 @@ def gen_text_with_cot_addition(model, tokenizer, op_length, tokenized_chat, max_
             # Decode the generated output
             response = tokenizer.decode(input_ids[0][op_length:], skip_special_tokens=True)
             
-            # Sanity checks
-            print("\n=== SANITY CHECKS ===")
-            print(f"Total generated tokens: {generated_tokens}")
-            print(f"Prompt length: {op_length}")
-            print(f"Final addition range: {activation_tracker.start_pos} to {activation_tracker.end_pos}")
+            # # Sanity checks
+            # print("\n=== SANITY CHECKS ===")
+            # print(f"Total generated tokens: {generated_tokens}")
+            # print(f"Prompt length: {op_length}")
+            # print(f"Final addition range: {activation_tracker.start_pos} to {activation_tracker.end_pos}")
             
-            # Check if </think> was found
-            if activation_tracker.found_think_close:
-                print(f"</think> found at position: {activation_tracker.end_pos - len(activation_tracker.think_close_tokens)}")
-                print(f"Relative position in generation: {activation_tracker.end_pos - len(activation_tracker.think_close_tokens) - op_length}")
+            # # Check if </think> was found
+            # if activation_tracker.found_think_close:
+            #     print(f"</think> found at position: {activation_tracker.end_pos - len(activation_tracker.think_close_tokens)}")
+            #     print(f"Relative position in generation: {activation_tracker.end_pos - len(activation_tracker.think_close_tokens) - op_length}")
                 
-                # Show tokens around </think>
-                think_start = activation_tracker.end_pos - len(activation_tracker.think_close_tokens)
-                context_start = max(0, think_start - 5)
-                context_end = min(len(input_ids[0]), think_start + 10)
-                context_tokens = input_ids[0][context_start:context_end]
-                context_text = tokenizer.decode(context_tokens, skip_special_tokens=False)
-                print(f"Context around </think>: {repr(context_text)}")
-            else:
-                print("WARNING: </think> tag not found in generation!")
+            #     # Show tokens around </think>
+            #     think_start = activation_tracker.end_pos - len(activation_tracker.think_close_tokens)
+            #     context_start = max(0, think_start - 5)
+            #     context_end = min(len(input_ids[0]), think_start + 10)
+            #     context_tokens = input_ids[0][context_start:context_end]
+            #     context_text = tokenizer.decode(context_tokens, skip_special_tokens=False)
+            #     print(f"Context around </think>: {repr(context_text)}")
+            # else:
+            #     print("WARNING: </think> tag not found in generation!")
             
-            # Check if activation addition was applied
-            if activation_tracker.start_pos is not None and activation_tracker.end_pos is not None:
-                modified_tokens = activation_tracker.end_pos - activation_tracker.start_pos
-                print(f"Applied activation addition to {modified_tokens} CoT tokens")
-            elif activation_tracker.start_pos is not None:
-                modified_tokens = generated_tokens
-                print(f"Applied activation addition to approximately {modified_tokens} CoT tokens (</think> not found)")
-            else:
-                print("WARNING: No activation addition range was set!")
+            # # Check if activation addition was applied
+            # if activation_tracker.start_pos is not None and activation_tracker.end_pos is not None:
+            #     modified_tokens = activation_tracker.end_pos - activation_tracker.start_pos
+            #     print(f"Applied activation addition to {modified_tokens} CoT tokens")
+            # elif activation_tracker.start_pos is not None:
+            #     modified_tokens = generated_tokens
+            #     print(f"Applied activation addition to approximately {modified_tokens} CoT tokens (</think> not found)")
+            # else:
+            #     print("WARNING: No activation addition range was set!")
             
-            print("=== END SANITY CHECKS ===\n")
+            # print("=== END SANITY CHECKS ===\n")
     
     finally:
         # Remove hooks to clean up
@@ -324,42 +299,25 @@ def main():
     gc.collect()
     torch.cuda.empty_cache()
 
-    # Load activations
-    print("Loading activations...")
-    activations_cautious = load_activations(os.path.join(args.activations_dir, f"deepseek_layer_{args.layer}_cautious_activations.npy"))
-    cautious_mean_act = get_mean_act(activations_cautious).to(dtype=torch.float16, device=args.device)
-    # Free memory
-    del activations_cautious
-    gc.collect()
-    torch.cuda.empty_cache()
-    
-    activations_noncautious = load_activations(os.path.join(args.activations_dir, f"deepseek_layer_{args.layer}_noncautious_activations.npy"))
-    noncautious_mean_act = get_mean_act(activations_noncautious).to(dtype=torch.float16, device=args.device)
-    # Free memory
-    del activations_noncautious
-    gc.collect()
-    torch.cuda.empty_cache()
-    
-    # Calculate difference of means (cautious direction)
-    # This vector points from non-cautious to cautious
-    cautious_dir = get_dir(cautious_mean_act, noncautious_mean_act)
-    print(f"Cautious direction shape: {cautious_dir.shape}")
-    print(f"Cautious direction norm: {torch.norm(cautious_dir).item():.4f}")
-    
-    # Free memory before generating text with activation addition
-    del cautious_mean_act, noncautious_mean_act
+    # Load tensor directly from refusal_dir and normalize
+    r_dir = torch.load(os.path.join('results', args.model_name, 'refusal_dir', f'{args.type}_refusal_dir.pt'))
+    refusal_dir = r_dir / r_dir.norm()  # Normalize for ablation
+
     gc.collect()
     torch.cuda.empty_cache()
 
     # Load model and tokenizer
     model, tokenizer = load_model(args.model_name, args.device)
 
-    # Test tokenizer with </think> tag
-    think_close_tokens = tokenizer.encode("</think>", add_special_tokens=False)
-    print(f"</think> tokenizes to: {think_close_tokens}")
-    print(f"</think> decoded back: {repr(tokenizer.decode(think_close_tokens))}")
+    # # Test tokenizer with </think> tag
+    # think_close_tokens = tokenizer.encode("</think>", add_special_tokens=False)
+    # print(f"</think> tokenizes to: {think_close_tokens}")
+    # print(f"</think> decoded back: {repr(tokenizer.decode(think_close_tokens))}")
 
-    prompts = read_csv(args.input_csv)
+    input_csv = os.path.join('results', args.model_name, 'dataset', f'test_nonrefusal_0.6_{args.type}.csv')
+    output_csv = os.path.join('results', args.model_name, 'attack_results', f'act_addition_allcot_{args.type}.csv')
+
+    prompts = read_csv(input_csv)
     results = []
 
     # Process each prompt
@@ -369,27 +327,26 @@ def main():
         # Apply chat template
         tokenized_chat, op_length = apply_chat_template(prompt, tokenizer, args.device)
         
-        # Show prompt tokens for debugging
-        prompt_text = tokenizer.decode(tokenized_chat[0], skip_special_tokens=False)
-        print(f"Prompt tokens (length {op_length}): {repr(prompt_text[:200])}...")
+        # # Show prompt tokens for debugging
+        # prompt_text = tokenizer.decode(tokenized_chat[0], skip_special_tokens=False)
+        # print(f"Prompt tokens (length {op_length}): {repr(prompt_text[:200])}...")
             
         # Generate text with CoT-specific activation addition
         print("Generating text with CoT-specific activation addition...")
         modified_text = gen_text_with_cot_addition(
-            model, tokenizer, op_length, tokenized_chat, args.max_new_tokens, 
-            cautious_dir, args.layer, args.alpha
+            model, tokenizer, op_length, tokenized_chat, args.max_new_tokens, refusal_dir, args.layer, args.alpha
         )
             
         # Save result
         results.append({
-            "forbidden_prompt": prompt, 
+            "prompt": prompt, 
             "response": modified_text,
         })
         del prompt, modified_text
         gc.collect()
         torch.cuda.empty_cache()
 
-    save_csv(results, args.output_csv)
+    save_csv(results, output_csv)
     
     print("CoT-specific activation addition completed successfully!")
 
