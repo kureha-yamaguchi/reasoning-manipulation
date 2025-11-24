@@ -26,9 +26,9 @@ def parse_args():
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Model to use for generation")
-    parser.add_argument("--refusal_dataset", type=str, default="refusal_0.05_pct0.75.csv", 
+    parser.add_argument("--refusal_dataset", type=str, default="refusal_0.05_baseline.csv", 
                         help="Name of the refusal dataset")
-    parser.add_argument("--nonrefusal_dataset", type=str, default="nonrefusal_0.6_pct0.75.csv", 
+    parser.add_argument("--nonrefusal_dataset", type=str, default="nonrefusal_0.6_baseline.csv", 
                         help="Name of the non-refusal dataset")
     parser.add_argument("--train_set_split", type=float, default="0.75", 
                         help="Train split proportion between 0-1")
