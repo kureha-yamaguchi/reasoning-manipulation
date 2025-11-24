@@ -26,6 +26,7 @@ from vllm import LLM, SamplingParams
 import questionary
 import re
 import torch
+from huggingface_hub import hf_hub_download
 
 from utils.paths import get_path, make_dirs
 
@@ -90,15 +91,44 @@ def save_csv(results: List[dict], output_csv: str, dataset_dir: str):
     except Exception as e:
         print(f"Error saving CSV: {e}")
 
-def apply_chat_template_batch(prompts: List[str], tokenizer) -> List[str]:
+def apply_chat_template_batch(prompts: List[str], model_name, tokenizer) -> List[str]:
     """Apply chat template to batch of prompts."""
     formatted_prompts = []
-    for prompt in prompts:
-        chat = [{"role": "user", "content": prompt}]
-        formatted_prompts.append(tokenizer.apply_chat_template(
-            chat, add_generation_prompt=True, tokenize=False
-        ))
+
+    if model_name == "mistralai/Magistral-Small-2506":
+        SYSTEM_PROMPT = load_system_prompt(model_name, "SYSTEM_PROMPT.txt")
+        for prompt in prompts:
+            chat = [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ]
+            formatted_prompts.append(tokenizer.apply_chat_template(
+                chat, add_generation_prompt=True, tokenize=False
+            ))
+    elif model_name == "nvidia/NVIDIA-Nemotron-Nano-9B-v2":
+        for prompt in prompts:
+            chat = [
+                {"role": "system", "content": "/think"},
+                {"role": "user", "content": prompt}
+            ]
+            formatted_prompts.append(tokenizer.apply_chat_template(
+                chat, add_generation_prompt=True, tokenize=False
+            ))
+    else:
+        for prompt in prompts:
+            chat = [{"role": "user", "content": prompt}]
+            formatted_prompts.append(tokenizer.apply_chat_template(
+                chat, add_generation_prompt=True, tokenize=False
+            ))
+
+    
     return formatted_prompts
+
+def load_system_prompt(repo_id: str, filename: str) -> str:
+    file_path = hf_hub_download(repo_id=repo_id, filename=filename)
+    with open(file_path, "r") as file:
+        system_prompt = file.read()
+    return system_prompt
 
 def extract_cot_and_output(response):
     """
@@ -181,7 +211,7 @@ def stage1_generate_cots(
                 prompt_indices.append(i)
         
         # Apply chat template
-        formatted_prompts = apply_chat_template_batch(repeated_prompts, tokenizer)
+        formatted_prompts = apply_chat_template_batch(repeated_prompts, args.model_name, tokenizer)
         
         # Generate
         outputs = llm.generate(formatted_prompts, sampling_params)
@@ -286,7 +316,7 @@ def stage2_generate_outputs(
         unique_prompts = [cot_result["prompt"] for cot_result in batch_cots]
         
         # Apply chat template to all prompts in batch
-        formatted_prompts = apply_chat_template_batch(unique_prompts, tokenizer)
+        formatted_prompts = apply_chat_template_batch(unique_prompts, args.model_name, tokenizer)
         
         # Create prompt-cot sequences for generation
         rep_combined_input = []
@@ -429,23 +459,50 @@ def main():
 
     # Initialize model and tokenizer
     print("Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+    
+    if args.model_name == "mistralai/Magistral-Small-2506":
+        # Use base model tokenizer as workaround
+        tokenizer = AutoTokenizer.from_pretrained(
+            "unsloth/Magistral-Small-2506", 
+            trust_remote_code=True
+        )
+        print("Using base model tokenizer for Magistral-Small-2506")
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     
     print("Initializing vLLM...")
-    llm = LLM(
+    
+    # Special vLLM configuration for Magistral models
+    if args.model_name == "mistralai/Magistral-Small-2506":
+        # Set environment variable for context length
+        os.environ["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
+        llm = LLM(
         model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         trust_remote_code=True,
+        tokenizer_mode="mistral",  # Use mistral tokenizer mode
+        config_format="mistral",   # Use mistral config format
+        load_format="mistral",     # Use mistral load format
     )
+
+    else:
+        llm = LLM(
+            model=args.model_name,
+            tensor_parallel_size=args.tensor_parallel_size,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+            trust_remote_code=True,
+        )
+        
     print("Model loaded successfully!")
+    
     # Process each CSV
     for i, input_csv in enumerate(input_csvs, 1):
         print(f"\n[{i}/{len(input_csvs)}] Starting: {input_csv}")
         process_single_csv(llm, tokenizer, input_csv, args)
     
     print(f"\n{'='*60}")
-    print(f"✓ Processed {len(input_csvs)} CSV file(s)")
+    print(f"✅ Processed {len(input_csvs)} CSV file(s)")
     print(f"{'='*60}")
 
 if __name__ == "__main__":
