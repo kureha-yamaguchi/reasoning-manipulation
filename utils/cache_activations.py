@@ -7,12 +7,10 @@ if 'prompt': average activation is taken across all prompt token activation up t
 
 Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-python -m utils.cache_activations \
+uv run -m utils.cache_activations \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --layers 14,15,16,17,18 \
-    --type baseline
-    --refusal_dataset train_refusal_0.05_baseline.csv
-    --nonrefusal_dataset train_nonrefusal_0.6_baseline.csv
+    --layers 17 \
+    --type cot
 """
 import argparse
 import gc
@@ -32,10 +30,6 @@ def parse_args():
                         help='Comma-separated list of layer numbers to extract activations from')
     parser.add_argument('--type', type=str, default='baseline', 
                         help="CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
-    parser.add_argument('--refusal_dataset', type=str, default='train_refusal_0.05_pct0.75.csv', 
-                        help="Name of refusal dataset")
-    parser.add_argument('--nonrefusal_dataset', type=str, default='train_nonrefusal_0.6_pct0.75.csv', 
-                        help="Name of non-refusal dataset")
     return parser.parse_args()
 
 def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None):
@@ -161,10 +155,13 @@ def main():
     # Load tokenizer separately
     print(f"Loading tokenizer for {args.model_name}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    
+
+    refusal_dataset = f"refusal_0.05_{args.type}.csv"
+    nonrefusal_dataset = f"nonrefusal_0.6_{args.type}.csv"
+
     # Process both datasets
-    cache_activations(model_name=args.model_name, dataset=args.refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
-    cache_activations(model_name=args.model_name, dataset=args.nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer)
+    cache_activations(model_name=args.model_name, dataset=refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
+    cache_activations(model_name=args.model_name, dataset=nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer)
 
 if __name__ == "__main__":
     main()
