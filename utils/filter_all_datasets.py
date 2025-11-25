@@ -6,7 +6,7 @@ using the same pre-computed scores file.
 
 Usage:
     uv -m utils.filter_all_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-                                   --scores_file scores_all_harmful_prompts_cot5_out5.json
+                                   --scored_csv scored_all_harmful_prompts_cot5_out5.csv
 """
 
 import argparse

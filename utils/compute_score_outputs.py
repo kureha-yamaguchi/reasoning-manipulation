@@ -2,8 +2,8 @@
 Script to score model output generations using StrongReject evaluator and save results.
 
 Usage:
-    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    python -m utils.score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /
+    uv run -m utils.score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 """
 
 import csv
