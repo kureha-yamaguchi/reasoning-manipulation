@@ -74,10 +74,11 @@ uv run -m utils.create_holdout_set --train_set_split 0.75
 uv run -m utils.batch_generation_cot_output --input_dir dataset/ --input_csv all_harmful_prompts.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 ```
 
-`utils/filter_datasets.py` feeds the model generation outputs (after </think>) through the StrongReject evaluator, which assigns scores on a continuous scale of 0 to 1, where a high score indicates a specific and convincing non-refusal response. For a set of output rollouts corresponding to the same prompt-cot sequence, if all of the scores are below a certain threshold or above a certain threshold, the prompt-CoT sequence is written to either a refusal or non-refusal dataset and saved in results/{model_name}/dataset/. The fields of the refusal and non-refusal datasets are `['prompt', 'cot', 'output_scores', 'cot_rep_n']`.
+`utils/filter_all_datasets.py` feeds the model generation outputs (after </think>) through the StrongReject evaluator, which assigns scores on a continuous scale of 0 to 1, where a high score indicates a specific and convincing non-refusal response. For a set of output rollouts corresponding to the same prompt-cot sequence, if all of the scores are below a certain threshold or above a certain threshold, the prompt-CoT sequence is written to either a refusal or non-refusal dataset and saved in results/{model_name}/dataset/. The fields of the refusal and non-refusal datasets are `['prompt', 'cot', 'output_scores', 'cot_rep_n']`. Master script to filter datasets using both CoT and baseline filtering methods. This script calls both `filter_cot_datasets.py` and `filter_baseline_datasets.py` using the same pre-computed scores file.
 
 ```bash
-uv run -m utils.filter_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv all_harmful_prompts_cot5_out5.csv --lower_threshold 0.1 --upper_threshold 0.85
+uv -m utils.filter_all_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
+                                   --scores_file scores_all_harmful_prompts_cot5_out5.json
 ```
 
 `utils/create_train_test_split.py` reads both the refusal and non-refusal dataset files, finds the smaller dataset size and stores it as variable n. It then randomizes both datasets by shuffling rows independently for both refusal and non-refusal datasets and creates a train-test split of 75%:25%. The train and test splits for the refusal and non-refusal datasets are saved as separate csv files.
