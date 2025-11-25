@@ -61,6 +61,13 @@ uv run -m utils.create_base_dataset --dataset orbench --n 500 --dataset_dir data
 ```bash
 uv run  -m utils.check_duplicates
 ```
+
+`utils/create_holdout_set.py` creates a train-test split from `all_harmful_prompts.csv`. It shuffles the dataset and splits it into 75% training and 25% hold out test sets by default. The train and test sets are saved as `train_harmful_prompts.csv` and `test_harmful_prompts.csv` in the dataset directory.
+
+```bash
+uv run -m utils.create_holdout_set --train_set_split 0.75
+```
+
 `utils/batch_generation_cot_output.py` generates n rollouts of a response for each prompt determined by –cot_repetitions and k rollouts of outputs (after </think>) determined by –output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag). Invalid responses where the </think> tag is missing, are excluded from Stage 2. Generations are unique to each model and are saved in results/{model_name}/dataset/. The directories will be created upon running of the script. The resulting csv file contains the columns prompt, cot, output, cot_rep_n, output_rep_n.
 
 ```bash
