@@ -438,7 +438,7 @@ eval/.
 
 huggingface_cache/
 
-all_harmful_prompts_cot5_out5.csv
+# all_harmful_prompts_cot5_out5.csv
 
 heatmap_test_refusal_cot.csv
 heatmap_test_nonrefusal_cot.csv
