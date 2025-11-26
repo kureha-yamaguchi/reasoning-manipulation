@@ -9,7 +9,7 @@ Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.cache_activations \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --layers 15,16,17,18,19 \
+    --layers 16,17,18,19 \
     --type cot
 """
 import argparse
@@ -123,7 +123,10 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
             mean_activation = torch.mean(select_tokens, dim=1).detach().cpu().to(torch.float32).numpy() # float32 for bfloat16 compatability
             activation_matrices[layer].append(mean_activation.squeeze())
         
-        # Clear CUDA cache
+        # Free memory
+        del layer_activations, select_tokens, mean_activation, example_layer_activations, activation, input_text, prompt_tokens, response_tokens, tokens_to_process, target_start, target_end, chat, idx, row, activation_matrices, layer, df, output_dir, input_path
+
+        gc.collect()
         torch.cuda.empty_cache()
     
     # Save activation matrices for each layer
@@ -161,6 +164,7 @@ def main():
 
     # Process both datasets
     cache_activations(model_name=args.model_name, dataset=refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
+
     cache_activations(model_name=args.model_name, dataset=nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer)
 
 if __name__ == "__main__":

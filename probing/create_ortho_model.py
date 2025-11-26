@@ -1,12 +1,11 @@
 """
-Perform weight orthogonalisation to create a model with the refusal direction ablated from its residual stream activations.
-Savees the refusal direction and orthogonalised model.
+Perform weight orthogonalisation to create a model with the refusal direction ablated from its residual stream activations. Saves the refusal direction and orthogonalised model for each layer.
 
 Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-python -m probing.create_ortho_model \
+uv run -m probing.create_ortho_model \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --layer 17 \
+    --layers 16,17,18,19 \
     --type cot
 """
 
@@ -25,7 +24,7 @@ def parse_args():
         description="Process prompts through DeepSeek-R1-Distill-Llama-8B model"
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", help="Load the model")
-    parser.add_argument("--layer", type=int, default=17, help="Layer to take the activations")
+    parser.add_argument("--layers", type=str, default="17", help="Layers to take the activations (comma-separated, e.g., '15,16,17,18,19')")
     parser.add_argument('--type', type=str, default='baseline', 
                         help="using CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
@@ -223,9 +222,6 @@ def _handle_moe_layer_down_proj(down_proj, direction, get_orthogonalized_matrix_
     raise TypeError("Unsupported MoE down_proj object type. Expected torch.Tensor or quantized MXFP4-like object.")
 
 
-
-
-
 def orthogonalize_model_weights(model, direction):
     """
     Orthogonalize key model weights with respect to the given direction
@@ -288,6 +284,33 @@ def orthogonalize_model_weights(model, direction):
     print("Model weights orthogonalized successfully.")
     return model
 
+def compute_refusal_dir(args, layer):
+    # Load activations - convert to fp16 for memory efficiency
+    print("Loading activations...")
+    activations_refusal = load_activations(os.path.join('results', args.model_name, 'activations', 'refusal', f'layer_{layer}_{args.type}_activations.npy'))
+    refusal_mean_act = get_mean_act(activations_refusal).to(dtype=torch.float16, device=args.device)
+    # Free memory
+    del activations_refusal
+    gc.collect()
+    torch.cuda.empty_cache()
+    
+    activations_nonrefusal = load_activations(os.path.join('results', args.model_name, 'activations', 'non_refusal', f'layer_{layer}_{args.type}_activations.npy'))
+    nonrefusal_mean_act = get_mean_act(activations_nonrefusal).to(dtype=torch.float16, device=args.device)
+    # Free memory
+    del activations_nonrefusal
+    gc.collect()
+    torch.cuda.empty_cache()
+    
+    # Calculate difference of means (refusal direction)
+    refusal_dir = get_dir(refusal_mean_act, nonrefusal_mean_act)
+
+    # Free memory before orthogonalization
+    del refusal_mean_act, nonrefusal_mean_act
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    return refusal_dir
+
 
 def main():
     args = parse_args()
@@ -306,53 +329,43 @@ def main():
     # baseline_text = gen_text(model, tokenizer, op_length, tokenized_chat, args.max_new_tokens)
     # print(baseline_text)
 
-    # Load activations - convert to fp16 for memory efficiency
-    print("Loading activations...")
-    activations_refusal = load_activations(os.path.join('results', args.model_name, 'activations', 'refusal', f'layer_{args.layer}_{args.type}_activations.npy'))
-    refusal_mean_act = get_mean_act(activations_refusal).to(dtype=torch.float16, device=args.device)
-    # Free memory
-    del activations_refusal
-    gc.collect()
-    torch.cuda.empty_cache()
-    
-    activations_nonrefusal = load_activations(os.path.join('results', args.model_name, 'activations', 'non_refusal', f'layer_{args.layer}_{args.type}_activations.npy'))
-    nonrefusal_mean_act = get_mean_act(activations_nonrefusal).to(dtype=torch.float16, device=args.device)
-    # Free memory
-    del activations_nonrefusal
-    gc.collect()
-    torch.cuda.empty_cache()
-    
-    # Calculate difference of means (refusal direction)
-    refusal_dir = get_dir(refusal_mean_act, nonrefusal_mean_act)
-    # Save the tensor to a .pt file
-    torch.save(refusal_dir, os.path.join('results', args.model_name, 'refusal_dir', f'{args.type}_refusal_dir.pt'))
-    print(f"refusal direction shape: {refusal_dir.shape}")
-    
-    # Free memory before orthogonalization
-    del refusal_mean_act, nonrefusal_mean_act
-    gc.collect()
-    torch.cuda.empty_cache()
-    
-    # Orthogonalize model weights with respect to the refusal direction
-    orthogonalized_model = orthogonalize_model_weights(model, refusal_dir)
+    # Parse layers
+    layers = [int(layer) for layer in args.layers.split(',')]
 
-    if "gpt-oss" in args.model_name:
-        orthogonalized_model = orthogonalized_model.to(dtype=torch.bfloat16, device="cuda")
+    for layer in layers:
+        print(f"Computing refusal direction for layer {layer}")
+        refusal_dir = compute_refusal_dir(args, layer)
 
-    # Define the output directory
-    output_dir = os.path.join('results', args.model_name, f'ortho_model_{args.type}')
+        # Save the tensor to a .pt file
+        torch.save(refusal_dir, os.path.join('results', args.model_name, 'refusal_dir', f'refusal_dir_{args.type}_layer_{layer}.pt'))
+        print(f"refusal direction shape: {refusal_dir.shape}")
+
     
-    print("Saving model as safetensors... (takes a while)")
-    # Save the orthogonalized model in SafeTensors format
-    orthogonalized_model.save_pretrained(
-        output_dir,
-        safe_serialization=True  # This enables SafeTensors format
-    )
+        # Orthogonalize model weights with respect to the refusal direction
+        orthogonalized_model = orthogonalize_model_weights(model, refusal_dir)
+
+        if "gpt-oss" in args.model_name:
+            orthogonalized_model = orthogonalized_model.to(dtype=torch.bfloat16, device="cuda")
+
+        # Define the output directory
+        output_dir = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
     
-    # Save the tokenizer to the same directory
-    print("Saving tokenizer...")
-    tokenizer.save_pretrained(output_dir)
-    print(f"Tokenizer saved to {output_dir}")
+        print("Saving model as safetensors... (takes a while)")
+        # Save the orthogonalized model in SafeTensors format
+        orthogonalized_model.save_pretrained(
+            output_dir,
+            safe_serialization=True  # This enables SafeTensors format
+        )
+        
+        # Save the tokenizer to the same directory
+        print("Saving tokenizer...")
+        tokenizer.save_pretrained(output_dir)
+        print(f"Tokenizer saved to {output_dir}")
+
+        # Free memory
+        del orthogonalized_model
+        gc.collect()
+        torch.cuda.empty_cache()
 
 def run():
     main()
