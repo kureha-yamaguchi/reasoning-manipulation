@@ -1,10 +1,15 @@
 """
 Generates model outputs from the locally stored orthogonalised model using vllm.
 
-Usage:
+Usage (for multiple layers, subset holdout dataset):
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True 
-python -m probing.csv_generation_vllm --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --type baseline 
+uv run -m probing.csv_generation_vllm --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --type cot --layers 16,17,18,19 --eval_csv subset_5_test_harmful_prompts.csv
+
+Usage (for chosen single layer, full holdout dataset):
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True 
+uv run -m probing.csv_generation_vllm --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --type cot --layers 17 --eval_csv test_harmful_prompts.csv
 """
 
 
@@ -27,6 +32,10 @@ def parse_args():
                         help="Name of the model (used to construct local path)")
     parser.add_argument("--type", type=str, required=True,
                         help="Ortho model from direction extracted from CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
+    parser.add_argument("--layers", type=str, default="17", 
+                        help="Layers to take the activations and generate outputs from (comma-separated, e.g., '16,17,18,19')")
+    parser.add_argument("--eval_csv", type=str, required=True,
+                        help="CSV file to evaluate on")
     parser.add_argument("--max_new_tokens", type=int, default=2048, 
                         help="Maximum number of tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.6, 
@@ -131,47 +140,70 @@ def process_csv(llm: LLM, tokenizer, input_csv: str, output_csv: str, args, samp
     save_csv(results, output_csv)
     print(f"Completed processing {input_csv}! Generated {len(results)} total responses.")
 
+    # Free memory
+    del results, prompts, prompts_batch, batch_results, response, batch_end
+
+    gc.collect()
+    torch.cuda.empty_cache()
+
 def main():
     args = parse_args()
     print(f"CUDA available: {torch.cuda.is_available()}")
     gc.collect()
     torch.cuda.empty_cache()
-    
-    # Construct local model path
-    local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}')
-    print(f"Loading model from local path: {local_model_path}")
-    
-    # Verify the model directory exists
-    if not os.path.exists(local_model_path):
-        print(f"Error: Model directory does not exist: {local_model_path}")
-        return
-    
-    # Handle CSV file selection
-    
-    input_csv = os.path.join('results', args.model_name, 'dataset', f'test_refusal_0.05_{args.type}.csv')
-    output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_model_output_{args.type}.csv')
 
-    # Initialize model and tokenizer
-    print("Loading tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained(local_model_path, trust_remote_code=True)
-    
-    print("Initializing vLLM...")
-    llm = LLM(
-        model=local_model_path,
-        tensor_parallel_size=args.tensor_parallel_size,
-        gpu_memory_utilization=args.gpu_memory_utilization,
-        trust_remote_code=True,
-        # max_model_len=4096,  # Adjust based on your model's context length
-    )
-    
-    # Set up sampling parameters
-    sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        # top_p=args.top_p
-    )
-    
-    process_csv(llm, tokenizer, input_csv, output_csv, args, sampling_params)
+    layers = [int(layer) for layer in args.layers.split(',')]
+
+    for layer in layers:
+
+        # Construct local model path
+        local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
+        print(f"Loading model from local path: {local_model_path}")
+        
+        # Verify the model directory exists
+        if not os.path.exists(local_model_path):
+            print(f"Error: Model directory does not exist: {local_model_path}")
+            return
+        
+        # Handle CSV file selection
+        
+        input_csv = os.path.join('dataset', args.eval_csv)
+        output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_model_output_{args.type}_layer_{layer}.csv')
+
+        # Initialize model and tokenizer
+        print("Loading tokenizer...")
+        tokenizer = AutoTokenizer.from_pretrained(local_model_path, trust_remote_code=True)
+        
+        print("Initializing vLLM...")
+        llm = LLM(
+            model=local_model_path,
+            tensor_parallel_size=args.tensor_parallel_size,
+            gpu_memory_utilization=args.gpu_memory_utilization,
+            trust_remote_code=True,
+            # max_model_len=4096,  # Adjust based on your model's context length
+        )
+        
+        # Set up sampling parameters
+        sampling_params = SamplingParams(
+            max_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            # top_p=args.top_p
+        )
+        
+        process_csv(llm, tokenizer, input_csv, output_csv, args, sampling_params)
+        
+        # Cleanup vLLM instance and GPU resources before next layer
+        print(f"\nCleaning up resources for layer {layer}...")
+        del llm
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        # Synchronize CUDA operations to ensure cleanup is complete
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        
+        print(f"Cleanup complete for layer {layer}. Moving to next layer...\n")
+
 
 
 def run():
