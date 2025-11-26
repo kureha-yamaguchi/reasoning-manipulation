@@ -9,7 +9,7 @@ Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.cache_activations \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --layers 17 \
+    --layers 15,16,17,18,19 \
     --type cot
 """
 import argparse
