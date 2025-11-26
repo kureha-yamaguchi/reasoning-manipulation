@@ -445,3 +445,14 @@ all_harmful_prompts_cot5_out5.csv
 
 heatmap_test_refusal_cot.csv
 heatmap_test_nonrefusal_cot.csv
+
+tmux.sh
+run_overnight.sh
+watch_and_run.sh
+
+=0.7.1
+=4.46.3
+activations.log
+
+requirements.txt
+filter_ex.py
