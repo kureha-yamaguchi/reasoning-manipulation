@@ -1,25 +1,45 @@
 """
-Script to generate n rollouts of CoT determined by --cot_repetitions and k rollouts of outputs (after </think>) determined
-by --output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses
-for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag).
-Invalid responses where the </think> tag is missing, is excluded from stage 2.
+Script to generate n rollouts of CoT determined by --cot_repetitions and k rollouts of outputs (after </think>) determined by --output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag). Invalid responses where the </think> tag is missing, is excluded from stage 2.
 
-Usage:
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-python -m utils.batch_generation_cot_output \
-  --input_dir dataset/ \
-  --input_csv all_harmful_prompts.csv \
+====================
+For training dataset
+====================
+
+Use to generate model outputs from the clean model using vllm with the training dataset train_harmful_prompts.csv. Generations are saved in results/{model_name}/dataset/.
+
+Example usage (for training dataset):
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run -m utils.batch_generation_cot_output \
+  --input_csv train_harmful_prompts.csv \
+  --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+
+====================
+For testing dataset
+====================
+
+Use to generate model outputs from the locally stored orthogonalised model using vllm with evaluation dataset subset_5_test_harmful_prompts.csv or test_harmful_prompts.csv. Generations are saved in results/{model_name}/attack_results/.
+
+Example usage (for ortho model created from activation at multiple layers, random subset of holdout dataset):
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run -m utils.batch_generation_cot_output \
+  --input_csv subset_5_test_harmful_prompts.csv \
   --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-  --tensor_parallel_size 8 \
-  --batch_size 64 \
-  --gpu_memory_utilization 0.9
+  --type cot \
+  --layer 16,17,18,19
+
+Example usage (for ortho model created from activation at a chosen single layer, full holdout dataset):
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run -m utils.batch_generation_cot_output \
+  --input_csv test_harmful_prompts.csv \
+  --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+  --type cot \
+  --layer 17
 """
 
 import argparse
 import gc
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 import os
-from urllib import response
 import pandas as pd
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
@@ -33,9 +53,6 @@ from utils.paths import get_path, make_dirs
 # Global variable for harmony format detection
 HARMONY = False
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m utils.batch_generation_cot_output --input_dir dataset/ --input_csv all_harmful_prompts.csv --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-
-
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -43,10 +60,12 @@ def parse_args():
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Model to use for generation")
-    parser.add_argument("--input_dir", type=str, default="dataset/", 
-                        help="Dataset input CSV directory")
-    parser.add_argument('--input_csv', type=str, nargs='*',  
-                        help='Input CSV files. Use "all" for all CSVs in directory')
+    parser.add_argument("--input_csv", type=str, required=True,
+                        help="CSV file to evaluate on")
+    parser.add_argument("--type", type=str, default=None,
+                        help="Ortho model from direction extracted from CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
+    parser.add_argument("--layer", type=str, default=None, 
+                        help="Layer to take the activations and generate outputs from")
     parser.add_argument("--cot_repetitions", type=int, default=5, 
                         help="Number of CoT variations per prompt")
     parser.add_argument("--output_repetitions", type=int, default=5, 
@@ -55,10 +74,6 @@ def parse_args():
                         help="Maximum tokens for generation")
     parser.add_argument("--temperature", type=float, default=0.6, 
                         help="Temperature for sampling")
-    parser.add_argument("--cot_temperature", type=float, default=None, 
-                        help="Temperature for CoT generation (defaults to --temperature)")
-    parser.add_argument("--output_temperature", type=float, default=None, 
-                        help="Temperature for output generation (defaults to --temperature)")
     parser.add_argument("--batch_size", type=int, default=32, 
                         help="Batch size for vLLM inference")
     parser.add_argument("--tensor_parallel_size", type=int, default=1, 
@@ -69,11 +84,11 @@ def parse_args():
                         help="Save intermediate CoT results to separate file")
     return parser.parse_args()
 
-def read_csv(input_csv: str, dataset_dir: str) -> List[str]:
+def read_csv(input_csv: str) -> Union[List[str], None]:
     """Read prompts from CSV file."""
     print(f"Reading prompts from {input_csv}...")
     try:
-        df = pd.read_csv(os.path.join(dataset_dir, input_csv))
+        df = pd.read_csv(input_csv)
         prompts = df['prompt'].tolist()
         print(f"Loaded {len(prompts)} prompts")
         return prompts
@@ -81,13 +96,13 @@ def read_csv(input_csv: str, dataset_dir: str) -> List[str]:
         print(f"Error reading CSV: {e}")
         return None
 
-def save_csv(results: List[dict], output_csv: str, dataset_dir: str):
+def save_csv(results: List[dict], output_csv: str):
     """Save results to CSV."""
     print(f"\nSaving {len(results)} results to {output_csv}...")
     try:
         output_df = pd.DataFrame(results)
-        output_df.to_csv(os.path.join(dataset_dir, output_csv), index=False)
-        print(f"Saved successfully")
+        output_df.to_csv(output_csv, index=False)
+        print(f"Results saved successfully to {output_csv}")
     except Exception as e:
         print(f"Error saving CSV: {e}")
 
@@ -362,50 +377,27 @@ def stage2_generate_outputs(
     print(f"\nStage 2 complete: Generated {len(all_final_results)} final outputs")
     return all_final_results
 
-def process_single_csv(llm: LLM, tokenizer, input_csv: str, args) -> None:
-    """Process a single CSV file through both stages."""
-    print(f"\n{'='*60}")
-    print(f"Processing: {input_csv}")
-    print(f"{'='*60}")
-    
-    # Read prompts
-    prompts = read_csv(input_csv, args.input_dir)
-    if prompts is None:
-        return
-    
-    # Set up sampling parameters for each stage
-    cot_temp = args.cot_temperature if args.cot_temperature is not None else args.temperature
-    output_temp = args.output_temperature if args.output_temperature is not None else args.temperature
-    
-    cot_sampling = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        temperature=cot_temp,
-    )
-    
-    output_sampling = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        temperature=output_temp,
-    )
-    
+def generate_and_save(llm: LLM, tokenizer, input_csv: str, output_csv: str, prompts, sampling_params, args) -> None:
     # Stage 1: Generate CoTs
     valid_cot_results, invalid_cot_results = stage1_generate_cots(
-        llm, tokenizer, prompts, args, cot_sampling
+        llm, tokenizer, prompts, args, sampling_params
     )
     gc.collect()
     torch.cuda.empty_cache()  # Clear CUDA memory too
     
-    # Save intermediate results if requested
-    if args.save_intermediate:
-        # Save valid CoT results
-        if valid_cot_results:
-            valid_cot_csv = input_csv.replace('.csv', f'_valid_cot_{args.cot_repetitions}.csv')
-            save_csv(valid_cot_results, valid_cot_csv, get_path(args.model_name, 'dataset'))
+    # # Save intermediate results if requested
+    # if args.save_intermediate:
+    #     # Save valid CoT results
+    #     if valid_cot_results:
+    #         valid_cot_csv = input_csv.replace('.csv', f'_valid_cot_{args.cot_repetitions}.csv')
+    #         valid_cot_path = os.path.join(get_path(args.model_name, 'dataset'), os.path.basename(valid_cot_csv))
+    #         save_csv(valid_cot_results, valid_cot_path)
         
-        # Save invalid CoT results for debugging
-        if invalid_cot_results:
-            invalid_cot_csv = input_csv.replace('.csv', f'_invalid_cot_{args.cot_repetitions}.csv')
-            save_csv(invalid_cot_results, invalid_cot_csv, get_path(args.model_name, 'dataset'))
-            print(f"  Saved {len(invalid_cot_results)} invalid CoT responses for review")
+    #     # Save invalid CoT results for debugging
+    #     if invalid_cot_results:
+    #         invalid_cot_csv = input_csv.replace('.csv', f'_invalid_cot_{args.cot_repetitions}.csv')
+    #         save_csv(invalid_cot_results, invalid_cot_csv)
+    #         print(f"  Saved {len(invalid_cot_results)} invalid CoT responses for review")
     
     # Check if we have valid CoT results to proceed
     if not valid_cot_results:
@@ -415,12 +407,11 @@ def process_single_csv(llm: LLM, tokenizer, input_csv: str, args) -> None:
     
     # Stage 2: Generate outputs for each valid CoT
     final_results = stage2_generate_outputs(
-        llm, tokenizer, valid_cot_results, args, output_sampling
+        llm, tokenizer, valid_cot_results, args, sampling_params
     )
     
     # Save final results
-    output_csv = input_csv.replace('.csv', f'_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
-    save_csv(final_results, output_csv, get_path(args.model_name, 'dataset'))
+    save_csv(final_results, output_csv)
     
     print(f"\n✓ Completed {input_csv}")
     print(f"  - Original prompts: {len(prompts)}")
@@ -437,73 +428,135 @@ def main():
     print(f"CUDA available: {torch.cuda.is_available()}")
     gc.collect()
     torch.cuda.empty_cache()
-    
-    # Handle CSV selection
-    input_csvs = args.input_csv
-    available_csvs = [f for f in os.listdir(args.input_dir) if f.endswith('.csv')]
-    
-    if not input_csvs:
-        input_csvs = questionary.checkbox(
-            "Select CSV files to process:",
-            choices=available_csvs
-        ).ask()
-        if not input_csvs:
-            print("No files selected.")
-            return
-    elif len(input_csvs) == 1 and input_csvs[0].lower() == 'all':
-        input_csvs = available_csvs
-    
-    make_dirs(args.model_name)
-    
 
+     # Handle CSV file selection
+    input_csv = os.path.join('dataset', args.input_csv)
 
-    # Initialize model and tokenizer
-    print("Loading tokenizer...")
+    # Read prompts
+    prompts = read_csv(input_csv)
     
-    if args.model_name == "mistralai/Magistral-Small-2506":
-        # Use base model tokenizer as workaround
-        tokenizer = AutoTokenizer.from_pretrained(
-            "unsloth/Magistral-Small-2506", 
-            trust_remote_code=True
-        )
-        print("Using base model tokenizer for Magistral-Small-2506")
-    else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-    
-    print("Initializing vLLM...")
-    
-    # Special vLLM configuration for Magistral models
-    if args.model_name == "mistralai/Magistral-Small-2506":
-        # Set environment variable for context length
-        os.environ["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
-        llm = LLM(
-        model=args.model_name,
-        tensor_parallel_size=args.tensor_parallel_size,
-        gpu_memory_utilization=args.gpu_memory_utilization,
-        trust_remote_code=True,
-        tokenizer_mode="mistral",  # Use mistral tokenizer mode
-        config_format="mistral",   # Use mistral config format
-        load_format="mistral",     # Use mistral load format
+    # Set up sampling parameters
+    sampling_params = SamplingParams(
+        max_tokens=args.max_new_tokens,
+        temperature=args.temperature,
     )
 
+    # Testing paradigm: Ortho model
+    if args.type is not None and args.layer is not None:
+        # Process each layer (if there are multiple layers)
+        for layer in args.layer.split(','):
+            layer = layer.strip()  # Remove any whitespace
+            # Construct local model path
+            local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
+            print(f"Loading model from local path: {local_model_path}")
+
+            # Initialize model and tokenizer
+            print("Loading tokenizer...")
+            
+            if args.model_name == "mistralai/Magistral-Small-2506":
+                # Use base model tokenizer as workaround
+                tokenizer = AutoTokenizer.from_pretrained(
+                    "unsloth/Magistral-Small-2506", 
+                    trust_remote_code=True
+                )
+                print("Using base model tokenizer for Magistral-Small-2506")
+            else:
+                tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+            
+            print("Initializing vLLM...")
+            
+            # Special vLLM configuration for Magistral models
+            if args.model_name == "mistralai/Magistral-Small-2506":
+                # Set environment variable for context length
+                os.environ["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
+                llm = LLM(
+                    model=local_model_path,
+                    tensor_parallel_size=args.tensor_parallel_size,
+                    gpu_memory_utilization=args.gpu_memory_utilization,
+                    trust_remote_code=True,
+                    tokenizer_mode="mistral",  # Use mistral tokenizer mode
+                    config_format="mistral",   # Use mistral config format
+                    load_format="mistral",     # Use mistral load format
+                )
+
+            else:
+                llm = LLM(
+                    model=local_model_path,
+                    tensor_parallel_size=args.tensor_parallel_size,
+                    gpu_memory_utilization=args.gpu_memory_utilization,
+                    trust_remote_code=True,
+                )
+                
+            print("Model loaded successfully!")
+
+            # Construct output CSV name
+            input_csv_name = os.path.splitext(args.input_csv)[0]
+            output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
+            
+            generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
+
+            del llm, tokenizer
+            gc.collect()
+            torch.cuda.empty_cache()
+            
+            print(f"\n{'='*60}")
+            print(f"✅ Processed layer {layer}")
+            print(f"{'='*60}")
+
+    # Training paradigm: Clean model
     else:
-        llm = LLM(
-            model=args.model_name,
-            tensor_parallel_size=args.tensor_parallel_size,
-            gpu_memory_utilization=args.gpu_memory_utilization,
-            trust_remote_code=True,
-        )
+        # Initialize model and tokenizer
+        print("Loading tokenizer...")
         
-    print("Model loaded successfully!")
-    
-    # Process each CSV
-    for i, input_csv in enumerate(input_csvs, 1):
-        print(f"\n[{i}/{len(input_csvs)}] Starting: {input_csv}")
-        process_single_csv(llm, tokenizer, input_csv, args)
-    
-    print(f"\n{'='*60}")
-    print(f"✅ Processed {len(input_csvs)} CSV file(s)")
-    print(f"{'='*60}")
+        if args.model_name == "mistralai/Magistral-Small-2506":
+            # Use base model tokenizer as workaround
+            tokenizer = AutoTokenizer.from_pretrained(
+                "unsloth/Magistral-Small-2506", 
+                trust_remote_code=True
+            )
+            print("Using base model tokenizer for Magistral-Small-2506")
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+        
+        print("Initializing vLLM...")
+        
+        # Special vLLM configuration for Magistral models
+        if args.model_name == "mistralai/Magistral-Small-2506":
+            # Set environment variable for context length
+            os.environ["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
+            llm = LLM(
+                model=args.model_name,
+                tensor_parallel_size=args.tensor_parallel_size,
+                gpu_memory_utilization=args.gpu_memory_utilization,
+                trust_remote_code=True,
+                tokenizer_mode="mistral",  # Use mistral tokenizer mode
+                config_format="mistral",   # Use mistral config format
+                load_format="mistral",     # Use mistral load format
+            )
+
+        else:
+            llm = LLM(
+                model=args.model_name,
+                tensor_parallel_size=args.tensor_parallel_size,
+                gpu_memory_utilization=args.gpu_memory_utilization,
+                trust_remote_code=True,
+            )
+            
+        print("Model loaded successfully!")
+
+        # Construct output CSV name
+        output_csv = input_csv.replace('.csv', f'_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
+        
+        generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
+
+        del llm, tokenizer
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        print(f"\n{'='*60}")
+        print(f"✅ Processing complete")
+        print(f"{'='*60}")
+
 
 if __name__ == "__main__":
     main()
