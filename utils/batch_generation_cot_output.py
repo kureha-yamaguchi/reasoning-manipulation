@@ -2,10 +2,10 @@
 Script to generate n rollouts of CoT determined by --cot_repetitions and k rollouts of outputs (after </think>) determined by --output_repetitions. The script is split into 2 stages. Stage 1: Generate n responses for each prompt. Stage 2: For each CoT response, generate k different outputs (after the </think> tag). Invalid responses where the </think> tag is missing, is excluded from stage 2.
 
 ====================
-For training dataset
+Clean model paradigm
 ====================
 
-Use to generate model outputs from the clean model using vllm with the training dataset train_harmful_prompts.csv. Generations are saved in results/{model_name}/dataset/.
+Use to generate model outputs from the clean model using vllm with the training/ testing dataset train_harmful_prompts.csv or test_harmful_prompts.csv. Generations are saved in results/{model_name}/dataset/.
 
 Example usage (for training dataset):
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
@@ -14,7 +14,7 @@ uv run -m utils.batch_generation_cot_output \
   --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 
 ====================
-For testing dataset
+Ortho model paradigm
 ====================
 
 Use to generate model outputs from the locally stored orthogonalised model using vllm with evaluation dataset subset_5_test_harmful_prompts.csv or test_harmful_prompts.csv. Generations are saved in results/{model_name}/attack_results/.
@@ -441,7 +441,7 @@ def main():
         temperature=args.temperature,
     )
 
-    # Testing paradigm: Ortho model
+    # Ortho model paradigm
     if args.type is not None and args.layer is not None:
         # Process each layer (if there are multiple layers)
         for layer in args.layer.split(','):
@@ -503,7 +503,7 @@ def main():
             print(f"✅ Processed layer {layer}")
             print(f"{'='*60}")
 
-    # Training paradigm: Clean model
+    # Clean model paradigm
     else:
         # Initialize model and tokenizer
         print("Loading tokenizer...")
