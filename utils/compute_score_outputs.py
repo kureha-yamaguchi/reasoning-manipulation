@@ -1,13 +1,30 @@
 """
 Script to score model output generations using StrongReject evaluator and save results. Scores stored in file called `scored_{input_csv}`.
 
+====================
+Clean model paradigm
+====================
+
 Example usage (analysing training dataset output train_harmful_prompts_cot5_out5.csv):
-    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /
+    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
     uv run -m utils.compute_score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv train_harmful_prompts_cot5_out5.csv
 
-Example usage (analysing a subset of harmful prompts_cot5_out5.csv):
-    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True /
-    uv run -m utils.compute_score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --type cot --layers 16,17,18,19
+====================
+Ortho model paradigm
+====================
+
+Example usage (analysing ortho model generations for multiple layers, subset of harmful prompts ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv):
+    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    uv run -m utils.compute_score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --type cot \
+    --layers 16,17,18,19 \
+    --subset
+
+Example usage (analysing ortho model generations for single layer,  full holdout set of harmful prompts ortho_output_test_harmful_prompts_{type}_layer_{layer}.csv):
+    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    uv run -m utils.compute_score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --type cot \
+    --layers 17 
 """
 
 import csv
@@ -54,6 +71,11 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="For analysing attack results only: Comma-separated list of layers to score"
+    )
+    parser.add_argument(
+        "--subset",
+        action="store_true",
+        help="For analysing attack results only: Whether to score a subset of harmful prompts"
     )
     
     return parser.parse_args()
@@ -181,8 +203,12 @@ def main() -> None:
         dir_path = os.path.join(args.results_dir, args.model_name, "attack_results")
 
         for layer in args.layers.split(","):
-            layer = layer.strip()  # Remove any whitespace
-            input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+            layer = layer.strip()  # Remove any 
+            if args.subset:
+                input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+            else:
+                input_csv = f"ortho_output_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+    
             csv_path = os.path.join(dir_path, input_csv)
         
             # Check if input CSV exists
