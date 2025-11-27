@@ -3,7 +3,7 @@ Perform weight orthogonalisation to create a model with the refusal direction ab
 
 Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-uv run -m probing.create_ortho_model \
+uv run -m interventions.create_ortho_model \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
     --layers 16,17,18,19 \
     --type cot

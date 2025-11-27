@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.dir_ablation_allcot --model_name Qwen/Qwen3-8B --type cot
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m interventions.dir_ablation_allcot --model_name Qwen/Qwen3-8B --type cot
 
 
 def parse_args():

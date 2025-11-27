@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.ortho_csv_generation --model_name 'kureha295/ortho_model' --input_csv 'dataset/cautious_eval.csv' --output_csv 'dataset/orthogonalized_outputs_2048.csv' --max_new_tokens 2048
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m interventions.ortho_csv_generation --model_name 'kureha295/ortho_model' --input_csv 'dataset/cautious_eval.csv' --output_csv 'dataset/orthogonalized_outputs_2048.csv' --max_new_tokens 2048
 
 def parse_args():
     """Parse command line arguments."""

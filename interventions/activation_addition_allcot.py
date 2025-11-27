@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.activation_addition_allcot --alpha 1.7 --layer 17 --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --type cot
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m interventions.activation_addition_allcot --alpha 1.7 --layer 17 --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --type cot
 
 
 def parse_args():

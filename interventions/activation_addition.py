@@ -9,7 +9,7 @@ import pandas as pd
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.activation_addition --alpha 1.5 --layer 17
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m interventions.activation_addition --alpha 1.5 --layer 17
 
 
 def parse_args():
@@ -224,7 +224,7 @@ def main():
     torch.cuda.empty_cache()
 
     # # Alternative: Load tensor directly from cautious_dir.pt
-    # cautious_dir = torch.load('probing/cautious_dir.pt')
+    # cautious_dir = torch.load('interventions/cautious_dir.pt')
     
     # Load model and tokenizer
     model, tokenizer = load_model(args.model_name, args.device)

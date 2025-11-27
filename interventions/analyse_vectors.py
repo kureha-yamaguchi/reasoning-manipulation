@@ -2,7 +2,7 @@
 This script visualizes the cosine similarity between a pre-computed direction vector
 and per-token activations from layer 18 of DeepSeek-R1-Distill-Llama-8B.
 """
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m probing.analyse_vectors --index 1 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m interventions.analyse_vectors --index 1 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 
 import argparse
 import gc
