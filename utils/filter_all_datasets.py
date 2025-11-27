@@ -4,9 +4,29 @@ Master script to filter datasets using both CoT and baseline filtering methods.
 This script calls both filter_cot_datasets.py and filter_baseline_datasets.py
 using the same pre-computed scores file.
 
+Input File:
+    Reads a scored CSV file containing pre-computed scores for each prompt/output pair.
+    Location: results/{model_name}/dataset/scored_all_harmful_prompts_cot5_out5.csv
+    This file must be generated first by running the scoring script:
+        python -m utils.compute_score_outputs --model_name {model_name}
+
+Output Files:
+    All output files are saved to: results/{model_name}/dataset/
+    
+    CoT Filtering (if --run_cot is enabled):
+        - refusal_{cot_lower_threshold}.csv
+            Contains prompts/outputs with CoT scores below the lower threshold
+        - nonrefusal_{cot_upper_threshold}.csv
+            Contains prompts/outputs with CoT scores above the upper threshold
+    
+    Baseline Filtering (if --run_baseline is enabled):
+        - refusal_{baseline_lower_threshold}_pct{percentage_threshold}.csv
+            Contains prompts where {percentage_threshold}% of outputs have scores below lower threshold
+        - nonrefusal_{baseline_upper_threshold}_pct{percentage_threshold}.csv
+            Contains prompts where {percentage_threshold}% of outputs have scores above upper threshold
+
 Usage:
-    uv -m utils.filter_all_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-                                   --scored_csv scored_all_harmful_prompts_cot5_out5.csv
+    uv -m utils.filter_all_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 """
 
 import argparse
@@ -35,7 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scored_csv",
         type=str,
-        required=True,
+        default="scored_all_harmful_prompts_cot5_out5.csv",
         help="CSV file containing pre-computed scores"
     )
     

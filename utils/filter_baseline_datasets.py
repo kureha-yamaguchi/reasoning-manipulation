@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scored_csv",
         type=str,
-        required=True,
+        default="scored_all_harmful_prompts_cot5_out5.csv",
         help="CSV file containing pre-computed StrongReject scores"
     )
     parser.add_argument(

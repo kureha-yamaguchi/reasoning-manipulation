@@ -2,8 +2,7 @@
 Script to filter Chain-of-Thought datasets based on pre-computed StrongReject evaluator scores.
 
 Usage:
-    python -m utils.filter_cot_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-                                       --scored_csv scored_all_harmful_prompts_cot5_out5.csv
+    python -m utils.filter_cot_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 """
 
 import csv
@@ -33,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scored_csv",
         type=str,
-        required=True,
+        default="scored_all_harmful_prompts_cot5_out5.csv",
         help="CSV file containing pre-computed StrongReject scores"
     )
     parser.add_argument(
