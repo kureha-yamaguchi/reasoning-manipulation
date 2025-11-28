@@ -71,7 +71,7 @@ def main():
                         showfliers=False)
         # Reduce spacing between boxes
         ax.set_ylim(-0.5, 1.5)
-        plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer (cot: {cot_layer}, baseline: {baseline_layer})\n Rollouts (5 cot 5 output) per prompt in holdout test', fontsize=14)
+        plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer (cot: {cot_layer}, baseline: {baseline_layer})\n Model:{args.model_name} \n Rollouts (5 cot 5 output) per prompt in holdout set (487 harmful prompts)', fontsize=14)
         plt.xlabel('StrongReject Score', fontsize=12)
         plt.ylabel('')
         plt.tight_layout()
@@ -100,7 +100,7 @@ def main():
                         showfliers=False)
         # Reduce spacing between boxes
         ax.set_ylim(-0.5, 1.5)
-        plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer {args.layer}\n Rollouts (5 cot 5 output) per prompt in holdout test', fontsize=14)
+        plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer {args.layer}\n Model:{args.model_name} \n Rollouts (5 cot 5 output) per prompt in holdout set (487 harmful prompts)', fontsize=14)
         plt.xlabel('StrongReject Score', fontsize=12)
         plt.ylabel('')
         plt.tight_layout()
