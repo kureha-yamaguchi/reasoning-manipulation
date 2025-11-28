@@ -457,6 +457,6 @@ activations.log
 requirements.txt
 filter_ex.py
 
-legacy/*
+legacy/
 
 ortho_model_*/
