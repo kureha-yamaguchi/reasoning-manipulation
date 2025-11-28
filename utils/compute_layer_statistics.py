@@ -179,6 +179,7 @@ def main() -> None:
             weighted_score = float('-inf')
         else:
             weighted_score = mean - 2 * std_dev
+            weighted_score = mean
         
         results[layer] = {
             'mean': mean,
@@ -190,7 +191,8 @@ def main() -> None:
         print(f"  Found {len(scores)} scores")
         print(f"  Mean: {mean:.6f}")
         print(f"  Std Dev: {std_dev:.6f}")
-        print(f"  Weighted Score (mean - 2×std_dev): {weighted_score:.6f}")
+        # print(f"  Weighted Score (mean - 2×std_dev): {weighted_score:.6f}")
+        print(f"  Weighted Score (mean): {weighted_score:.6f}")
         print()
     
     # Find best layer (maximum weighted score)
