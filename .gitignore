@@ -418,9 +418,9 @@ virtualenv/
 requirements.in
 archive/*
 
-probing/best_of_n.ipynb
-probing/vllm_results.ipynb
-probing/model/
+interventions/best_of_n.ipynb
+interventions/vllm_results.ipynb
+interventions/model/
 
 attack/__pycache__/
 attack/results*
@@ -457,5 +457,6 @@ activations.log
 requirements.txt
 filter_ex.py
 
-nonrefusal/legacy
-refusal/legacy
+legacy/
+
+ortho_model_*/
