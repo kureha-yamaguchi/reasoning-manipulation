@@ -20,7 +20,7 @@ echo "Log file: $LOG_FILE"
 echo "Model: $MODEL_NAME | Type1: $TYPE1 | Type2: $TYPE2 | Layers: $TRY_LAYERS"
 echo ""
 
-====== SECTION 1: CREATE DATASET ======
+echo "====== SECTION 1: CREATE DATASET ======"
 
 echo "=== Step 0: Create dataset ==="
 uv run -m utils.create_base_dataset --dataset orbench --n 500 --dataset_dir dataset/base/
@@ -46,7 +46,7 @@ uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "te
 echo "=== Step 3: Create refusal and non-refusal datasets (both cot and baseline) ==="
 uv run -m utils.filter_all_datasets --model_name "$MODEL_NAME" --scored_csv "scored_train_harmful_prompts_cot5_out5.csv"
 
-====== SECTION 2: CACHE ACTIVATIONS AND CREATE ORTHOGONAL MODELS ======
+echo "====== SECTION 2: CACHE ACTIVATIONS AND CREATE ORTHOGONAL MODELS ======"
 
 echo "=== Step 4: Cache activations ==="
 uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE1"

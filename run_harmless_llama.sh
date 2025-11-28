@@ -27,7 +27,7 @@ uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_c
 
 echo "=== Step 8: Compute score outputs ==="
 uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv test_harmless_prompts_cot5_out5.csv
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$BEST_LAYER" --subset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$BEST_LAYER" --is_harmless
 
 echo "=== Step 9: Plot boxplot comparison ==="
 uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "$TYPE" --layer "$BEST_LAYER"
