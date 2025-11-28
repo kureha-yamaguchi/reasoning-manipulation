@@ -87,9 +87,9 @@ uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_c
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE2" --layer "$BEST_LAYER2"
 
 echo "=== Step 11: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$BEST_LAYER1" --subset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$BEST_LAYER1"
 
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$BEST_LAYER2" --subset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$BEST_LAYER2"
 
 echo "=== Step 12: Plot boxplot comparison ==="
 uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "all" --layer "$BEST_LAYER1,$BEST_LAYER2"

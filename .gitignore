@@ -460,3 +460,9 @@ filter_ex.py
 legacy/
 
 ortho_model_*/
+
+run_retrospective_qwen.sh
+run_retrospective_qwen3.sh
+run_qwen.sh
+
+alpaca_sql.txt
