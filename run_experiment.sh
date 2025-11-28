@@ -19,14 +19,14 @@ echo "Log file: $LOG_FILE"
 echo "Model: $MODEL_NAME | Type: $TYPE | Layers: $TRY_LAYERS"
 echo ""
 
-# echo "=== Step 1: Cache activations ==="
-# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE"
+echo "=== Step 1: Cache activations ==="
+uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE"
 
-# echo "=== Step 2: Create orthogonal model ==="
-# uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE"
+echo "=== Step 2: Create orthogonal model ==="
+uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE"
 
 echo "=== Step 3: Batch generation (subset) ==="
-uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE" --layer "18,19"
+uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE" --layer "$TYPE"
 
 echo "=== Step 4: Compute score outputs ==="
 uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$TRY_LAYERS" --subset
@@ -41,6 +41,8 @@ echo "Best layer: $BEST_LAYER"
 echo "=== Step 7: Final batch generation ==="
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE" --layer "$BEST_LAYER"
 
-echo ""
-echo "=== Completed at: $(date) ==="
-echo "Best layer: $BEST_LAYER"
+echo "=== Step 8: Compute score outputs ==="
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$BEST_LAYER" --subset
+
+echo "=== Step 9: Plot boxplot comparison ==="
+uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "$TYPE" --layer "$BEST_LAYER"
