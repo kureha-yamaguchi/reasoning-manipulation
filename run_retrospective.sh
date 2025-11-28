@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL_NAME="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+MODEL_NAME="openai/gpt-oss-20b"
 TYPE="cot"
 TRY_LAYERS="16,17,18,19"
 
@@ -19,11 +19,18 @@ echo "Log file: $LOG_FILE"
 echo "Model: $MODEL_NAME | Type: $TYPE | Layers: $TRY_LAYERS"
 echo ""
 
-# echo "=== Step 1: Cache activations ==="
-# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE"
 
-# echo "=== Step 2: Create orthogonal model ==="
-# uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE"
+echo "=== Step 0: Filter dataset ==="
+
+uv run -m utils.retrospective.retrospective_filter --model_name  "$MODEL_NAME" --type "$TYPE"
+
+uv run -m utils.retrospective.retrospective_test_gen --model_name "$MODEL_NAME"
+
+echo "=== Step 1: Cache activations ==="
+uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE"
+
+echo "=== Step 2: Create orthogonal model ==="
+uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE"
 
 echo "=== Step 3: Batch generation (subset) ==="
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE" --layer "18,19"

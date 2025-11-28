@@ -545,7 +545,8 @@ def main():
         print("Model loaded successfully!")
 
         # Construct output CSV name
-        output_csv = input_csv.replace('.csv', f'_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
+        input_csv_name = os.path.splitext(args.input_csv)[0]
+        output_csv = os.path.join('results', args.model_name, 'dataset', f'{input_csv_name}_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
         
         generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
 
