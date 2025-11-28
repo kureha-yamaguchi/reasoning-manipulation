@@ -5,7 +5,7 @@ This script reads scored CSV files for different layers and computes statistics 
 
 Input Files:
     Reads scored CSV files from:
-    results/{model_name}/dataset/scored_ortho_output_subset_5_test_harmful_prompts_{type}_layer_{layer}.csv
+    results/{model_name}/attack_results/scored_ortho_output_subset_5_test_harmful_prompts_{type}_layer_{layer}.csv
     
     Where {layer} comes from --layer argument (comma-separated list like "16,17,18,19")
 
@@ -22,6 +22,7 @@ import os
 import sys
 import csv
 import json
+import math
 from typing import List, Dict, Tuple
 import statistics
 
@@ -143,7 +144,7 @@ def main() -> None:
     print(f"{'='*60}\n")
     
     # Base directory for CSV files
-    dataset_dir = os.path.join(args.results_dir, args.model_name, "dataset")
+    dataset_dir = os.path.join(args.results_dir, args.model_name, "attack_results")
     
     # Store results for each layer
     results: Dict[str, Dict[str, float]] = {}
@@ -172,22 +173,40 @@ def main() -> None:
         # Compute statistics
         mean, std_dev = compute_statistics(scores)
         
+        # Compute weighted score: mean - 2 × std_dev
+        # Higher mean increases score, lower std_dev increases score
+        if math.isnan(mean) or math.isnan(std_dev):
+            weighted_score = float('-inf')
+        else:
+            weighted_score = mean - 2 * std_dev
+        
         results[layer] = {
             'mean': mean,
             'std_dev': std_dev,
-            'count': len(scores)
+            'count': len(scores),
+            'weighted_score': weighted_score
         }
         
         print(f"  Found {len(scores)} scores")
         print(f"  Mean: {mean:.6f}")
         print(f"  Std Dev: {std_dev:.6f}")
+        print(f"  Weighted Score (mean - 2×std_dev): {weighted_score:.6f}")
         print()
+    
+    # Find best layer (maximum weighted score)
+    valid_layers = {layer: results[layer] for layer in layers if results[layer]['count'] > 0}
+    if valid_layers:
+        best_layer = max(valid_layers.keys(), key=lambda l: valid_layers[l]['weighted_score'])
+        best_score = valid_layers[best_layer]['weighted_score']
+    else:
+        best_layer = None
+        best_score = float('-inf')
     
     # Print summary table
     print(f"{'='*60}")
     print(f"SUMMARY")
     print(f"{'='*60}")
-    print(f"{'Layer':<10} {'Count':<10} {'Mean':<15} {'Std Dev':<15}")
+    print(f"{'Layer':<10} {'Count':<10} {'Mean':<15} {'Std Dev':<15} {'Weighted Score':<15}")
     print(f"{'-'*60}")
     
     for layer in layers:
@@ -195,21 +214,32 @@ def main() -> None:
         count = result['count']
         mean = result['mean']
         std_dev = result['std_dev']
+        weighted_score = result['weighted_score']
         
         if count > 0:
-            print(f"{layer:<10} {count:<10} {mean:<15.6f} {std_dev:<15.6f}")
+            marker = " ← BEST" if layer == best_layer else ""
+            print(f"{layer:<10} {count:<10} {mean:<15.6f} {std_dev:<15.6f} {weighted_score:<15.6f}{marker}")
         else:
-            print(f"{layer:<10} {count:<10} {'N/A':<15} {'N/A':<15}")
+            print(f"{layer:<10} {count:<10} {'N/A':<15} {'N/A':<15} {'N/A':<15}")
     
     print(f"{'='*60}")
+    
+    if best_layer:
+        print(f"\nBest layer: {best_layer} (weighted score: {best_score:.6f})")
     
     # Save results to JSON file
     output_dir = os.path.join(args.results_dir, args.model_name, "attack_results")
     os.makedirs(output_dir, exist_ok=True)
     
+    # Add best layer to results
+    output_data = {
+        **results,
+        'best_layer': best_layer if best_layer else None
+    }
+    
     output_file = os.path.join(output_dir, f"layer_statistics_{args.type}_layers_{args.layer.replace(',', '_')}.json")
     with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(results, f, indent=2)
+        json.dump(output_data, f, indent=2)
     
     print(f"\nResults saved to: {output_file}")
     

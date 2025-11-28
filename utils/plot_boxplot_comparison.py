@@ -1,0 +1,79 @@
+"""
+Generate box plots comparing StrongReject scores before and after intervention.
+
+This module creates box plots to visualize the distribution of strongreject_score
+values from baseline test data versus intervention results. It compares scores
+from the original test dataset against scores from ortho model outputs.
+
+Example usage:
+    uv run -m utils.plot_boxplot_comparison \
+        --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+        --type cot \
+        --layer 17
+"""
+
+import argparse
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate box plot comparing strongreject_score before and after intervention"
+    )
+    parser.add_argument("--model_name", type=str, required=True,
+                        help="Model name (e.g., deepseek-ai/DeepSeek-R1-Distill-Llama-8B)")
+    parser.add_argument("--type", type=str, required=True,
+                        help="Type of intervention (e.g., cot, baseline)")
+    parser.add_argument("--layer", type=str, required=True,
+                        help="Layer number (e.g., 16)")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    
+    # Construct file paths
+    before_path = f"results/{args.model_name}/dataset/scored_test_harmful_prompts_cot5_out5.csv"
+    after_path = f"results/{args.model_name}/attack_results/scored_ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{args.layer}.csv"
+    
+    # Load data
+    before_df = pd.read_csv(before_path)
+    after_df = pd.read_csv(after_path)
+    
+    # Extract strongreject_score columns
+    before_scores = before_df['strongreject_score'].dropna()
+    after_scores = after_df['strongreject_score'].dropna()
+    
+    # Create comparison dataframe
+    comparison_data = pd.DataFrame({
+        'Score': list(before_scores) + list(after_scores),
+        'Group': ['Before'] * len(before_scores) + ['After'] * len(after_scores)
+    })
+    
+    # Create box plot (hide outliers)
+    plt.figure(figsize=(10, 6))
+    ax = sns.boxplot(x='Score', y='Group', data=comparison_data, width=0.5,
+                     order=['After', 'Before'],
+                     palette={'Before': '#50a9a9', 'After': '#ff9900'},
+                     showfliers=False)
+    # Reduce spacing between boxes
+    ax.set_ylim(-0.5, 1.5)
+    plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer {args.layer}\n Rollouts (5 cot 5 output) per prompt in holdout test', fontsize=14)
+    plt.xlabel('StrongReject Score', fontsize=12)
+    plt.ylabel('')
+    plt.tight_layout()
+    
+    # Save plot
+    output_dir = f"results/{args.model_name}/figures"
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = f"{output_dir}/boxplot_comparison_{args.type}_layer_{args.layer}.png"
+    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+    print(f"Box plot saved to: {output_file}")
+
+
+if __name__ == "__main__":
+    main()
+

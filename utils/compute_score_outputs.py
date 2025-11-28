@@ -223,7 +223,7 @@ def main() -> None:
             output_csv_path = os.path.join(
                 args.results_dir, 
                 args.model_name, 
-                "dataset", 
+                "attack_results", 
                 output_csv
             )
             

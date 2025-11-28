@@ -124,7 +124,7 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
             activation_matrices[layer].append(mean_activation.squeeze())
         
         # Free memory
-        del layer_activations, select_tokens, mean_activation, example_layer_activations, activation, input_text, prompt_tokens, response_tokens, tokens_to_process, target_start, target_end, chat, idx, row, activation_matrices, layer, df, output_dir, input_path
+        del layer_activations, select_tokens, mean_activation, example_layer_activations, activation, input_text, prompt_tokens, response_tokens, tokens_to_process, target_start, target_end, chat
 
         gc.collect()
         torch.cuda.empty_cache()

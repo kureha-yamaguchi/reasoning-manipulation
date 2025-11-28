@@ -8,7 +8,7 @@ Clean model paradigm
 Use to generate model outputs from the clean model using vllm with the training/ testing dataset train_harmful_prompts.csv or test_harmful_prompts.csv. Generations are saved in results/{model_name}/dataset/.
 
 Example usage (for training dataset):
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.batch_generation_cot_output \
   --input_csv train_harmful_prompts.csv \
   --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
