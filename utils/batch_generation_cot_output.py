@@ -76,7 +76,7 @@ def parse_args():
                         help="Temperature for sampling")
     parser.add_argument("--batch_size", type=int, default=32, 
                         help="Batch size for vLLM inference")
-    parser.add_argument("--tensor_parallel_size", type=int, default=1, 
+    parser.add_argument("--tensor_parallel_size", type=int, default=None, 
                         help="Number of GPUs for tensor parallelism")
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.9, 
                         help="GPU memory utilization ratio")
@@ -422,6 +422,10 @@ def generate_and_save(llm: LLM, tokenizer, input_csv: str, output_csv: str, prom
 def main():
     args = parse_args()
 
+    if not args.tensor_parallel_size:
+        # if not explicitly specified, use all available CUDA devices
+        args.tensor_parallel_size = torch.cuda.device_count() 
+
     global HARMONY
     HARMONY = "gpt-oss" in args.model_name
 
@@ -480,7 +484,7 @@ def main():
                 )
 
             else:
-                llm = LLM(
+                llm = LLM( 
                     model=local_model_path,
                     tensor_parallel_size=args.tensor_parallel_size,
                     gpu_memory_utilization=args.gpu_memory_utilization,
