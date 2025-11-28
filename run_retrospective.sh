@@ -26,6 +26,8 @@ uv run -m utils.retrospective.retrospective_filter --model_name  "$MODEL_NAME" -
 
 uv run -m utils.retrospective.retrospective_test_gen --model_name "$MODEL_NAME"
 
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv test_harmful_prompts_cot5_out5.csv
+
 echo "=== Step 1: Cache activations ==="
 uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE"
 
