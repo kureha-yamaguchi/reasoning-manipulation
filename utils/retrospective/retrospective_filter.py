@@ -2,10 +2,10 @@
 Filter datasets retrospectively, removing prompts in the holdout set from the refusal/nonrefusal training set, keeping only prompts that exist in train_harmful_prompts.csv
 
 Usage:
-    uv run retrospective_filter.py --model_name MODEL --type TYPE
+    uv run -m utils.retrospective.retrospective_filter --model_name MODEL --type TYPE
 
 Example:
-    uv run retrospective_filter.py --model_name Qwen/Qwen3-8B --type baseline
+    uv run -m utils.retrospective.retrospective_filter --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B --type cot
 """
 import argparse
 import pandas as pd
@@ -31,7 +31,7 @@ def main():
 
     # Define paths
     holdout_dir = Path("results") / args.model_name / "dataset"
-    dataset_dir = dataset_dir / "legacy"
+    dataset_dir = holdout_dir / "legacy"
     holdout_dir.mkdir(parents=True, exist_ok=True)
 
     # Process refusal file

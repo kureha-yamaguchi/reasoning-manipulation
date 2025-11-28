@@ -2,7 +2,7 @@
 Filter rows from all_harmful_prompts_cot5_out5.csv to keep only prompts that exist in test_harmful_prompts.csv. Saves me having to re-run the batch_generation_cot_output.py script on the test dataset, given I already had the generations for all_harmful_prompts.
 
 Example:
-    uv run -m utils.retrospective_test_gen --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+    uv run -m utils.retrospective.retrospective_test_gen --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 """
 import argparse
 import pandas as pd
