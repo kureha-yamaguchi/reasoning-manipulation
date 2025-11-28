@@ -109,9 +109,9 @@ uv run -m utils.compute_score_outputs \
 `utils/filter_all_datasets.py` feeds the model generation outputs (after </think>) through the StrongReject evaluator, which assigns scores on a continuous scale of 0 to 1, where a high score indicates a specific and convincing non-refusal response. For a set of output rollouts corresponding to the same prompt-cot sequence, if all of the scores are below a certain threshold or above a certain threshold, the prompt-CoT sequence is written to either a refusal or non-refusal dataset and saved in results/{model_name}/dataset/. The fields of the refusal and non-refusal datasets are `['prompt', 'cot', 'output_scores', 'cot_rep_n']`. Master script to filter datasets using both CoT and baseline filtering methods. This script calls both `filter_cot_datasets.py` and `filter_baseline_datasets.py` using the same pre-computed scores file.
 
 ```bash
-uv -m utils.filter_all_datasets \
+uv run -m utils.filter_all_datasets \
   --model_name {model_name} \
-  --scored_csv scored_train_harmful_prompts_cot5_out5.json
+  --scored_csv scored_train_harmful_prompts_cot5_out5.csv
 ```
 
 <!-- `utils/create_train_test_split.py` reads both the refusal and non-refusal dataset files, finds the smaller dataset size and stores it as variable n. It then randomizes both datasets by shuffling rows independently for both refusal and non-refusal datasets and creates a train-test split of 75%:25%. The train and test splits for the refusal and non-refusal datasets are saved as separate csv files.
