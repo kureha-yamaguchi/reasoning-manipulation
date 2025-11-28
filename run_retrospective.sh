@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL_NAME="openai/gpt-oss-20b"
-TYPE="cot"
+MODEL_NAME="deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+TYPE="baseline"
 TRY_LAYERS="16,17,18,19"
 
 # Create log file with timestamp
@@ -24,9 +24,9 @@ echo "=== Step 0: Filter dataset ==="
 
 uv run -m utils.retrospective.retrospective_filter --model_name  "$MODEL_NAME" --type "$TYPE"
 
-uv run -m utils.retrospective.retrospective_test_gen --model_name "$MODEL_NAME"
+# uv run -m utils.retrospective.retrospective_test_gen --model_name "$MODEL_NAME"
 
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv test_harmful_prompts_cot5_out5.csv
+# uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv test_harmful_prompts_cot5_out5.csv
 
 echo "=== Step 1: Cache activations ==="
 uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE"
@@ -50,6 +50,8 @@ echo "Best layer: $BEST_LAYER"
 echo "=== Step 7: Final batch generation ==="
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE" --layer "$BEST_LAYER"
 
-echo ""
-echo "=== Completed at: $(date) ==="
-echo "Best layer: $BEST_LAYER"
+echo "=== Step 8: Compute score outputs ==="
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$BEST_LAYER" --subset
+
+echo "=== Step 9: Plot boxplot comparison ==="
+uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "$TYPE" --layer "$BEST_LAYER"
