@@ -48,9 +48,12 @@ pip install -e ".[dev]"
 > This codebase requires access to at least one GPU with a minimum of ~32 GB VRAM available, and CUDA `12.x` installed.
 
 > [!NOTE]
-> It's possible to automate this entire pipeline using run_experiment.sh. Edit according to what commands you require.
+> It's possible to automate this entire pipeline using run_from_scratch.sh. Edit according to what commands you require.
 
 ##  Dataset creation
+
+> [!NOTE]
+> From here, you can use workflow bash script `run_datasets.sh`
 
 `utils/create_base_dataset.py` creates base prompt dataset for harmbench, advbench, strongreject, sorrybench and orbench, depending on the argument parsed in --dataset. Run this script for all 5 harmful datasets. Manual cleaning may be required afterwards to ensure every row corresponds to a prompt.
 
@@ -121,6 +124,9 @@ uv run -m utils.create_train_test_split --model_name deepseek-ai/DeepSeek-R1-Dis
 > We have provided the alpaca_instructions_100.csv. To create it from scratch, download `alpaca_data_cleaned.json` from https://github.com/gururise/AlpacaDataCleaned and run `utils/alpaca.py`. -->
 
 ## Activations
+
+> [!NOTE]
+> From here, you can use workflow bash script `run_activations_and_interventions.sh`
 
 `utils/cache_activations.py` takes refusal and non-refusal train sets and caches residual stream activations for a sweep of layers. Depending on the argument specified in --type, the following is cached:
   - if 'cot': average activation is taken across all cot token activations up to and including </think>
