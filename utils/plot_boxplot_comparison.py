@@ -66,15 +66,22 @@ def main():
         # Create box plot (hide outliers)
         plt.figure(figsize=(10, 6))
         ax = sns.boxplot(x='Score', y='Group', data=comparison_data, width=0.5,
-                        order=['After (baseline)', 'After (cot)', 'Before'],
+                        order=['After (cot)', 'After (baseline)', 'Before'],
                         palette={'After (baseline)': '#ff9900', 'After (cot)': '#ff9900', 'Before': '#50a9a9'},
                         showfliers=False)
-        # Reduce spacing between boxes
-        ax.set_ylim(-0.5, 1.5)
-        plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer (cot: {cot_layer}, baseline: {baseline_layer})\n Model:{args.model_name} \n Rollouts (5 cot 5 output) per prompt in holdout set (487 harmful prompts)', fontsize=14)
+        # Adjust spacing for 3 groups (y positions: 0, 1, 2)
+        ax.set_ylim(-0.5, 2.5)
+        plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer (baseline: {baseline_layer}, cot: {cot_layer})\n Model:{args.model_name} \n Rollouts (5 cot 5 output) per prompt in holdout set (487 harmful prompts)', fontsize=14)
         plt.xlabel('StrongReject Score', fontsize=12)
         plt.ylabel('')
         plt.tight_layout()
+
+        # Save plot
+        output_dir = f"results/{args.model_name}/figures"
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = f"{output_dir}/boxplot_comparison_{args.type}_layer_{cot_layer}_{baseline_layer}.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"Box plot saved to: {output_file}")
     else:
         after_path = f"results/{args.model_name}/attack_results/scored_ortho_output_test_harmful_prompts_{args.type}_layer_{args.layer}.csv"
         
@@ -105,12 +112,12 @@ def main():
         plt.ylabel('')
         plt.tight_layout()
     
-    # Save plot
-    output_dir = f"results/{args.model_name}/figures"
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = f"{output_dir}/boxplot_comparison_{args.type}_layer_{args.layer}.png"
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
-    print(f"Box plot saved to: {output_file}")
+        # Save plot
+        output_dir = f"results/{args.model_name}/figures"
+        os.makedirs(output_dir, exist_ok=True)
+        output_file = f"{output_dir}/boxplot_comparison_{args.type}_layer_{args.layer}.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        print(f"Box plot saved to: {output_file}")
 
 
 if __name__ == "__main__":
