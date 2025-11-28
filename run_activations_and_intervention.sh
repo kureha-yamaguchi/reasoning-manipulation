@@ -26,7 +26,7 @@ echo "=== Step 2: Create orthogonal model ==="
 uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE"
 
 echo "=== Step 3: Batch generation (subset) ==="
-uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE" --layer "$TYPE"
+uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE" --layer "$TRY_LAYERS"
 
 echo "=== Step 4: Compute score outputs ==="
 uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$TRY_LAYERS" --subset
