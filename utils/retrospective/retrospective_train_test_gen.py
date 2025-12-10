@@ -1,8 +1,12 @@
 """
-Filter rows from all_harmful_prompts_cot5_out5.csv to keep only prompts that exist in test_harmful_prompts.csv. Saves me having to re-run the batch_generation_cot_output.py script on the test dataset, given I already had the generations for all_harmful_prompts.
+Filter rows from all_harmful_prompts_cot5_out5.csv to:
+1. Keep only prompts that exist in test_harmful_prompts.csv -> saves as test_harmful_prompts_cot5_out5.csv
+2. Remove prompts that exist in test_harmful_prompts.csv -> saves as train_harmful_prompts_cot5_out5.csv
+
+Saves me having to re-run the batch_generation_cot_output.py script on the test dataset, given I already had the generations for all_harmful_prompts.
 
 Example:
-    uv run -m utils.retrospective.retrospective_test_gen --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    uv run -m utils.retrospective.retrospective_train_test_gen --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 """
 import argparse
 import pandas as pd
@@ -35,7 +39,8 @@ def main():
     # Define paths
     dataset_dir = Path("results") / args.model_name / "dataset"
     input_csv = dataset_dir / "all_harmful_prompts_cot5_out5.csv"
-    output_csv = dataset_dir / "test_harmful_prompts_cot5_out5.csv"
+    test_output_csv = dataset_dir / "test_harmful_prompts_cot5_out5.csv"
+    train_output_csv = dataset_dir / "train_harmful_prompts_cot5_out5.csv"
 
     # Check if input file exists
     if not input_csv.exists():
@@ -46,14 +51,22 @@ def main():
     full_df = pd.read_csv(input_csv)
     print(f"Full dataset rows: {len(full_df)}")
 
-    # Filter rows where prompt is in test_prompts_set
-    filtered_df = full_df[full_df["prompt"].isin(test_prompts_set)]
-    print(f"Filtered dataset rows: {len(filtered_df)}")
+    # Filter rows where prompt is in test_prompts_set (test set)
+    test_df = full_df[full_df["prompt"].isin(test_prompts_set)]
+    print(f"Test dataset rows: {len(test_df)}")
 
-    # Save the filtered dataset
+    # Filter rows where prompt is NOT in test_prompts_set (train set)
+    train_df = full_df[~full_df["prompt"].isin(test_prompts_set)]
+    print(f"Train dataset rows: {len(train_df)}")
+
+    # Save the filtered datasets
     dataset_dir.mkdir(parents=True, exist_ok=True)
-    filtered_df.to_csv(output_csv, index=False)
-    print(f"Saved filtered dataset to {output_csv}")
+    
+    test_df.to_csv(test_output_csv, index=False)
+    print(f"Saved test dataset to {test_output_csv}")
+    
+    train_df.to_csv(train_output_csv, index=False)
+    print(f"Saved train dataset to {train_output_csv}")
 
 
 if __name__ == "__main__":
