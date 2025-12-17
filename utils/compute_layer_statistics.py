@@ -173,12 +173,11 @@ def main() -> None:
         # Compute statistics
         mean, std_dev = compute_statistics(scores)
         
-        # Compute weighted score: mean - 2 × std_dev
-        # Higher mean increases score, lower std_dev increases score
+        # Compute weighted score: mean (no longer penalizing std_dev)
         if math.isnan(mean) or math.isnan(std_dev):
             weighted_score = float('-inf')
         else:
-            weighted_score = mean - 2 * std_dev
+            # weighted_score = mean - 2 * std_dev
             weighted_score = mean
         
         results[layer] = {
