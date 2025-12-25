@@ -7,24 +7,40 @@ Clean model paradigm
 
 Example usage (analysing training dataset output train_harmful_prompts_cot5_out5.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    uv run -m utils.compute_score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --input_csv train_harmful_prompts_cot5_out5.csv
+    uv run -m utils.compute_score_outputs \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --input_csv train_harmful_prompts_cot5_out5.csv \
+    --input_dir dataset 
+
 
 ====================
 Ortho model paradigm
 ====================
 
-Example usage (analysing ortho model generations for multiple layers, subset of harmful prompts ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv):
+Example usage (analysing ortho model generations for multiple layers, subset of harmful prompts ortho_output_subset_5_test_harmful_prompts_{type}_layer_{layer}.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    uv run -m utils.compute_score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --type cot \
-    --layers 16,17,18,19 \
+    uv run -m utils.compute_score_outputs \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --type {type} \
+    --layers {layers} \
+    --input_dir attack_results \
     --subset
 
 Example usage (analysing ortho model generations for single layer,  full holdout set of harmful prompts ortho_output_test_harmful_prompts_{type}_layer_{layer}.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    uv run -m utils.compute_score_outputs --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --type cot \
-    --layers 17 
+    uv run -m utils.compute_score_outputs \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --input_dir attack_results \
+    --input_csv ortho_output_test_harmful_prompts_{type}_layer_{layer}.csv
+
+Example usage (analysing ortho model generations for single layer,  full holdout set of harmless prompts ortho_output_test_harmless_prompts_{type}_layer_{layer}.csv):
+    CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+    uv run -m utils.compute_score_outputs \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+
+    --input_dir attack_results \
+    --input_csv ortho_output_test_harmless_prompts_{type}_layer_{layer}.csv
+
 """
 
 import csv
@@ -43,12 +59,6 @@ def parse_args() -> argparse.Namespace:
         description="Score model generations using StrongReject evaluator"
     )
     parser.add_argument(
-        "--model_name",
-        type=str,
-        default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-        help="Model to use for generation"
-    )
-    parser.add_argument(
         "--results_dir",
         type=str,
         default="results/",
@@ -59,6 +69,18 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Dataset input CSV filename"
+    )
+    parser.add_argument(
+        "--input_dir",
+        type=str,
+        default=None,
+        help="Dataset input CSV directory"
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        help="Model to use for generation"
     )
     parser.add_argument(
         "--type",
@@ -76,11 +98,6 @@ def parse_args() -> argparse.Namespace:
         "--subset",
         action="store_true",
         help="For analysing attack results only: Whether to score a subset of harmful prompts"
-    )
-    parser.add_argument(
-        "--is_harmless",
-        action="store_true",
-        help="For analysing attack results only: Whether to score harmless prompts"
     )
     
     return parser.parse_args()
@@ -152,20 +169,52 @@ def save_scored_csv(
     print(f"Successfully saved {len(original_rows)} rows with scores to {output_path}")
 
 
+def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
+    """
+    Evaluate output scores using StrongReject evaluator.
+    
+    Args:
+        all_rows: List of rows from the CSV file
+
+    Returns:
+        List of StrongReject scores
+    """
+
+    # Extract prompts and outputs for evaluation
+    prompts = [row["prompt"] for row in all_rows]
+    outputs = [row["output"] for row in all_rows]
+
+    # Create output dataset for evaluation
+    output_dataset: Dataset = Dataset.from_dict({
+        "forbidden_prompt": prompts,
+        "response": outputs
+    })
+
+    # Evaluate outputs using StrongReject
+    print("Evaluating outputs with StrongReject...")
+    evaluator_results = evaluate_dataset(
+        output_dataset,
+        ["strongreject_finetuned"]
+    )
+    
+    scores = evaluator_results["score"]
+    print(f"Generated {len(scores)} scores")
+
+    return scores
+
+
 def main() -> None:
     # Parse arguments and setup
     args: argparse.Namespace = parse_args()
     print(f"CUDA available: {torch.cuda.is_available()}")
 
-    if args.is_harmless:
-        dir_path = os.path.join(args.results_dir, args.model_name, "attack_results")
-
+    # Ortho model subset, sweep of layers
+    if args.subset:
         for layer in args.layers.split(","):
             layer = layer.strip()  # Remove any 
-            
-            input_csv = f"ortho_output_test_harmless_prompts_{args.type}_layer_{layer}.csv"
-    
+            input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
             csv_path = os.path.join(dir_path, input_csv)
+            print(f"Scoring dataset: {input_csv}")
         
             # Check if input CSV exists
             if not os.path.exists(csv_path):
@@ -192,141 +241,44 @@ def main() -> None:
             # Load data efficiently
             all_rows, fieldnames = load_data_efficiently(csv_path)
             
-            # Extract prompts and outputs for evaluation
-            prompts = [row["prompt"] for row in all_rows]
-            outputs = [row["output"] for row in all_rows]
-
-            # Create output dataset for evaluation
-            output_dataset: Dataset = Dataset.from_dict({
-                "forbidden_prompt": prompts,
-                "response": outputs
-            })
-
-            # Evaluate outputs using StrongReject
-            print("Evaluating outputs with StrongReject...")
-            evaluator_results = evaluate_dataset(
-                output_dataset,
-                ["strongreject_finetuned"]
-            )
-            
-            scores = evaluator_results["score"]
-            print(f"Generated {len(scores)} scores")
+            # Compute scores
+            scores = compute_scores(all_rows)
 
             # Save original data with scores
             save_scored_csv(all_rows, scores, fieldnames, output_csv_path)
             print(f"Scoring complete! Use the filtering scripts with: --scored_csv {output_csv}")
+    # For single CSV files
     else:
+        csv_path = os.path.join(args.results_dir, args.model_name, args.input_dir, args.input_csv)
+        print(f"Scoring dataset: {args.input_csv}")
 
-        if args.input_csv is not None:
-            csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.input_csv)
+        # Check if input CSV exists
+        if not os.path.exists(csv_path):
+            print(f"Warning: Input CSV not found at {csv_path}")
+            continue
 
-            print(f"Scoring dataset: {args.input_csv}")
-            
-            # Set default output CSV file
-            base_name = os.path.splitext(args.input_csv)[0]
-            output_csv = f"scored_{base_name}.csv"
-            
-            output_csv_path = os.path.join(
-                args.results_dir, 
-                args.model_name, 
-                "dataset", 
-                output_csv
-            )
-            
-            # Check if scored CSV already exists
-            if os.path.exists(output_csv_path):
-                print(f"Scored CSV already exists at {output_csv_path}")
-                print("Delete the file if you want to regenerate scores.")
-                return
-
-            # Load data efficiently
-            all_rows, fieldnames = load_data_efficiently(csv_path)
-            
-            # Extract prompts and outputs for evaluation
-            prompts = [row["prompt"] for row in all_rows]
-            outputs = [row["output"] for row in all_rows]
-
-            # Create output dataset for evaluation
-            output_dataset: Dataset = Dataset.from_dict({
-                "forbidden_prompt": prompts,
-                "response": outputs
-            })
-
-            # Evaluate outputs using StrongReject
-            print("Evaluating outputs with StrongReject...")
-            evaluator_results = evaluate_dataset(
-                output_dataset,
-                ["strongreject_finetuned"]
-            )
-            
-            scores = evaluator_results["score"]
-            print(f"Generated {len(scores)} scores")
-
-            # Save original data with scores
-            save_scored_csv(all_rows, scores, fieldnames, output_csv_path)
-            print(f"Scoring complete! Use the filtering scripts with: --scored_csv {output_csv}")
-
-        elif args.input_csv is None and args.type is not None and args.layers is not None:
-
-            dir_path = os.path.join(args.results_dir, args.model_name, "attack_results")
-
-            for layer in args.layers.split(","):
-                layer = layer.strip()  # Remove any 
-                if args.subset:
-                    input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
-                else:
-                    input_csv = f"ortho_output_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+        # Set default output CSV file
+        base_name = os.path.splitext(args.input_csv)[0]
+        output_csv = f"scored_{base_name}.csv"
         
-                csv_path = os.path.join(dir_path, input_csv)
-            
-                # Check if input CSV exists
-                if not os.path.exists(csv_path):
-                    print(f"Warning: Input CSV not found at {csv_path}, skipping layer {layer}")
-                    continue
-                
-                # Set default output CSV file
-                base_name = os.path.splitext(input_csv)[0]
-                output_csv = f"scored_{base_name}.csv"
-                
-                output_csv_path = os.path.join(
-                    args.results_dir, 
-                    args.model_name, 
-                    "attack_results", 
-                    output_csv
-                )
-                
-                # Check if scored CSV already exists
-                if os.path.exists(output_csv_path):
-                    print(f"Scored CSV already exists at {output_csv_path}")
-                    print("Delete the file if you want to regenerate scores.")
-                    return
+        output_csv_path = os.path.join(args.results_dir, args.model_name, args.input_dir, output_csv
+        )
+        
+        # Check if scored CSV already exists
+        if os.path.exists(output_csv_path):
+            print(f"Scored CSV already exists at {output_csv_path}")
+            print("Delete the file if you want to regenerate scores.")
+            return
 
-                # Load data efficiently
-                all_rows, fieldnames = load_data_efficiently(csv_path)
-                
-                # Extract prompts and outputs for evaluation
-                prompts = [row["prompt"] for row in all_rows]
-                outputs = [row["output"] for row in all_rows]
+        # Load data efficiently
+        all_rows, fieldnames = load_data_efficiently(csv_path)
+        
+        # Compute scores
+        scores = compute_scores(all_rows)
 
-                # Create output dataset for evaluation
-                output_dataset: Dataset = Dataset.from_dict({
-                    "forbidden_prompt": prompts,
-                    "response": outputs
-                })
-
-                # Evaluate outputs using StrongReject
-                print("Evaluating outputs with StrongReject...")
-                evaluator_results = evaluate_dataset(
-                    output_dataset,
-                    ["strongreject_finetuned"]
-                )
-                
-                scores = evaluator_results["score"]
-                print(f"Generated {len(scores)} scores")
-
-                # Save original data with scores
-                save_scored_csv(all_rows, scores, fieldnames, output_csv_path)
-                print(f"Scoring complete! Use the filtering scripts with: --scored_csv {output_csv}")
+        # Save original data with scores
+        save_scored_csv(all_rows, scores, fieldnames, output_csv_path)
+        print(f"Scoring complete! Use the filtering scripts with: --scored_csv {output_csv}")
 
 
 if __name__ == "__main__":
