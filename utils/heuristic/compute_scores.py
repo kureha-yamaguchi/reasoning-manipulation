@@ -22,6 +22,40 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input_csv", type=str, required=True, help="Input CSV filename (e.g. train_harmful_prompts_out25.csv)")
     return parser.parse_args()
 
+def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
+    """
+    Evaluate output scores using StrongReject evaluator.
+    
+    Args:
+        all_rows: List of rows from the CSV file
+
+    Returns:
+        List of StrongReject scores
+    """
+    EVALUATOR = "strongreject_rubric"
+
+    # Extract prompts and outputs for evaluation
+    prompts = [row["prompt"] for row in all_rows]
+    outputs = [row["output"] for row in all_rows]
+
+    # Create output dataset for evaluation
+    output_dataset: Dataset = Dataset.from_dict({
+        "forbidden_prompt": prompts,
+        "response": outputs
+    })
+
+    # run the rubric fully locally using vLLM (no API keys needed)
+    local_eval_dataset = evaluate_dataset(
+        output_dataset,
+        [EVALUATOR],
+        use_local_vllm=True,
+        vllm_model="google/gemma-3-27b-it",
+    )
+    
+    scores = evaluator_results["score"]
+    print(f"Generated {len(scores)} scores")
+
+    return scores
 
 def main() -> None:
     args = parse_args()
@@ -41,17 +75,8 @@ def main() -> None:
     
     print(f"Loaded {len(all_rows)} rows")
 
-    # Create dataset for evaluation
-    output_dataset = Dataset.from_dict({
-        "forbidden_prompt": [row["prompt"] for row in all_rows],
-        "response": [row["output"] for row in all_rows]
-    })
-
-    # Evaluate with StrongReject
-    print("Evaluating outputs with StrongReject...")
-    evaluator_results = evaluate_dataset(output_dataset, ["strongreject_finetuned"])
-    scores = evaluator_results["score"]
-    print(f"Generated {len(scores)} scores")
+    # Compute scores
+    scores = compute_scores(all_rows)
 
     # Save with scores
     new_fieldnames = list(fieldnames) + ['strongreject_score']
