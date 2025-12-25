@@ -464,7 +464,12 @@ pca/
 ortho_model_*/
 
 run_retrospective_qwen.sh
+run_harmless_llama.sh
+run_retrospective.sh
 run_retrospective_qwen3.sh
 run_qwen.sh
+run_heuristic_qwen3.sh
+run_nonreasoning2.sh
+run_reasoning.sh
 
 alpaca_sql.txt

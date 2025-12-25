@@ -100,11 +100,13 @@ uv run -m utils.batch_generation_cot_output \
 ```bash
 uv run -m utils.compute_score_outputs \
   --model_name {model_name} \
-  --input_csv train_harmful_prompts_cot5_out5.csv
+  --input_csv train_harmful_prompts_cot5_out5.csv \
+  --input_dir dataset
 
 uv run -m utils.compute_score_outputs \
   --model_name {model_name} \
-  --input_csv test_harmful_prompts_cot5_out5.csv
+  --input_csv test_harmful_prompts_cot5_out5.csv \
+  --input_dir dataset
 ```
 
 `utils/filter_all_datasets.py` is a master script to filter datasets using both CoT and baseline filtering methods, calling both `filter_cot_datasets.py` and `filter_baseline_datasets.py` using the same pre-computed scores file. Both scripts filter datasets based on StrongReject evaluator scores to create refusal and non-refusal datasets. `filter_baseline_datasets.py` filters based on the score of the outputs given a prompt, asking the question "is the prompt leading to refusal or non-refusal"? On the other hand, `filter_cot_datasets.py` filters based on the score of the outputs conditioned on a prompt-cot sequence, asking the question "is the prompt-cot leading to a refusal or non-refusal"? The results are written to either a refusal or non-refusal dataset and saved in results/{model_name}/dataset/. The fields of the refusal and non-refusal datasets are `['prompt', 'cot', 'output_scores', 'cot_rep_n']` for cot and `['prompt', 'output_scores']` for baseline.
@@ -185,7 +187,8 @@ uv run -m utils.batch_generation_cot_output \
 uv run -m utils.compute_score_outputs \
   --model_name {model_name} \
   --type {type} \
-  --layers {try_layers} \
+  --layers {layers} \
+  --input_dir attack_results \
   --subset
 ```
 
@@ -224,8 +227,8 @@ uv run -m utils.batch_generation_cot_output \
 ```bash
 uv run -m utils.compute_score_outputs \
   --model_name {model_name} \
-  --type {type} \
-  --layers {layer}
+  --input_csv ortho_output_test_harmful_prompts_{type}_layer_{layer}.csv \
+  --input_dir attack_results
 ```
 
 `utils/plot_boxplot_comparison.py` creates box plots to visualize the distribution of strongreject_score

@@ -40,8 +40,8 @@ uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_c
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" 
 
 echo "=== Step 2: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "train_harmful_prompts_cot5_out5.csv"
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts_cot5_out5.csv"
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "train_harmful_prompts_cot5_out5.csv" --input_dir dataset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts_cot5_out5.csv" --input_dir dataset
 
 echo "=== Step 3: Create refusal and non-refusal datasets (both cot and baseline) ==="
 uv run -m utils.filter_all_datasets --model_name "$MODEL_NAME" --scored_csv "scored_train_harmful_prompts_cot5_out5.csv"
@@ -65,9 +65,9 @@ uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_c
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE2" --layer "$TRY_LAYERS"
 
 echo "=== Step 7: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$TRY_LAYERS" --subset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$TRY_LAYERS" --input_dir attack_results --subset
 
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$TRY_LAYERS" --subset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$TRY_LAYERS" --input_dir attack_results --subset
 
 echo "=== Step 8: Compute layer statistics ==="
 uv run -m utils.compute_layer_statistics --model_name "$MODEL_NAME" --type "$TYPE1" --layer "$TRY_LAYERS"
@@ -87,9 +87,9 @@ uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_c
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE2" --layer "$BEST_LAYER2"
 
 echo "=== Step 11: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$BEST_LAYER1"
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE1}_layer_${BEST_LAYER1}.csv"
 
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$BEST_LAYER2"
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE2}_layer_${BEST_LAYER2}.csv"
 
 echo "=== Step 12: Plot boxplot comparison ==="
 uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "all" --layer "$BEST_LAYER1,$BEST_LAYER2"

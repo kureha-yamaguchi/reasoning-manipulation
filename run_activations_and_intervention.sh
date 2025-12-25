@@ -29,7 +29,7 @@ echo "=== Step 3: Batch generation (subset) ==="
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE" --layer "$TRY_LAYERS"
 
 echo "=== Step 4: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$TRY_LAYERS" --subset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$TRY_LAYERS" --input_dir attack_results --subset
 
 echo "=== Step 5: Compute layer statistics ==="
 uv run -m utils.compute_layer_statistics --model_name "$MODEL_NAME" --type "$TYPE" --layer "$TRY_LAYERS"
@@ -42,7 +42,7 @@ echo "=== Step 7: Final batch generation ==="
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE" --layer "$BEST_LAYER"
 
 echo "=== Step 8: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE" --layers "$BEST_LAYER"
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE}_layer_${BEST_LAYER}.csv"
 
 echo "=== Step 9: Plot boxplot comparison ==="
 uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "$TYPE" --layer "$BEST_LAYER"
