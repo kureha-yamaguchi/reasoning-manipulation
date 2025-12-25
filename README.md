@@ -29,6 +29,7 @@ cd reasoning-manipulation
 With uv, dependencies are managed automatically and no specific install step is needed (other than uv itself, instructions [here](https://docs.astral.sh/uv/getting-started/installation/)). We recommended this for faster dependency resolution and better reproducibility. 
 - Run a python file with `uv run {FILENAME.py}`
 - Use a module with `uv run -m {MODULE_PATH}`
+- [TEMP] Need to do `uv pip install git+https://github.com/b-d-e/strong_reject` (if this doesn't work, just use compute_score_outputs_slow.py in place of compute_score_outputs.py)
 
 <br>
 

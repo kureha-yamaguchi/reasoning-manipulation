@@ -7,7 +7,7 @@ Clean model paradigm
 
 Example usage (analysing training dataset output train_harmful_prompts_cot5_out5.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    uv run -m utils.compute_score_outputs \
+    uv run -m utils.compute_score_outputs_slow \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
     --input_csv train_harmful_prompts_cot5_out5.csv \
     --input_dir dataset 
@@ -19,7 +19,7 @@ Ortho model paradigm
 
 Example usage (analysing ortho model generations for multiple layers, subset of harmful prompts ortho_output_subset_5_test_harmful_prompts_{type}_layer_{layer}.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    uv run -m utils.compute_score_outputs \
+    uv run -m utils.compute_score_outputs_slow \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
     --type {type} \
     --layers {layers} \
@@ -28,14 +28,14 @@ Example usage (analysing ortho model generations for multiple layers, subset of 
 
 Example usage (analysing ortho model generations for single layer,  full holdout set of harmful prompts ortho_output_test_harmful_prompts_{type}_layer_{layer}.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    uv run -m utils.compute_score_outputs \
+    uv run -m utils.compute_score_outputs_slow \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
     --input_dir attack_results \
     --input_csv ortho_output_test_harmful_prompts_{type}_layer_{layer}.csv
 
 Example usage (analysing ortho model generations for single layer,  full holdout set of harmless prompts ortho_output_test_harmless_prompts_{type}_layer_{layer}.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-    uv run -m utils.compute_score_outputs \
+    uv run -m utils.compute_score_outputs_slow \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
     --input_dir attack_results \
     --input_csv ortho_output_test_harmless_prompts_{type}_layer_{layer}.csv
@@ -178,7 +178,6 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
     Returns:
         List of StrongReject scores
     """
-    EVALUATOR = "strongreject_rubric"
 
     # Extract prompts and outputs for evaluation
     prompts = [row["prompt"] for row in all_rows]
@@ -190,12 +189,11 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
         "response": outputs
     })
 
-    # run the rubric fully locally using vLLM (no API keys needed)
-    local_eval_dataset = evaluate_dataset(
+    # Evaluate outputs using StrongReject
+    print("Evaluating outputs with StrongReject...")
+    evaluator_results = evaluate_dataset(
         output_dataset,
-        [EVALUATOR],
-        use_local_vllm=True,
-        vllm_model="google/gemma-3-27b-it",
+        ["strongreject_finetuned"]
     )
     
     scores = evaluator_results["score"]
