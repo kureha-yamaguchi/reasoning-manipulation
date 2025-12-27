@@ -36,8 +36,8 @@ uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_c
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" 
 
 echo "=== Step 2: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "train_harmful_prompts_cot5_out5.csv" -input_dir dataset
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts_cot5_out5.csv" -input_dir dataset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "train_harmful_prompts_cot5_out5.csv" --input_dir dataset
+uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts_cot5_out5.csv" --input_dir dataset
 
 echo "=== Step 3: Create refusal and non-refusal datasets (both cot and baseline) ==="
 uv run -m utils.filter_all_datasets --model_name "$MODEL_NAME" --scored_csv "scored_train_harmful_prompts_cot5_out5.csv"
