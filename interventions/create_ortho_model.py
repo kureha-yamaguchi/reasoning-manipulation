@@ -337,7 +337,9 @@ def main():
         refusal_dir = compute_refusal_dir(args, layer)
 
         # Save the tensor to a .pt file
-        torch.save(refusal_dir, os.path.join('results', args.model_name, 'refusal_dir', f'refusal_dir_{args.type}_layer_{layer}.pt'))
+        save_path = os.path.join('results', args.model_name, 'refusal_dir')
+        os.makedirs(save_path, exist_ok=True)
+        torch.save(refusal_dir, os.path.join(save_path, f'refusal_dir_{args.type}_layer_{layer}.pt'))
         print(f"refusal direction shape: {refusal_dir.shape}")
 
     
