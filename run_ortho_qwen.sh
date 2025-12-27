@@ -65,5 +65,5 @@ uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir att
 
 uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE2}_layer_${BEST_LAYER2}.csv"
 
-echo "=== Step 12: Plot boxplot comparison ==="
-uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "all" --layer "$BEST_LAYER1,$BEST_LAYER2"
+# echo "=== Step 12: Plot boxplot comparison ==="
+# uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "all" --layer "$BEST_LAYER1,$BEST_LAYER2"
