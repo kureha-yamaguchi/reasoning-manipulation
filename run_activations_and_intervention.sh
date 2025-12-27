@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL_NAME="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+MODEL_NAME="openai/gpt-oss-20b"
 TYPE="cot"
 TRY_LAYERS="16,17,18,19"
 
