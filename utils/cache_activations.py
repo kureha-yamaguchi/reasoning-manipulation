@@ -2,7 +2,7 @@
 Cache residual stream activations from a number of specified layers
 Depending on the argument specified in --type, the following is cached:
 if 'cot': average activation is taken across all cot token activations up to and including </think>
-if 'baseline': average activation is taken across 3 tokens at the end of prompt
+if 'baseline': average activation is taken across 3 tokens at the end-of-prompt unless the model is Qwen/Qwen3-8B, in which case the last 5 tokens at the end-of-prompt tokens are taken
 if 'prompt': average activation is taken across all prompt token activation up to and including <think>
 
 Usage:
@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument('--layers', type=str, default='15,19,23,27,31',
                         help='Comma-separated list of layer numbers to extract activations from')
     parser.add_argument('--type', type=str, default='baseline', 
-                        help="CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
+                        help="CoT tokens (cot) or 3 or 5 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     return parser.parse_args()
 
 def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None):
@@ -58,6 +58,7 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
         output_dir = os.path.join('results', model_name, 'activations', 'non_refusal')
         os.makedirs(output_dir, exist_ok=True)
 
+
     input_path = os.path.join('results', model_name, 'dataset', dataset)
     df = pd.read_csv(input_path)
 
@@ -70,6 +71,12 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
     # Initialize dictionary to store activation matrices for each layer
     activation_matrices = {layer: [] for layer in layers}
     print(f"Caching activations mode: {type}")
+
+    # Configure number of end-of-prompt tokens
+    if model_name == "Qwen/Qwen3-8B":
+        k=5
+    else:
+        k=3
 
     # Process each example
     for idx, row in enumerate(tqdm(df.itertuples())):
@@ -87,7 +94,7 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
             target_end = len(tokens_to_process)  # End of our selection
         elif type == 'baseline':
             tokens_to_process = prompt_tokens
-            target_start = max(0, len(prompt_tokens) - 3)  # Last 3 tokens of prompt
+            target_start = max(0, len(prompt_tokens) - k)  # Last 3 tokens of prompt
             target_end = len(prompt_tokens)
         elif type == 'prompt':
             tokens_to_process = prompt_tokens
@@ -96,15 +103,15 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
         else:
             print("WARNING args.type not selected. Your choices are cot, baseline, prompt.")
 
-        # Process the entire sequence at once
-        # input_text = model.tokenizer.decode(tokens_to_process)
-        input_text = tokenizer.decode(tokens_to_process)
+        # Pass tokens directly instead of decoding to text
+        # This ensures target_start and target_end indices match the actual token positions
+        input_ids = torch.tensor([tokens_to_process])
         
         # Initialize dict to collect activations for this example across all layers
         example_layer_activations = {layer: [] for layer in layers}
         
         with torch.no_grad():
-            with model.trace(input_text):
+            with model.trace(input_ids):
                 for layer in layers:
                     # Note: Different models may have different attribute names
                     # For Qwen3, you might need to adjust this path
