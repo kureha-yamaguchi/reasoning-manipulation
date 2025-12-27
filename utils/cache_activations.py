@@ -113,6 +113,7 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
         with torch.no_grad():
             with model.trace(input_ids):
                 for layer in layers:
+                    # Residual stream before normalisation
                     # Note: Different models may have different attribute names
                     # For Qwen3, you might need to adjust this path
                     activation = model.model.layers[layer].input_layernorm.input.save()

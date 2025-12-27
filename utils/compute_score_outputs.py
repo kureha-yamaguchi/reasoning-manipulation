@@ -195,7 +195,7 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
         output_dataset,
         [EVALUATOR],
         use_local_vllm=True,
-        vllm_model="google/gemma-3-12b-it",
+        vllm_model="google/gemma-3-27b-it",
     )
     
     scores = local_eval_dataset["score"]
