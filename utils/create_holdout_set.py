@@ -4,7 +4,7 @@ Takes 75% of data for training set and 25% for test set.
 Shuffles the dataset before splitting to ensure randomization.
 
 Usage:
-python -m utils.create_holdout_set --train_set_split 0.75
+uv run -m utils.create_holdout_set --train_set_split 0.75 --input_csv all_harmful_prompts.csv --seed 42
 """
 
 import pandas as pd
@@ -18,18 +18,18 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Create train-test split from all_harmful_prompts.csv"
     )
-    parser.add_argument("--input_file", type=str, default="dataset/all_harmful_prompts.csv",
+    parser.add_argument("--input_csv", type=str, default="all_harmful_prompts.csv",
                         help="Path to input CSV file")
     parser.add_argument("--train_set_split", type=float, default=0.75,
                         help="Train split proportion between 0-1 (default: 0.75)")
     parser.add_argument("--output_dir", type=str, default="dataset",
                         help="Directory to save output files")
-    parser.add_argument("--random_state", type=int, default=42,
+    parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility (default: 42)")
     return parser.parse_args()
 
 
-def create_train_test_split(input_path, train_set_split, random_state=42):
+def create_train_test_split(input_path, train_set_split, seed=42):
     """
     Create train-test split from a single dataset.
 
@@ -39,7 +39,7 @@ def create_train_test_split(input_path, train_set_split, random_state=42):
         Path to the input CSV file
     train_set_split: float
         Train split proportion between 0 and 1
-    random_state : int
+    seed : int
         Random seed for reproducibility (default: 42)
 
     Returns:
@@ -64,7 +64,7 @@ def create_train_test_split(input_path, train_set_split, random_state=42):
 
     # Shuffle the dataset
     print("\nShuffling dataset...")
-    df_shuffled = df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+    df_shuffled = df.sample(frac=1, random_state=seed).reset_index(drop=True)
 
     # Create train-test split
     print("Creating train-test split...")
@@ -95,11 +95,12 @@ def main():
     args = parse_args()
 
     try:
+        input_path=os.path.join('dataset', args.input_csv)
         # Create the train-test split
         results = create_train_test_split(
-            input_path=args.input_file,
+            input_path=input_path,
             train_set_split=args.train_set_split,
-            random_state=args.random_state
+            seed=args.seed
         )
 
         # Ensure output directory exists
@@ -121,15 +122,15 @@ def main():
         print("SUMMARY")
         print("="*50)
         print("Successfully created train-test split")
-        print(f"Input file: {args.input_file}")
+        print(f"Input file: {args.input_csv}")
         print(f"Total rows: {results['total_rows']}")
         print(f"Train set size ({args.train_set_split:.0%}): {results['train_size']}")
         print(f"Test set size ({1-args.train_set_split:.0%}): {results['test_size']}")
-        print(f"Random seed: {args.random_state}")
+        print(f"Random seed: {args.seed}")
 
     except FileNotFoundError as e:
         print(f"Error: Could not find CSV file - {e}")
-        print(f"Please ensure the file exists at: {args.input_file}")
+        print(f"Please ensure the file exists at: {args.input_csv}")
     except Exception as e:
         print(f"An error occurred: {e}")
 
