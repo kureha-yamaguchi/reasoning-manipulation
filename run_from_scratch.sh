@@ -31,7 +31,7 @@ uv run -m utils.create_base_dataset --dataset sorrybench --dataset_dir dataset/b
 
 uv run  -m utils.check_duplicates
 
-uv run -m utils.create_holdout_set --train_set_split 0.75
+uv run -m utils.create_holdout_set --train_set_split 0.75 --input_csv all_harmful_prompts.csv --seed 42
 
 uv run -m utils.create_random_subset --num_prompts 5 --seed 42
 

@@ -71,7 +71,7 @@ uv run  -m utils.check_duplicates
 `utils/create_holdout_set.py` creates a train-test split from `all_harmful_prompts.csv`. It shuffles the dataset and splits it into 75% training and 25% hold out test sets by default. The train and test sets are saved as `train_harmful_prompts.csv` and `test_harmful_prompts.csv` in the dataset directory.
 
 ```bash
-uv run -m utils.create_holdout_set --train_set_split 0.75
+uv run -m utils.create_holdout_set --train_set_split 0.75 --input_csv all_harmful_prompts.csv --seed 42
 ```
 
 `utils/create_random_subset.py` creates a randomized subset of prompts from a CSV file. By default, it samples 5 prompts from `test_harmful_prompts.csv` using a fixed random seed for reproducibility. The subset is saved as `subset_{num_prompts}_{input_csv}` in the dataset directory. This is useful for quickly testing intervention on a small sample, in order to choose the best layer.

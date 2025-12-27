@@ -46,7 +46,7 @@ import csv
 import os
 import argparse
 from typing import List, Dict, Tuple
-
+import litellm
 import torch
 from tqdm import tqdm
 from datasets import Dataset
@@ -195,10 +195,10 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
         output_dataset,
         [EVALUATOR],
         use_local_vllm=True,
-        vllm_model="google/gemma-3-27b-it",
+        vllm_model="google/gemma-3-12b-it",
     )
     
-    scores = evaluator_results["score"]
+    scores = local_eval_dataset["score"]
     print(f"Generated {len(scores)} scores")
 
     return scores
@@ -208,6 +208,8 @@ def main() -> None:
     # Parse arguments and setup
     args: argparse.Namespace = parse_args()
     print(f"CUDA available: {torch.cuda.is_available()}")
+
+    os.environ['LITELLM_LOG'] = 'DEBUG'
 
     # Ortho model subset, sweep of layers
     if args.subset:
@@ -256,7 +258,6 @@ def main() -> None:
         # Check if input CSV exists
         if not os.path.exists(csv_path):
             print(f"Warning: Input CSV not found at {csv_path}")
-            continue
 
         # Set default output CSV file
         base_name = os.path.splitext(args.input_csv)[0]

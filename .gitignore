@@ -473,3 +473,5 @@ run_nonreasoning2.sh
 run_reasoning.sh
 
 alpaca_sql.txt
+
+alpaca.pyx

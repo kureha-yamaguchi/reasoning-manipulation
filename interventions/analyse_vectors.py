@@ -4,6 +4,8 @@ and per-token activations from layer 18 of DeepSeek-R1-Distill-Llama-8B.
 """
 # CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m interventions.analyse_vectors --index 1 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 
+# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run -m interventions.analyse_vectors --index 0 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+
 import argparse
 import gc
 import os
@@ -21,7 +23,7 @@ def parse_args():
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="Name of the model you are interested in")
     parser.add_argument("--type", type=str, default="cot", help="Which activations were taken to compute the difference-of-means direction?")
-    parser.add_argument('--dataset', type=str, default='heatmap_test_refusal_cot.csv',
+    parser.add_argument('--dataset', type=str, default='scored_train_harmful_prompts_cot5_out5.csv',
                         help='Path to the dataset')
     parser.add_argument("--layer", type=int, default=17, 
                         help="Layer to extract activations from")
@@ -123,7 +125,7 @@ def compute_cosine_similarities(activation_tensor, direction_vector):
     
     return similarities
 
-def plot_heatmap(token_texts, similarities, title, output_path="similarity_heatmap.png"):
+def plot_heatmap(token_texts, similarities, title, output_path="similarity_heatmap.png", score=None, cot_rep_n=None):
     """Create a heatmap visualization of token similarities."""
     plt.figure(figsize=(12, 4))
     
@@ -136,7 +138,7 @@ def plot_heatmap(token_texts, similarities, title, output_path="similarity_heatm
     for i, token in enumerate(token_texts):
         # Check if it's one of the specific special tokens or every 10th token
         special_tokens = ['<｜User｜>', '<｜Assistant｜>', '</think>']
-        if token in special_tokens or ((i+1) % 10 == 0):
+        if token in special_tokens or ((i+1) % 5 == 0):
             custom_positions.append(i)
     
     # Create heatmap without x-tick labels initially
@@ -152,8 +154,8 @@ def plot_heatmap(token_texts, similarities, title, output_path="similarity_heatm
         if tick_label.get_text() in special_tokens:
             tick_label.set_color('blue')
             tick_label.set_weight('bold')
-    
-    plt.title(f'Prompt: {title}', fontsize=12)
+
+    plt.title(f'Prompt: {title}, \nScore: {float(score):.2f}, CoT rollout no.: {cot_rep_n}', fontsize=12)
     plt.tight_layout()
     plt.savefig(output_path, dpi=600, bbox_inches='tight')
     print(f"Heatmap saved to {output_path}")
@@ -173,7 +175,7 @@ def main():
     set_plotting_settings()
     
     # Load the pre-computed direction vector
-    direction_vector = torch.load(os.path.join('results', model_name, 'refusal_dir', f'{args.type}_refusal_dir.pt'))
+    direction_vector = torch.load(os.path.join('results', model_name, 'refusal_dir', f'refusal_dir_{args.type}_layer_{args.layer}.pt'))
     print(f"Loaded direction vector with shape: {direction_vector.shape}")
     
     dataset_path = os.path.join('results', model_name, 'dataset', args.dataset)
@@ -199,8 +201,13 @@ def main():
     # plot_token_similarities(token_texts, similarities, 
     #                        output_path=os.path.join(args.output_dir, "after_4_bars.png"))
     output_dir = os.path.join('results', model_name, 'figures')
+    score = row.strongreject_score
+    # Convert cot_rep_n to sequential index (e.g., 1,3,5 -> 1,2,3)
+    same_prompt_rows = df[df.prompt == row.prompt]
+    unique_cot_rep_ns = sorted(same_prompt_rows.cot_rep_n.unique())
+    cot_rep_n = unique_cot_rep_ns.index(row.cot_rep_n) + 1
     plot_heatmap(token_texts, similarities, prompt,
-                output_path=os.path.join(output_dir, f"{args.dataset}_{args.index}.png"))
+                output_path=os.path.join(output_dir, f"{args.dataset}_{args.index}.png"), score=score, cot_rep_n=cot_rep_n)
     
     # Print highest and lowest similarity tokens
     sorted_indices = np.argsort(similarities)

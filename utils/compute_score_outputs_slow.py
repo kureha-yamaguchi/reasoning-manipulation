@@ -254,7 +254,6 @@ def main() -> None:
         # Check if input CSV exists
         if not os.path.exists(csv_path):
             print(f"Warning: Input CSV not found at {csv_path}")
-            continue
 
         # Set default output CSV file
         base_name = os.path.splitext(args.input_csv)[0]
