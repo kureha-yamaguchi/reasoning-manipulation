@@ -463,6 +463,7 @@ pca/
 
 ortho_model_*/
 
+# bash scripts
 run_retrospective_qwen.sh
 run_harmless_llama.sh
 run_retrospective.sh
@@ -472,6 +473,8 @@ run_heuristic_qwen3.sh
 run_nonreasoning2.sh
 run_reasoning.sh
 
-alpaca_sql.txt
+alpaca.py
 
-alpaca.pyx
+# remove subset files as all relevant info captured in json
+ortho_output_subset_5_test_harmful_prompts_*.csv
+scored_ortho_output_subset_5_test_harmful_prompts_*.csv
