@@ -216,13 +216,17 @@ def main() -> None:
         for layer in args.layers.split(","):
             layer = layer.strip()  # Remove any 
             input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+            dir_path = os.path.join(args.results_dir, args.model_name, args.input_dir)
             csv_path = os.path.join(dir_path, input_csv)
-            print(f"Scoring dataset: {input_csv}")
-        
             # Check if input CSV exists
             if not os.path.exists(csv_path):
-                print(f"Warning: Input CSV not found at {csv_path}, skipping layer {layer}")
-                continue
+                print(f"Warning: Input CSV not found at {csv_path}")
+            print(f"Scoring dataset: {input_csv}")
+        
+            # # Check if input CSV exists
+            # if not os.path.exists(csv_path):
+            #     print(f"Warning: Input CSV not found at {csv_path}, skipping layer {layer}")
+            #     continue
             
             # Set default output CSV file
             base_name = os.path.splitext(input_csv)[0]
