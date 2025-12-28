@@ -50,6 +50,7 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
         [EVALUATOR],
         use_local_vllm=True,
         vllm_model="google/gemma-3-27b-it",
+        vllm_wait_seconds=30*60, 
     )
     
     scores = evaluator_results["score"]

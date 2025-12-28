@@ -196,6 +196,7 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
         [EVALUATOR],
         use_local_vllm=True,
         vllm_model="google/gemma-3-27b-it",
+        vllm_wait_seconds=30*60, 
     )
     
     scores = local_eval_dataset["score"]
@@ -220,6 +221,7 @@ def main() -> None:
             csv_path = os.path.join(dir_path, input_csv)
             # Check if input CSV exists
             if not os.path.exists(csv_path):
+                os.makedirs(dir_path, exist_ok=True)
                 print(f"Warning: Input CSV not found at {csv_path}")
             print(f"Scoring dataset: {input_csv}")
         
