@@ -116,6 +116,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip baseline filtering"
     )
+    parser.add_argument(
+        "--harmless",
+        action="store_true",
+        help="For harmless datasets"
+    )
 
     return parser.parse_args()
 
@@ -185,6 +190,9 @@ def main() -> None:
             "--upper_threshold", str(args.cot_upper_threshold)
         ]
         
+        if args.harmless:
+            cot_cmd.append("--harmless")
+
         if run_command(cot_cmd, "CoT filtering"):
             success_count += 1
     
@@ -201,6 +209,9 @@ def main() -> None:
             "--percentage_threshold", str(args.percentage_threshold)
         ]
         
+        if args.harmless:
+            cot_cmd.append("--harmless")
+
         if run_command(baseline_cmd, "Baseline filtering"):
             success_count += 1
     
@@ -224,8 +235,8 @@ def main() -> None:
             print(f"  - nonrefusal_{args.cot_upper_threshold}.csv (CoT non-refusal)")
         
         if run_baseline:
-            print(f"  - refusal_{args.baseline_lower_threshold}_pct{args.percentage_threshold}.csv (Baseline refusal)")
-            print(f"  - nonrefusal_{args.baseline_upper_threshold}_pct{args.percentage_threshold}.csv (Baseline non-refusal)")
+            print(f"  - refusal_{args.baseline_lower_threshold}.csv (Baseline refusal)")
+            print(f"  - nonrefusal_{args.baseline_upper_threshold}.csv (Baseline non-refusal)")
             
     else:
         print("Some filtering operations failed. Check the logs above.")

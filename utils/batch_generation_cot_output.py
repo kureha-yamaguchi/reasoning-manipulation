@@ -385,25 +385,25 @@ def generate_and_save(llm: LLM, tokenizer, input_csv: str, output_csv: str, prom
     gc.collect()
     torch.cuda.empty_cache()  # Clear CUDA memory too
     
-    # # Save intermediate results if requested
-    # if args.save_intermediate:
-    #     # Save valid CoT results
-    #     if valid_cot_results:
-    #         valid_cot_csv = input_csv.replace('.csv', f'_valid_cot_{args.cot_repetitions}.csv')
-    #         valid_cot_path = os.path.join(get_path(args.model_name, 'dataset'), os.path.basename(valid_cot_csv))
-    #         save_csv(valid_cot_results, valid_cot_path)
+    # Save intermediate results if requested
+    if args.save_intermediate:
+        # Save valid CoT results
+        if valid_cot_results:
+            valid_cot_csv = input_csv.replace('.csv', f'_valid_cot_{args.cot_repetitions}.csv')
+            valid_cot_path = os.path.join(get_path(args.model_name, 'dataset'), os.path.basename(valid_cot_csv))
+            save_csv(valid_cot_results, valid_cot_path)
         
-    #     # Save invalid CoT results for debugging
-    #     if invalid_cot_results:
-    #         invalid_cot_csv = input_csv.replace('.csv', f'_invalid_cot_{args.cot_repetitions}.csv')
-    #         save_csv(invalid_cot_results, invalid_cot_csv)
-    #         print(f"  Saved {len(invalid_cot_results)} invalid CoT responses for review")
+        # Save invalid CoT results for debugging
+        if invalid_cot_results:
+            invalid_cot_csv = input_csv.replace('.csv', f'_invalid_cot_{args.cot_repetitions}.csv')
+            save_csv(invalid_cot_results, invalid_cot_csv)
+            print(f"  Saved {len(invalid_cot_results)} invalid CoT responses for review")
     
-    # Check if we have valid CoT results to proceed
-    if not valid_cot_results:
-        print(f"\n No valid CoT responses generated (all missing </think> tag)")
-        print(f"   Cannot proceed to Stage 2")
-        return
+    # # Check if we have valid CoT results to proceed
+    # if not valid_cot_results:
+    #     print(f"\n No valid CoT responses generated (all missing </think> tag)")
+    #     print(f"   Cannot proceed to Stage 2")
+    #     return
     
     # Stage 2: Generate outputs for each valid CoT
     final_results = stage2_generate_outputs(

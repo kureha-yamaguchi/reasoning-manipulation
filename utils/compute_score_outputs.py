@@ -46,7 +46,7 @@ import csv
 import os
 import argparse
 from typing import List, Dict, Tuple
-import litellm
+
 import torch
 from tqdm import tqdm
 from datasets import Dataset
@@ -98,6 +98,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="For analysing attack results only: Whether to score a subset of harmful prompts"
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=32,
+        help="Batch size into strongreject evaluator"
+    )
     
     return parser.parse_args()
 
@@ -119,6 +125,14 @@ def load_data_efficiently(csv_path: str) -> Tuple[List[Dict[str, str]], List[str
     # Second pass: load data with progress bar
     all_rows = []
     fieldnames = None
+
+    # with open(csv_path, 'r', encoding='utf-8') as f:
+    #     reader = csv.DictReader(f)
+    #     fieldnames = reader.fieldnames
+    #     for i, row in enumerate(tqdm(reader, total=min(total_rows, 100), desc="Loading data")):
+    #         if i >= 100:
+    #             break
+    #         all_rows.append(row)
     
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
@@ -168,7 +182,7 @@ def save_scored_csv(
     print(f"Successfully saved {len(original_rows)} rows with scores to {output_path}")
 
 
-def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
+def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[float]:
     """
     Evaluate output scores using StrongReject evaluator.
     
@@ -178,7 +192,6 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
     Returns:
         List of StrongReject scores
     """
-    EVALUATOR = "strongreject_rubric"
 
     # Extract prompts and outputs for evaluation
     prompts = [row["prompt"] for row in all_rows]
@@ -190,16 +203,15 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
         "response": outputs
     })
 
-    # run the rubric fully locally using vLLM (no API keys needed)
-    local_eval_dataset = evaluate_dataset(
+    # Evaluate outputs using StrongReject
+    print("Evaluating outputs with StrongReject...")
+    evaluator_results = evaluate_dataset(
         output_dataset,
-        [EVALUATOR],
-        use_local_vllm=True,
-        vllm_model="google/gemma-3-27b-it",
-        vllm_wait_seconds=30*60, 
+        ["strongreject_finetuned"],
+        batch_size=batch_size
     )
     
-    scores = local_eval_dataset["score"]
+    scores = evaluator_results["score"]
     print(f"Generated {len(scores)} scores")
 
     return scores
@@ -209,27 +221,22 @@ def main() -> None:
     # Parse arguments and setup
     args: argparse.Namespace = parse_args()
     print(f"CUDA available: {torch.cuda.is_available()}")
-
-    os.environ['LITELLM_LOG'] = 'DEBUG'
+    dir_path = os.path.join(args.results_dir, args.model_name, args.input_dir)
 
     # Ortho model subset, sweep of layers
     if args.subset:
         for layer in args.layers.split(","):
             layer = layer.strip()  # Remove any 
             input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
-            dir_path = os.path.join(args.results_dir, args.model_name, args.input_dir)
             csv_path = os.path.join(dir_path, input_csv)
+
             # Check if input CSV exists
             if not os.path.exists(csv_path):
                 os.makedirs(dir_path, exist_ok=True)
                 print(f"Warning: Input CSV not found at {csv_path}")
+
             print(f"Scoring dataset: {input_csv}")
         
-            # # Check if input CSV exists
-            # if not os.path.exists(csv_path):
-            #     print(f"Warning: Input CSV not found at {csv_path}, skipping layer {layer}")
-            #     continue
-            
             # Set default output CSV file
             base_name = os.path.splitext(input_csv)[0]
             output_csv = f"scored_{base_name}.csv"
@@ -251,14 +258,14 @@ def main() -> None:
             all_rows, fieldnames = load_data_efficiently(csv_path)
             
             # Compute scores
-            scores = compute_scores(all_rows)
+            scores = compute_scores(all_rows, args.batch_size)
 
             # Save original data with scores
             save_scored_csv(all_rows, scores, fieldnames, output_csv_path)
             print(f"Scoring complete! Use the filtering scripts with: --scored_csv {output_csv}")
     # For single CSV files
     else:
-        csv_path = os.path.join(args.results_dir, args.model_name, args.input_dir, args.input_csv)
+        csv_path = os.path.join(dir_path, args.input_csv)
         print(f"Scoring dataset: {args.input_csv}")
 
         # Check if input CSV exists
@@ -282,7 +289,7 @@ def main() -> None:
         all_rows, fieldnames = load_data_efficiently(csv_path)
         
         # Compute scores
-        scores = compute_scores(all_rows)
+        scores = compute_scores(all_rows, args.batch_size)
 
         # Save original data with scores
         save_scored_csv(all_rows, scores, fieldnames, output_csv_path)

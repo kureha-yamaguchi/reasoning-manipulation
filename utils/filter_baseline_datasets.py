@@ -55,6 +55,11 @@ def parse_args() -> argparse.Namespace:
         default=0.75,
         help="Percentage of outputs that must meet threshold (default: 75%)"
     )
+    parser.add_argument(
+        "--harmless",
+        action="store_true",
+        help="For harmless datasets"
+    )
 
     return parser.parse_args()
 
@@ -220,22 +225,40 @@ def main() -> None:
     print(f"Refusal samples: {len(refusal)}")
     print(f"Non-refusal samples: {len(non_refusal)}")
 
-    # Save refusal dataset
-    output_refusal_path = os.path.join(
-        args.results_dir,
-        args.model_name,
-        "dataset",
-        f"refusal_{args.lower_threshold}_pct{args.percentage_threshold}.csv"
-    )
-    write_filtered_csv(refusal, output_refusal_path)
+    if harmless:
+        # Save refusal dataset
+        output_refusal_path = os.path.join(
+            args.results_dir,
+            args.model_name,
+            "dataset",
+            f"refusal_{args.lower_threshold}_baseline_harmless.csv"
+        )
+        write_filtered_csv(refusal, output_refusal_path)
 
-    # Save non-refusal dataset
-    output_nonrefusal_path = os.path.join(
-        args.results_dir,
-        args.model_name,
-        "dataset",
-        f"nonrefusal_{args.upper_threshold}_pct{args.percentage_threshold}.csv"
-    )
+        # Save non-refusal dataset
+        output_nonrefusal_path = os.path.join(
+            args.results_dir,
+            args.model_name,
+            "dataset",
+            f"nonrefusal_{args.upper_threshold}_baseline_harmless.csv"
+        )
+    else:
+        # Save refusal dataset
+        output_refusal_path = os.path.join(
+            args.results_dir,
+            args.model_name,
+            "dataset",
+            f"refusal_{args.lower_threshold}_baseline.csv"
+        )
+        write_filtered_csv(refusal, output_refusal_path)
+
+        # Save non-refusal dataset
+        output_nonrefusal_path = os.path.join(
+            args.results_dir,
+            args.model_name,
+            "dataset",
+            f"nonrefusal_{args.upper_threshold}_baseline.csv"
+        )
     write_filtered_csv(non_refusal, output_nonrefusal_path)
 
 
