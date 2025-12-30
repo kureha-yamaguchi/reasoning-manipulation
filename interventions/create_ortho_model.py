@@ -369,7 +369,7 @@ def main():
                 print("Removing quantization_config from model config (weights are now in float format)")
                 delattr(orthogonalized_model.config, 'quantization_config')
             # Also update torch_dtype in config to reflect the actual weight dtype
-            orthogonalized_model.config.torch_dtype = "bfloat16"
+            orthogonalized_model.config.torch_dtype = torch.bfloat16
 
         # Define the output directory
         if args.harmless:
