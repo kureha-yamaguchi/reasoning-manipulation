@@ -359,6 +359,17 @@ def main():
 
         if "gpt-oss" in args.model_name:
             orthogonalized_model = orthogonalized_model.to(dtype=torch.bfloat16, device="cuda")
+            # Remove quantization_config from the model's config to prevent vLLM from
+            # attempting to load the model as quantized. After orthogonalization,
+            # the weights are stored in float format (bfloat16), not in the original
+            # quantized format (e.g., MXFP4). If the quantization_config persists,
+            # vLLM will incorrectly interpret the float weights as quantized data,
+            # leading to memory allocation issues and potential memory leaks.
+            if hasattr(orthogonalized_model.config, 'quantization_config'):
+                print("Removing quantization_config from model config (weights are now in float format)")
+                delattr(orthogonalized_model.config, 'quantization_config')
+            # Also update torch_dtype in config to reflect the actual weight dtype
+            orthogonalized_model.config.torch_dtype = "bfloat16"
 
         # Define the output directory
         if args.harmless:
