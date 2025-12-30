@@ -29,6 +29,7 @@ def parse_args():
                         help="using CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu",
                        help="Device to run inference on (cuda/cpu)")
+    parser.add_argument("--harmless", action="store_true", help="For harmless datasets")
     return parser.parse_args()
 
 def load_model(model_name, device):
@@ -293,8 +294,13 @@ def compute_refusal_dir(args, layer):
     del activations_refusal
     gc.collect()
     torch.cuda.empty_cache()
-    
-    activations_nonrefusal = load_activations(os.path.join('results', args.model_name, 'activations', 'non_refusal', f'layer_{layer}_{args.type}_activations.npy'))
+
+    # Set different path if we're using harmless activations
+    if args.harmless:
+        activations_nonrefusal = load_activations(os.path.join('results', args.model_name, 'activations', 'non_refusal', f'layer_{layer}_{args.type}_activations_harmless.npy'))
+        print("Using harmless nonrefusal, harmful refusal configuration")
+    else:
+        activations_nonrefusal = load_activations(os.path.join('results', args.model_name, 'activations', 'non_refusal', f'layer_{layer}_{args.type}_activations.npy'))
     nonrefusal_mean_act = get_mean_act(activations_nonrefusal).to(dtype=torch.float16, device=args.device)
     # Free memory
     del activations_nonrefusal
@@ -339,7 +345,12 @@ def main():
         # Save the tensor to a .pt file
         save_path = os.path.join('results', args.model_name, 'refusal_dir')
         os.makedirs(save_path, exist_ok=True)
-        torch.save(refusal_dir, os.path.join(save_path, f'refusal_dir_{args.type}_layer_{layer}.pt'))
+        # Set different path if we're using harmless activations
+        if args.harmless:
+            torch.save(refusal_dir, os.path.join(save_path, f'refusal_dir_{args.type}_layer_{layer}_harmless.pt'))
+            print("Using harmless nonrefusal, harmful refusal configuration")
+        else:
+            torch.save(refusal_dir, os.path.join(save_path, f'refusal_dir_{args.type}_layer_{layer}.pt'))
         print(f"refusal direction shape: {refusal_dir.shape}")
 
     
@@ -350,7 +361,11 @@ def main():
             orthogonalized_model = orthogonalized_model.to(dtype=torch.bfloat16, device="cuda")
 
         # Define the output directory
-        output_dir = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
+        if args.harmless:
+            output_dir = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}_harmless')
+            print("Using harmless nonrefusal, harmful refusal configuration")
+        else:
+            output_dir = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
     
         print("Saving model as safetensors... (takes a while)")
         # Save the orthogonalized model in SafeTensors format

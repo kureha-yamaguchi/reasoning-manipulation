@@ -194,7 +194,7 @@ def main() -> None:
     print(f"Refusal samples: {len(refusal)}")
     print(f"Non-refusal samples: {len(non_refusal)}")
 
-    if harmless:
+    if args.harmless:
         # Save refusal dataset
         output_refusal_path = os.path.join(
             args.results_dir,

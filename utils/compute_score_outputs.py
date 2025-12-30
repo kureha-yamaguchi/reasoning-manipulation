@@ -104,6 +104,11 @@ def parse_args() -> argparse.Namespace:
         default=32,
         help="Batch size into strongreject evaluator"
     )
+    parser.add_argument(
+        "--harmless",
+        action="store_true",
+        help="For harmless nonrefusal, harmful refusal dataset configuration"
+    )
     
     return parser.parse_args()
 
@@ -227,7 +232,10 @@ def main() -> None:
     if args.subset:
         for layer in args.layers.split(","):
             layer = layer.strip()  # Remove any 
-            input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+            if args.harmless:
+                input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}_harmless.csv"
+            else:
+                input_csv = f"ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
             csv_path = os.path.join(dir_path, input_csv)
 
             # Check if input CSV exists

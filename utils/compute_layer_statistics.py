@@ -55,6 +55,11 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Comma-separated list of layers (e.g., '16,17,18,19')"
     )
+    parser.add_argument(
+        "--harmless",
+        action='store_true',
+        help="For harmless nonrefusal, harmful refusal dataset configuration"
+    )
     
     return parser.parse_args()
 
@@ -152,7 +157,10 @@ def main() -> None:
     # Process each layer
     for layer in layers:
         # Construct CSV filename
-        scored_csv = f"scored_ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+        if args.harmless:
+            scored_csv = f"scored_ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+        else:
+            scored_csv = f"scored_ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
         csv_path = os.path.join(dataset_dir, scored_csv)
         
         print(f"Processing layer {layer}...")
@@ -237,8 +245,11 @@ def main() -> None:
         **results,
         'best_layer': best_layer if best_layer else None
     }
-    
-    output_file = os.path.join(output_dir, f"layer_statistics_{args.type}_layers_{args.layer.replace(',', '_')}.json")
+    if args.harmless:
+        output_file = os.path.join(output_dir, f"layer_statistics_{args.type}_layers_{args.layer.replace(',', '_')}_harmless.json")
+    else:
+        output_file = os.path.join(output_dir, f"layer_statistics_{args.type}_layers_{args.layer.replace(',', '_')}.json")
+        
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2)
     

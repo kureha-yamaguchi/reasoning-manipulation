@@ -29,6 +29,8 @@ def parse_args():
                         help="Type of intervention (e.g., cot, baseline, all)")
     parser.add_argument("--layer", type=str, required=True,
                         help="Layer number (e.g., 16)")
+    parser.add_argument("--harmless", action='store_true',
+                        help='For harmless nonrefusal, harmful refusal dataset configuration')
     return parser.parse_args()
 
 
@@ -43,9 +45,13 @@ def main():
         layers = args.layer.split(',')
         cot_layer = layers[0].strip()
         baseline_layer = layers[1].strip()
-        
-        cot_path = f"results/{args.model_name}/attack_results/scored_ortho_output_test_harmful_prompts_cot_layer_{cot_layer}.csv"
-        baseline_path = f"results/{args.model_name}/attack_results/scored_ortho_output_test_harmful_prompts_baseline_layer_{baseline_layer}.csv"
+
+        if args.harmless:
+            cot_path = f"results/{args.model_name}/attack_results/scored_ortho_output_test_harmful_prompts_cot_layer_{cot_layer}_harmless.csv"
+            baseline_path = f"results/{args.model_name}/attack_results/scored_ortho_output_test_harmful_prompts_baseline_layer_{baseline_layer}_harmless.csv"
+        else:
+            cot_path = f"results/{args.model_name}/attack_results/scored_ortho_output_test_harmful_prompts_cot_layer_{cot_layer}.csv"
+            baseline_path = f"results/{args.model_name}/attack_results/scored_ortho_output_test_harmful_prompts_baseline_layer_{baseline_layer}.csv"
         
         # Load data
         before_df = pd.read_csv(before_path)
@@ -79,7 +85,11 @@ def main():
         # Save plot
         output_dir = f"results/{args.model_name}/figures"
         os.makedirs(output_dir, exist_ok=True)
-        output_file = f"{output_dir}/boxplot_comparison_{args.type}_layer_{cot_layer}_{baseline_layer}.png"
+
+        if args.harmless:
+            output_file = f"{output_dir}/boxplot_comparison_{args.type}_layer_{cot_layer}_{baseline_layer}_harmless.png"
+        else:
+            output_file = f"{output_dir}/boxplot_comparison_{args.type}_layer_{cot_layer}_{baseline_layer}.png"
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         print(f"Box plot saved to: {output_file}")
     else:

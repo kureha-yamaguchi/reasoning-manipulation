@@ -208,9 +208,9 @@ def main() -> None:
             "--upper_threshold", str(args.baseline_upper_threshold),
             "--percentage_threshold", str(args.percentage_threshold)
         ]
-        
+
         if args.harmless:
-            cot_cmd.append("--harmless")
+            baseline_cmd.append("--harmless")
 
         if run_command(baseline_cmd, "Baseline filtering"):
             success_count += 1

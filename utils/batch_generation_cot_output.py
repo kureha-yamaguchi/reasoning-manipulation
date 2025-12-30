@@ -82,6 +82,8 @@ def parse_args():
                         help="GPU memory utilization ratio")
     parser.add_argument("--save_intermediate", action="store_true",
                         help="Save intermediate CoT results to separate file")
+    parser.add_argument("--harmless", action="store_true", 
+                        help="For harmless nonrefusal, harmful refusal   dataset configuration")
     return parser.parse_args()
 
 def read_csv(input_csv: str) -> Union[List[str], None]:
@@ -451,7 +453,10 @@ def main():
         for layer in args.layer.split(','):
             layer = layer.strip()  # Remove any whitespace
             # Construct local model path
-            local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
+            if args.harmless:
+                local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}_harmless')
+            else:
+                local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
             print(f"Loading model from local path: {local_model_path}")
 
             # Initialize model and tokenizer
@@ -495,7 +500,10 @@ def main():
 
             # Construct output CSV name
             input_csv_name = os.path.splitext(args.input_csv)[0]
-            output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
+            if args.harmless:
+                output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}_harmless.csv')
+            else:
+                output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
             
             generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
 
@@ -550,7 +558,10 @@ def main():
 
         # Construct output CSV name
         input_csv_name = os.path.splitext(args.input_csv)[0]
-        output_csv = os.path.join('results', args.model_name, 'dataset', f'{input_csv_name}_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
+        if args.harmless:
+            output_csv = os.path.join('results', args.model_name, 'dataset', f'{input_csv_name}_cot{args.cot_repetitions}_out{args.output_repetitions}_harmless.csv')
+        else:
+            output_csv = os.path.join('results', args.model_name, 'dataset', f'{input_csv_name}_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
         
         generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
 

@@ -12,10 +12,14 @@ def main():
     parser.add_argument("--model_name", required=True)
     parser.add_argument("--type", required=True)
     parser.add_argument("--try_layers", required=True)
+    parser.add_argument("--harmless", action='store_true', help='For harmless nonrefusal, harmful refusal dataset configuration')
     args = parser.parse_args()
 
     layers_underscored = args.try_layers.replace(",", "_")
-    stats_file = Path(f"results/{args.model_name}/attack_results/layer_statistics_{args.type}_layers_{layers_underscored}.json")
+    if args.harmless:
+        stats_file = Path(f"results/{args.model_name}/attack_results/layer_statistics_{args.type}_layers_{layers_underscored}_harmless.json")
+    else:
+        stats_file = Path(f"results/{args.model_name}/attack_results/layer_statistics_{args.type}_layers_{layers_underscored}.json")
 
     if not stats_file.exists():
         print(f"ERROR: {stats_file} not found", file=sys.stderr)
