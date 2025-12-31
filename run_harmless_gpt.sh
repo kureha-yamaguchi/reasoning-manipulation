@@ -7,7 +7,7 @@ set -euo pipefail
 MODEL_NAME="openai/gpt-oss-20b"
 TYPE1="cot"
 TYPE2="baseline"
-TRY_LAYERS="11,13,15,17,19,21,23"
+TRY_LAYERS="7,9,11,13,15,17,19"
 
 # Create log file with timestamp
 LOG_DIR="logs"
