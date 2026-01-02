@@ -227,13 +227,12 @@ def main() -> None:
 
     if args.harmless:
         # Save refusal dataset
-        output_refusal_path = os.path.join(
-            args.results_dir,
-            args.model_name,
-            "dataset",
-            f"refusal_{args.lower_threshold}_baseline_harmless.csv"
-        )
-        write_filtered_csv(refusal, output_refusal_path)
+        # output_refusal_path = os.path.join(
+        #     args.results_dir,
+        #     args.model_name,
+        #     "dataset",
+        #     f"refusal_{args.lower_threshold}_baseline_harmless.csv"
+        # )
 
         # Save non-refusal dataset
         output_nonrefusal_path = os.path.join(
@@ -242,6 +241,7 @@ def main() -> None:
             "dataset",
             f"nonrefusal_{args.upper_threshold}_baseline_harmless.csv"
         )
+        write_filtered_csv(non_refusal, output_nonrefusal_path)
     else:
         # Save refusal dataset
         output_refusal_path = os.path.join(
@@ -259,7 +259,7 @@ def main() -> None:
             "dataset",
             f"nonrefusal_{args.upper_threshold}_baseline.csv"
         )
-    write_filtered_csv(non_refusal, output_nonrefusal_path)
+        write_filtered_csv(non_refusal, output_nonrefusal_path)
 
 
 if __name__ == "__main__":

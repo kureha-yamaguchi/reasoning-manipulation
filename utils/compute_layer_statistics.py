@@ -158,7 +158,7 @@ def main() -> None:
     for layer in layers:
         # Construct CSV filename
         if args.harmless:
-            scored_csv = f"scored_ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
+            scored_csv = f"scored_ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}_harmless.csv"
         else:
             scored_csv = f"scored_ortho_output_subset_5_test_harmful_prompts_{args.type}_layer_{layer}.csv"
         csv_path = os.path.join(dataset_dir, scored_csv)
