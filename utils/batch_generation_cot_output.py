@@ -82,8 +82,6 @@ def parse_args():
                         help="GPU memory utilization ratio")
     parser.add_argument("--save_intermediate", action="store_true",
                         help="Save intermediate CoT results to separate file")
-    parser.add_argument("--harmless", action="store_true", 
-                        help="For harmless nonrefusal, harmful refusal   dataset configuration")
     return parser.parse_args()
 
 def read_csv(input_csv: str) -> Union[List[str], None]:
@@ -166,16 +164,19 @@ def extract_cot_and_output(response):
     
     if HARMONY:
         harmony_analysis_pattern = r'<\|channel\|>analysis<\|message\|>(.*?)<\|end\|>'
-        harmony_final_pattern = r'<\|start\|>assistant<\|channel\|>final<\|message\|>(.*?)<\|return\|>'
-        
+        # Make <|return|> optional to handle truncated outputs
+        harmony_final_pattern = r'<\|start\|>assistant<\|channel\|>final<\|message\|>(.*?)(?:<\|return\|>|$)'
+
         analysis_match = re.search(harmony_analysis_pattern, response, re.DOTALL)
         final_match = re.search(harmony_final_pattern, response, re.DOTALL)
-    
-        if not analysis_match or not final_match:
-            # Incomplete harmony format, treat as no full CoT
+
+        if not analysis_match:
+            # Debug: show first 500 chars of response to understand format
+            print(f"[DEBUG] HARMONY extraction failed. Response starts with: {repr(response[:500])}")
             return response, "", False
+
         cot_part = analysis_match.group(1)
-        output_part = final_match.group(1)
+        output_part = final_match.group(1) if final_match else ""
         return cot_part, output_part, True
     
     # If harmony format not found, try standard <think></think> format
@@ -387,25 +388,25 @@ def generate_and_save(llm: LLM, tokenizer, input_csv: str, output_csv: str, prom
     gc.collect()
     torch.cuda.empty_cache()  # Clear CUDA memory too
     
-    # Save intermediate results if requested
-    if args.save_intermediate:
-        # Save valid CoT results
-        if valid_cot_results:
-            valid_cot_csv = input_csv.replace('.csv', f'_valid_cot_{args.cot_repetitions}.csv')
-            valid_cot_path = os.path.join(get_path(args.model_name, 'dataset'), os.path.basename(valid_cot_csv))
-            save_csv(valid_cot_results, valid_cot_path)
+    # # Save intermediate results if requested
+    # if args.save_intermediate:
+    #     # Save valid CoT results
+    #     if valid_cot_results:
+    #         valid_cot_csv = input_csv.replace('.csv', f'_valid_cot_{args.cot_repetitions}.csv')
+    #         valid_cot_path = os.path.join(get_path(args.model_name, 'dataset'), os.path.basename(valid_cot_csv))
+    #         save_csv(valid_cot_results, valid_cot_path)
         
-        # Save invalid CoT results for debugging
-        if invalid_cot_results:
-            invalid_cot_csv = input_csv.replace('.csv', f'_invalid_cot_{args.cot_repetitions}.csv')
-            save_csv(invalid_cot_results, invalid_cot_csv)
-            print(f"  Saved {len(invalid_cot_results)} invalid CoT responses for review")
+    #     # Save invalid CoT results for debugging
+    #     if invalid_cot_results:
+    #         invalid_cot_csv = input_csv.replace('.csv', f'_invalid_cot_{args.cot_repetitions}.csv')
+    #         save_csv(invalid_cot_results, invalid_cot_csv)
+    #         print(f"  Saved {len(invalid_cot_results)} invalid CoT responses for review")
     
-    # # Check if we have valid CoT results to proceed
-    # if not valid_cot_results:
-    #     print(f"\n No valid CoT responses generated (all missing </think> tag)")
-    #     print(f"   Cannot proceed to Stage 2")
-    #     return
+    # Check if we have valid CoT results to proceed
+    if not valid_cot_results:
+        print(f"\n No valid CoT responses generated (all missing </think> tag)")
+        print(f"   Cannot proceed to Stage 2")
+        return
     
     # Stage 2: Generate outputs for each valid CoT
     final_results = stage2_generate_outputs(
@@ -431,6 +432,7 @@ def main():
     global HARMONY
     HARMONY = "gpt-oss" in args.model_name
 
+    print(f"HARMONY mode: {HARMONY} (model_name contains 'gpt-oss': {'gpt-oss' in args.model_name})")
     print(f"CUDA available: {torch.cuda.is_available()}")
     gc.collect()
     torch.cuda.empty_cache()
@@ -453,10 +455,7 @@ def main():
         for layer in args.layer.split(','):
             layer = layer.strip()  # Remove any whitespace
             # Construct local model path
-            if args.harmless:
-                local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}_harmless')
-            else:
-                local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
+            local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
             print(f"Loading model from local path: {local_model_path}")
 
             # Initialize model and tokenizer
@@ -500,10 +499,7 @@ def main():
 
             # Construct output CSV name
             input_csv_name = os.path.splitext(args.input_csv)[0]
-            if args.harmless:
-                output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}_harmless.csv')
-            else:
-                output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
+            output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
             
             generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
 
