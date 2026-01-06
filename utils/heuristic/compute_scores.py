@@ -20,9 +20,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Score model generations using StrongReject evaluator")
     parser.add_argument("--model_name", type=str, required=True, help="Model name (e.g. meta-llama/Llama-3.1-8B-Instruct)")
     parser.add_argument("--input_csv", type=str, required=True, help="Input CSV filename (e.g. train_harmful_prompts_out25.csv)")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size into strongreject evaluator"
+    )
     return parser.parse_args()
 
-def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
+def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[float]:
     """
     Evaluate output scores using StrongReject evaluator.
     
@@ -32,7 +34,6 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
     Returns:
         List of StrongReject scores
     """
-    EVALUATOR = "strongreject_rubric"
 
     # Extract prompts and outputs for evaluation
     prompts = [row["prompt"] for row in all_rows]
@@ -44,13 +45,12 @@ def compute_scores(all_rows: List[Dict[str, str]]) -> List[float]:
         "response": outputs
     })
 
-    # run the rubric fully locally using vLLM (no API keys needed)
-    local_eval_dataset = evaluate_dataset(
+    # Evaluate outputs using StrongReject
+    print("Evaluating outputs with StrongReject...")
+    evaluator_results = evaluate_dataset(
         output_dataset,
-        [EVALUATOR],
-        use_local_vllm=True,
-        vllm_model="google/gemma-3-27b-it",
-        vllm_wait_seconds=30*60, 
+        ["strongreject_finetuned"],
+        batch_size=batch_size
     )
     
     scores = evaluator_results["score"]
@@ -77,7 +77,7 @@ def main() -> None:
     print(f"Loaded {len(all_rows)} rows")
 
     # Compute scores
-    scores = compute_scores(all_rows)
+    scores = compute_scores(all_rows, args.batch_size)
 
     # Save with scores
     new_fieldnames = list(fieldnames) + ['strongreject_score']
