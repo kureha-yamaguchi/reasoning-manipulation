@@ -82,6 +82,8 @@ def parse_args():
                         help="GPU memory utilization ratio")
     parser.add_argument("--save_intermediate", action="store_true",
                         help="Save intermediate CoT results to separate file")
+    parser.add_argument("--harmless", action="store_true", 
+                    help="For harmless nonrefusal, harmful refusal   dataset configuration")
     return parser.parse_args()
 
 def read_csv(input_csv: str) -> Union[List[str], None]:
@@ -499,7 +501,10 @@ def main():
 
             # Construct output CSV name
             input_csv_name = os.path.splitext(args.input_csv)[0]
-            output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
+            if args.harmless:
+                output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}_harmless.csv')
+            else:
+                output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
             
             generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
 
