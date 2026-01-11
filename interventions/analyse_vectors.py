@@ -1,10 +1,23 @@
 """
 This script visualizes the cosine similarity between a pre-computed direction vector
-and per-token activations from layer 18 of DeepSeek-R1-Distill-Llama-8B.
-"""
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True python -m interventions.analyse_vectors --index 1 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+and per-token activations from a specified layer.
 
-# CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True uv run -m interventions.analyse_vectors --index 0 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+Supports both standard transformer architectures and GPT-OSS (Mixture-of-Experts).
+Can compare baseline models vs orthogonalized models to verify orthogonalization worked.
+
+Usage:
+# Standard model (baseline)
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run -m interventions.analyse_vectors --index 0 --type cot --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+
+# GPT-OSS baseline
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run -m interventions.analyse_vectors --index 0 --type cot --model_name openai/gpt-oss-20b --layer 11
+
+# GPT-OSS orthogonalized model (to compare with baseline)
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run -m interventions.analyse_vectors --index 0 --type cot --model_name openai/gpt-oss-20b --layer 11 --use_ortho
+"""
 
 import argparse
 import gc
@@ -25,12 +38,19 @@ def parse_args():
     parser.add_argument("--type", type=str, default="cot", help="Which activations were taken to compute the difference-of-means direction?")
     parser.add_argument('--dataset', type=str, default='scored_train_harmful_prompts_cot5_out5.csv',
                         help='Path to the dataset')
-    parser.add_argument("--layer", type=int, default=17, 
+    parser.add_argument("--layer", type=int, default=17,
                         help="Layer to extract activations from")
-    parser.add_argument("--index", type=int, default=3, 
-                        help="Index from cautious.csv")
-    
+    parser.add_argument("--index", type=int, default=3,
+                        help="Index from the dataset")
+    parser.add_argument("--use_ortho", action="store_true",
+                        help="Use the orthogonalized model instead of baseline")
+
     return parser.parse_args()
+
+
+def is_harmony_model(model_name):
+    """Check if model uses Harmony chat format (gpt-oss)."""
+    return "gpt-oss" in model_name
 
 def set_plotting_settings():
     plt.style.use('seaborn-v0_8')
@@ -51,38 +71,66 @@ def set_plotting_settings():
                     '#999999', '#e41a1c', '#dede00']
     plt.rcParams['axes.prop_cycle'] = plt.cycler(color=custom_colors)
 
-def get_activations(model, row, layer=18):
-    """Extract activations from specified layer using NNsight."""
+def get_activations(model, row, layer=18, model_name=""):
+    """Extract activations from specified layer using NNsight.
+
+    Args:
+        model: The nnsight LanguageModel
+        row: Dataset row containing prompt, cot, and output
+        layer: Layer number to extract activations from
+        model_name: Model name to detect Harmony format
+
+    Returns:
+        activation: Tensor of activations [seq_len, hidden_size]
+        token_texts: List of decoded token strings
+    """
     # Clear memory before processing
     gc.collect()
     torch.cuda.empty_cache()
+
+    harmony = is_harmony_model(model_name)
+
     chat = [{"role": "user", "content": row.prompt}]
     prompt_tokens = model.tokenizer.apply_chat_template(chat, add_generation_prompt=True)
-    cot_tokens = model.tokenizer.encode(row.cot, add_special_tokens=False)
+
+    # For GPT-OSS (Harmony format), prepend channel marker to CoT
+    if harmony:
+        HARMONY_COT_PREFIX = "<|channel|>analysis<|message|>"
+        cot_with_marker = HARMONY_COT_PREFIX + row.cot
+        cot_tokens = model.tokenizer.encode(cot_with_marker, add_special_tokens=False)
+    else:
+        cot_tokens = model.tokenizer.encode(row.cot, add_special_tokens=False)
+
     output_tokens = model.tokenizer.encode(row.output, add_special_tokens=False)
     tokens_to_process = prompt_tokens + cot_tokens + output_tokens
-    input_text = model.tokenizer.decode(tokens_to_process)
-    
+
     # Tokenize input text
     token_texts = [model.tokenizer.decode([token]) for token in tokens_to_process]
 
+    # Pass tokens directly to avoid decoding/encoding mismatch
+    input_ids = torch.tensor([tokens_to_process])
+
     # Trace the model to get activations
     with torch.no_grad():
-            with model.trace(input_text):
-                activation = model.model.layers[layer].input_layernorm.input.save()
-    
+        with model.trace(input_ids):
+            activation = model.model.layers[layer].input_layernorm.input.save()
+
     print(f"Activation tensor shape: {activation.shape}")
-    
+
     # If tensor is flattened, try to reshape it
     if len(activation.shape) == 1:
         print("len(activation_tensor.shape) == 1")
         # Calculate the expected sequence length
-        seq_len = len(input_text)
-        hidden_size = 4096  # Expected hidden size for DeepSeek-R1-Distill-Llama-8B # TODO: make this configurable / automatic
-        
+        seq_len = len(tokens_to_process)
+        # Get hidden size from model config
+        if hasattr(model.config, 'hidden_size'):
+            hidden_size = model.config.hidden_size
+        else:
+            hidden_size = 4096  # fallback
+
         print("Tensor appears to be flattened. Attempting reshape...")
         print(f"Expected shape: [{seq_len}, {hidden_size}]")
-        
+
         # Check if reshaping is possible
         if activation.numel() == seq_len * hidden_size:
             activation = activation.reshape(seq_len, hidden_size)
@@ -90,11 +138,11 @@ def get_activations(model, row, layer=18):
         else:
             print("WARNING: Cannot reshape tensor to expected dimensions.")
             print(f"Tensor has {activation.numel()} elements, but expected {seq_len * hidden_size}")
-    
+
     # Clear cache after processing
     gc.collect()
     torch.cuda.empty_cache()
-    
+
     return activation, token_texts
 
 def compute_cosine_similarities(activation_tensor, direction_vector):
@@ -125,27 +173,30 @@ def compute_cosine_similarities(activation_tensor, direction_vector):
     
     return similarities
 
-def plot_heatmap(token_texts, similarities, title, output_path="similarity_heatmap.png", score=None, cot_rep_n=None):
+def plot_heatmap(token_texts, similarities, title, output_path="similarity_heatmap.png", score=None, cot_rep_n=None, model_type="baseline"):
     """Create a heatmap visualization of token similarities."""
     plt.figure(figsize=(12, 4))
-    
+
     # Reshape similarities for heatmap (as a row)
     sim_matrix = np.array(similarities).reshape(1, -1)
-    
+
     # Create custom x-tick labels - only show specific special tokens and every 10th token
     custom_positions = []
-    
+
+    # Special tokens for both standard and Harmony formats
+    special_tokens = ['<｜User｜>', '<｜Assistant｜>', '</think>',
+                      '<|channel|>', '<|message|>', '<|im_start|>', '<|im_end|>']
+
     for i, token in enumerate(token_texts):
-        # Check if it's one of the specific special tokens or every 10th token
-        special_tokens = ['<｜User｜>', '<｜Assistant｜>', '</think>']
+        # Check if it's one of the specific special tokens or every 5th token
         if token in special_tokens or ((i+1) % 5 == 0):
             custom_positions.append(i)
-    
+
     # Create heatmap without x-tick labels initially
-    ax = sns.heatmap(sim_matrix, cmap='coolwarm_r', center=0, 
-                   xticklabels=False, yticklabels=["Similarity"], 
+    ax = sns.heatmap(sim_matrix, cmap='coolwarm_r', center=0,
+                   xticklabels=False, yticklabels=["Similarity"],
                    vmin=-0.4, vmax=0.4)
-    
+
     # Set custom tick positions and labels
     ax.set_xticks(custom_positions)
     ax.set_xticklabels([token_texts[i] for i in custom_positions], rotation=90, fontsize=8)
@@ -155,12 +206,13 @@ def plot_heatmap(token_texts, similarities, title, output_path="similarity_heatm
             tick_label.set_color('blue')
             tick_label.set_weight('bold')
 
-    plt.title(f'Prompt: {title}, \nScore: {float(score):.2f}, CoT rollout no.: {cot_rep_n}', fontsize=12)
+    model_label = "ORTHO" if model_type == "ortho" else "BASELINE"
+    plt.title(f'[{model_label}] Prompt: {title[:60]}..., \nScore: {float(score):.2f}, CoT rollout no.: {cot_rep_n}', fontsize=10)
     plt.tight_layout()
     plt.savefig(output_path, dpi=600, bbox_inches='tight')
     print(f"Heatmap saved to {output_path}")
     plt.close()
-    
+
     # Clear memory after plotting
     gc.collect()
 
@@ -173,52 +225,78 @@ def main():
 
     # Set plotting settings
     set_plotting_settings()
-    
-    # Load the pre-computed direction vector
-    direction_vector = torch.load(os.path.join('results', model_name, 'refusal_dir', f'refusal_dir_{args.type}_layer_{args.layer}.pt'))
+
+    # Load the pre-computed direction vector (always from the base model results)
+    direction_path = os.path.join('results', model_name, 'refusal_dir', f'refusal_dir_{args.type}_layer_{args.layer}.pt')
+    direction_vector = torch.load(direction_path, weights_only=True)
     print(f"Loaded direction vector with shape: {direction_vector.shape}")
-    
+    print(f"Direction vector dtype: {direction_vector.dtype}")
+
     dataset_path = os.path.join('results', model_name, 'dataset', args.dataset)
     print(f"Loading CSV dataset from {dataset_path}")
     df = pd.read_csv(dataset_path)
     row = df.iloc[args.index]
     prompt = row.prompt
-    print(prompt)
+    print(f"Prompt: {prompt}")
 
-    model = LanguageModel(model_name, device_map="auto")
+    # Determine which model to load
+    if args.use_ortho:
+        # Load orthogonalized model from results directory
+        ortho_model_path = os.path.join('results', model_name, f'ortho_model_{args.type}_layer_{args.layer}')
+        print(f"Loading ORTHOGONALIZED model from: {ortho_model_path}")
+        model = LanguageModel(ortho_model_path, device_map="auto")
+        model_type = "ortho"
+    else:
+        # Load baseline model from HuggingFace
+        print(f"Loading BASELINE model: {model_name}")
+        model = LanguageModel(model_name, device_map="auto")
+        model_type = "baseline"
+
     # Memory cleanup after model loading
     gc.collect()
     torch.cuda.empty_cache()
 
     # Get activations for the input text
     print(f"Extracting activations from layer {args.layer}")
-    activations, token_texts = get_activations(model, row, layer=args.layer)
-    
+    activations, token_texts = get_activations(model, row, layer=args.layer, model_name=model_name)
+
     # Compute cosine similarities
     similarities = compute_cosine_similarities(activations, direction_vector)
-    
+
+    # Compute statistics for sanity check
+    sim_array = np.array(similarities)
+    print(f"\n=== SANITY CHECK STATISTICS ({model_type.upper()} model) ===")
+    print(f"Mean similarity:   {np.mean(sim_array):.6f}")
+    print(f"Std similarity:    {np.std(sim_array):.6f}")
+    print(f"Max similarity:    {np.max(sim_array):.6f}")
+    print(f"Min similarity:    {np.min(sim_array):.6f}")
+    print(f"Abs mean:          {np.mean(np.abs(sim_array)):.6f}")
+
     # Create visualizations
-    # plot_token_similarities(token_texts, similarities, 
-    #                        output_path=os.path.join(args.output_dir, "after_4_bars.png"))
     output_dir = os.path.join('results', model_name, 'figures')
+    os.makedirs(output_dir, exist_ok=True)
     score = row.strongreject_score
     # Convert cot_rep_n to sequential index (e.g., 1,3,5 -> 1,2,3)
     same_prompt_rows = df[df.prompt == row.prompt]
     unique_cot_rep_ns = sorted(same_prompt_rows.cot_rep_n.unique())
     cot_rep_n = unique_cot_rep_ns.index(row.cot_rep_n) + 1
+
+    # Include model type in filename
+    output_filename = f"{args.dataset}_{args.index}_{model_type}_layer{args.layer}.png"
     plot_heatmap(token_texts, similarities, prompt,
-                output_path=os.path.join(output_dir, f"{args.dataset}_{args.index}.png"), score=score, cot_rep_n=cot_rep_n)
-    
+                output_path=os.path.join(output_dir, output_filename),
+                score=score, cot_rep_n=cot_rep_n, model_type=model_type)
+
     # Print highest and lowest similarity tokens
     sorted_indices = np.argsort(similarities)
-    print("\nTokens with highest similarity:")
+    print("\nTokens with highest similarity (most aligned with refusal direction):")
     for idx in sorted_indices[-5:]:
         print(f"  {token_texts[idx]}: {similarities[idx]:.4f}")
-    
-    print("\nTokens with lowest similarity:")
+
+    print("\nTokens with lowest similarity (most opposite to refusal direction):")
     for idx in sorted_indices[:5]:
         print(f"  {token_texts[idx]}: {similarities[idx]:.4f}")
-    
+
     # Final memory cleanup
     gc.collect()
     torch.cuda.empty_cache()

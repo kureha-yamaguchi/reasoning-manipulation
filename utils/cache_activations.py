@@ -5,11 +5,21 @@ if 'cot': average activation is taken across all cot token activations up to and
 if 'baseline': average activation is taken across 3 tokens at the end-of-prompt unless the model is Qwen/Qwen3-8B, in which case the last 5 tokens at the end-of-prompt tokens are taken
 if 'prompt': average activation is taken across all prompt token activation up to and including <think>
 
+Supports gpt-oss Harmony format which uses channel markers (<|channel|>analysis<|message|>)
+instead of <think></think> tags.
+
 Usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.cache_activations \
     --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --layers 16,17,18,19 \
+    --layers 11,13,15,17,19,21,23 \
+    --type cot
+
+For gpt-oss:
+CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+uv run -m utils.cache_activations \
+    --model_name openai/gpt-oss-20b \
+    --layers 7,9,11,13,15,17,19  \
     --type cot
 """
 import argparse
@@ -30,26 +40,35 @@ def parse_args():
                         help='Comma-separated list of layer numbers to extract activations from')
     parser.add_argument('--type', type=str, default='baseline', 
                         help="CoT tokens (cot) or 3 or 5 tokens at the end of prompt (baseline) or whole prompt (prompt)")
-    parser.add_argument("--harmless", action="store_true", help="For harmless datasets"
-    )
+    parser.add_argument("--harmless", action="store_true", help="For harmless datasets")
     return parser.parse_args()
+
+def is_harmony_model(model_name):
+    """Check if model uses Harmony chat format (gpt-oss)."""
+    return "gpt-oss" in model_name
+
 
 def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None, harmless=None):
     """
     Extract and cache residual stream activations from specified layers of a language model.
-    
+
     This function processes a dataset of prompts and responses, extracts neural network
     activations from specified transformer layers, and saves them as numpy arrays.
-    
+
     Args:
         model_name (str): HuggingFace model identifier (e.g., 'Qwen/Qwen3-8B')
         dataset (str): Dataset name ('refusal' or 'non_refusal') - determines input file path
         layers (list of int): List of layer indices to extract activations from
         type (str): Extraction mode:
             - 'cot': Average activations across Chain-of-Thought response tokens
-            - 'baseline': Average activations across last 3 prompt tokens  
+            - 'baseline': Average activations across last 3 prompt tokens
             - 'prompt': Average activations across all prompt tokens
         tokenizer: The tokenizer instance to use for encoding text
+
+    Note:
+        For gpt-oss (Harmony format), CoT activations are extracted from the analysis
+        channel which requires prepending '<|channel|>analysis<|message|>' to match
+        the actual generation format.
     """
     if refusal:
         # Create output directory if it doesn't exist
@@ -80,23 +99,35 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
     else:
         k=3
 
+    # Check if this is a Harmony format model (gpt-oss)
+    harmony = is_harmony_model(model_name)
+    if harmony:
+        print("Detected Harmony format model (gpt-oss)")
+        # Harmony format uses channel markers instead of <think></think>
+        HARMONY_COT_PREFIX = "<|channel|>analysis<|message|>"
+
     # Process each example
     for idx, row in enumerate(tqdm(df.itertuples())):
         chat = [{"role": "user", "content": row.prompt}]
         # prompt_tokens = model.tokenizer.apply_chat_template(chat, add_generation_prompt=True)
         prompt_tokens = tokenizer.apply_chat_template(chat, add_generation_prompt=True)
-        
+
         if type == 'cot':
             # Encode the cot response separately
-            # response_tokens = model.tokenizer.encode(row.cot, add_special_tokens=False)
-            response_tokens = tokenizer.encode(row.cot, add_special_tokens=False)
+            if harmony:
+                # For gpt-oss, prepend channel marker to match actual generation format
+                # The stored CoT is just the content, but generation includes markers
+                cot_with_marker = HARMONY_COT_PREFIX + row.cot
+                response_tokens = tokenizer.encode(cot_with_marker, add_special_tokens=False)
+            else:
+                response_tokens = tokenizer.encode(row.cot, add_special_tokens=False)
             # We want all tokens of the CoT (response)
             tokens_to_process = prompt_tokens + response_tokens
             target_start = len(prompt_tokens)  # Start of CoT
             target_end = len(tokens_to_process)  # End of our selection
         elif type == 'baseline':
             tokens_to_process = prompt_tokens
-            target_start = max(0, len(prompt_tokens) - k)  # Last 3 tokens of prompt
+            target_start = max(0, len(prompt_tokens) - k)  # Last k tokens of prompt
             target_end = len(prompt_tokens)
         elif type == 'prompt':
             tokens_to_process = prompt_tokens
@@ -143,10 +174,12 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
     for layer, activations in activation_matrices.items():
         if activations:
             activation_matrix = np.stack(activations)
+
             if harmless:
                 output_path = os.path.join(output_dir, f"layer_{layer}_{type}_activations_harmless.npy")
             else:
                 output_path = os.path.join(output_dir, f"layer_{layer}_{type}_activations.npy")
+
             np.save(output_path, activation_matrix)
             
             print(f"Saved activation matrix for layer {layer} with shape {activation_matrix.shape} to {output_path}")
@@ -184,6 +217,7 @@ def main():
         cache_activations(model_name=args.model_name, dataset=refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
 
         cache_activations(model_name=args.model_name, dataset=nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer)
+
 
 if __name__ == "__main__":
     main()
