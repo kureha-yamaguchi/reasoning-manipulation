@@ -40,6 +40,7 @@ def parse_args():
                         help='Comma-separated list of layer numbers to extract activations from')
     parser.add_argument('--type', type=str, default='baseline', 
                         help="CoT tokens (cot) or 3 or 5 tokens at the end of prompt (baseline) or whole prompt (prompt)")
+    parser.add_argument("--harmless", action="store_true", help="For harmless datasets")
     return parser.parse_args()
 
 def is_harmony_model(model_name):
@@ -47,7 +48,7 @@ def is_harmony_model(model_name):
     return "gpt-oss" in model_name
 
 
-def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None):
+def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None, harmless=None):
     """
     Extract and cache residual stream activations from specified layers of a language model.
 
@@ -173,7 +174,12 @@ def cache_activations(model_name, dataset, layers, type, tokenizer, refusal=None
     for layer, activations in activation_matrices.items():
         if activations:
             activation_matrix = np.stack(activations)
-            output_path = os.path.join(output_dir, f"layer_{layer}_{type}_activations.npy")
+
+            if harmless:
+                output_path = os.path.join(output_dir, f"layer_{layer}_{type}_activations_harmless.npy")
+            else:
+                output_path = os.path.join(output_dir, f"layer_{layer}_{type}_activations.npy")
+
             np.save(output_path, activation_matrix)
             
             print(f"Saved activation matrix for layer {layer} with shape {activation_matrix.shape} to {output_path}")
@@ -199,13 +205,19 @@ def main():
     print(f"Loading tokenizer for {args.model_name}")
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
-    refusal_dataset = f"refusal_0.05_{args.type}.csv"
-    nonrefusal_dataset = f"nonrefusal_0.6_{args.type}.csv"
+    if args.harmless:
+        nonrefusal_dataset = f"nonrefusal_0.6_{args.type}_harmless.csv"
+        cache_activations(model_name=args.model_name, dataset=nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, harmless=True)
 
-    # Process both datasets
-    cache_activations(model_name=args.model_name, dataset=refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
+    else:
+        refusal_dataset = f"refusal_0.05_{args.type}.csv"
+        nonrefusal_dataset = f"nonrefusal_0.6_{args.type}.csv"
 
-    cache_activations(model_name=args.model_name, dataset=nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer)
+        # Process both datasets
+        cache_activations(model_name=args.model_name, dataset=refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
+
+        cache_activations(model_name=args.model_name, dataset=nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer)
+
 
 if __name__ == "__main__":
     main()
