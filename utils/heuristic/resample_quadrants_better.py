@@ -3,50 +3,35 @@ Docstring for utils.heuristic.resampling.
 
 1. Reads in rows from scored_train_harmful_prompts_cot5_out5.csv
 2. Identifies points that lie in the quadrant. These are generations that have low standard deviation conditioned on the specific prompt-CoT but high standard deviation when conditioned only on the prompt.
-3. Performs resampling with n rollouts for a given index_number and cot_number in the quadrant, beginning at cot sentence start_idx and ending at end_idx
+3. Performs resampling with n rollouts for a given index_number and cot_number in the quadrant, beginning at cot sentence S1 and ending at the last sentence S(len(sentences))
 4. Partitions into output (after close think tag)
 5. Saves generations
 
-So with start_idx=2, end_idx=4, n=5:
-
-Generate 5 rollouts from: prompt + S1 + S2
-Generate 5 rollouts from: prompt + S1 + S2 + S3
-Generate 5 rollouts from: prompt + S1 + S2 + S3 + S4
 
 Example usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.resample_quadrants \
+  --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --index_number 3\
   --cot_number 1 \
-  --start_idx 10 \
-  --end_idx 12
 '''
 
 import csv
 import os
 import argparse
-from re import X
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple
 
 from tqdm import tqdm
 from collections import defaultdict
 import statistics 
-import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.gridspec import GridSpec
-import argparse
 import gc
-import os
 import re
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
 import torch
-from nnsight import LanguageModel
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
+
 
 def parse_args():
     """Parse command line arguments."""
@@ -57,28 +42,25 @@ def parse_args():
                         help="Index number as per quadrant_output.txt")
     parser.add_argument("--cot_number", type=int, required=True,
                         help="Cot number as per quadrant_output.txt (x/5)")
-    parser.add_argument("--start_idx", type=int, required=True,
-                        help="Sentence number to start resampling from")
-    parser.add_argument("--end_idx", type=int, required=True,
-                        help="Sentence number to end resampling on")
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="Model to use for generation")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
     parser.add_argument("--scored_csv", type=str, default='scored_train_harmful_prompts_cot5_out5.csv',
                         help="Scored CSV file with prompts")
-    parser.add_argument("--repetitions", type=int, default=5,
+    parser.add_argument("--repetitions", type=int, default=15,
                         help="Number of output variations per prompt")
     parser.add_argument("--max_new_tokens", type=int, default=2048,
                         help="Maximum tokens for generation")
     parser.add_argument("--temperature", type=float, default=0.6,
                         help="Temperature for sampling")
-    parser.add_argument("--batch_size", type=int, default=32,
-                        help="Batch size for vLLM inference")
     parser.add_argument("--tensor_parallel_size", type=int, default=1,
                         help="Number of GPUs for tensor parallelism")
     parser.add_argument("--gpu_memory_utilization", type=float, default=0.9,
                         help="GPU memory utilization ratio")
+    parser.add_argument("--max_retries_multiplier", type=int, default=10,
+                        help="Maximum total generations = repetitions * this multiplier (safety limit)")
+    parser.add_argument("--first_sentence", action="store_true", help="Flag for first sentence")
     return parser.parse_args()
 
 
@@ -127,9 +109,6 @@ def compute_stats_per_prompt_cot(
         cot_groups[key].append(row)
 
     # Compute stats per (prompt, cot), organized by prompt
-    # The lambda function is called: lambda: {'means': [], 'std_devs': [], 'cots': []}
-    # It returns a fresh dictionary: {'means': [], 'std_devs': [], 'cots': []}
-    # That dictionary is stored at prompt_to_stats['some_prompt']
     prompt_to_stats = defaultdict(lambda: {'means': [], 'std_devs': [], 'cots': []})
     
     for (prompt, cot_rep_n), rows in tqdm(cot_groups.items(), desc="Processing CoT groups"):
@@ -157,7 +136,7 @@ def compute_stats_per_prompt(
     scored_rows: List[Dict[str, str]]
 ) -> Tuple[List[float], List[float], List[str]]:
     """
-    This function groups by prompt only — aggregating across all CoTs and outputs. The standard deviation here (std_dev_i) captures total variance (from both CoT variation and output sampling).
+    Groups by prompt only — aggregating across all CoTs and outputs.
     
     Args:
         scored_rows: List of dictionaries containing CSV data with scores
@@ -177,23 +156,22 @@ def compute_stats_per_prompt(
 
     # Process for each prompt
     for prompt, rows in tqdm(prompt_groups.items(), desc="Processing prompt groups"):
-        # Extract scores for this prompt
         chunk_scores = [float(row['strongreject_score']) for row in rows]
 
         mean = statistics.mean(chunk_scores)
         std_dev = statistics.stdev(chunk_scores) if len(chunk_scores) > 1 else 0.0
 
-        # Append to lists
         means.append(mean)
         std_devs.append(std_dev)
         prompts.append(prompt)
         
     return means, std_devs, prompts
 
+
 def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.35):
+    """Find data points in the target quadrant based on variance thresholds."""
     quadrant_points = []
     means_ij, std_devs_ij, cots = compute_stats_per_prompt_cot(scored_rows)
-    # Average per prompt first, then overall average
     per_prompt_avgs = [statistics.mean(sublist) for sublist in std_devs_ij]
     means_i, std_devs_i, prompts = compute_stats_per_prompt(scored_rows)
 
@@ -216,40 +194,122 @@ def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.35):
 
 def split_cot_into_sentences(cot: str) -> List[str]:
     """
-    Split a chain-of-thought text into individual sentences.
+    Split a chain-of-thought text into individual sentences,
+    preserving trailing whitespace for each sentence.
     
     Args:
         cot: The chain-of-thought text string
         
     Returns:
-        List of sentences
+        List of sentences (with trailing whitespace preserved)
     """
-    # Split on sentence-ending punctuation followed by whitespace
-    # This regex handles . ! ? followed by whitespace or end of string
-    # It also handles cases like "..." and keeps the delimiter with the sentence
-    sentence_pattern = r'(?<=[.!?])\s+'
-    sentences = re.split(sentence_pattern, cot.strip())
+    # Match a sentence ending in punctuation, plus any trailing whitespace
+    sentence_pattern = r'.*?[.!?](?:\s+|$)'
     
-    # Filter out empty sentences
-    sentences = [s.strip() for s in sentences if s.strip()]
+    sentences = re.findall(sentence_pattern, cot)
     
+    # Filter out truly empty matches (but keep whitespace intact)
+    sentences = [s for s in sentences if s]
     return sentences
 
 
 def get_sentences(quadrant_points, index_number=19, cot_number=1):
-    """Extract activations from specified layer using NNsight."""
-    # Clear memory before processing
+    """Extract sentences from specified quadrant point."""
     gc.collect()
     torch.cuda.empty_cache()
 
     index_number -= 1
     cot_number -= 1
     cot = quadrant_points[index_number]['cots'][cot_number]
-
-    # Split CoT into sentences
     sentences = split_cot_into_sentences(cot)
     
     return sentences
+
+
+def extract_valid_output(generated_text: str, model_name: str = None) -> str | None:
+    """
+    Extract the output after the thinking/analysis section.
+    
+    Args:
+        generated_text: The full generated text from the model
+        model_name: Model name to determine the delimiter pattern
+        
+    Returns:
+        The text after the thinking delimiter, or None if delimiter not found
+    """
+    if model_name == "openai/gpt-oss-20b":
+        # GPT-OSS uses channel-based format
+        delimiter = r'<\|end\|><\|start\|>assistant<\|channel\|>final<\|message\|>'
+        pattern = rf'(.*?{delimiter})(.*)'
+    else:
+        # DeepSeek and similar models use </think> tag
+        pattern = r'(.*?</think>)(.*)'
+    
+    match = re.match(pattern, generated_text, re.DOTALL)
+    
+    if match:
+        return match.group(2)
+    return None
+
+
+def generate_valid_outputs(
+    llm: LLM,
+    prompt: str,
+    sampling_params: SamplingParams,
+    num_required: int,
+    max_total_generations: int,
+    is_last_sentence: bool,
+    model_name: str = None
+) -> Tuple[List[Tuple[str, str]], int]:
+    """
+    Generate exactly num_required valid outputs.
+    
+    With high success rates, this typically completes in one batch.
+    If some outputs are invalid (missing </think> tag), subsequent 
+    iterations generate exactly the number still needed.
+    
+    Args:
+        llm: The vLLM model instance
+        prompt: The input prompt to generate from
+        sampling_params: vLLM sampling parameters
+        num_required: Number of valid outputs needed
+        max_total_generations: Safety limit on total generations
+        is_last_sentence: If True, all outputs are valid (no </think> check needed)
+    
+    Returns:
+        Tuple of (list of (generated_text, output_text) tuples, total_generated count)
+    """
+    valid_outputs = []
+    total_generated = 0
+    
+    while len(valid_outputs) < num_required and total_generated < max_total_generations:
+        # Generate exactly what we still need
+        num_to_generate = min(
+            num_required - len(valid_outputs),
+            max_total_generations - total_generated
+        )
+        
+        outputs = llm.generate([prompt] * num_to_generate, sampling_params)
+        total_generated += num_to_generate
+        
+        # Filter for valid outputs
+        for output in outputs:
+            if len(valid_outputs) >= num_required:
+                break
+            
+            generated_text = output.outputs[0].text
+            
+            if is_last_sentence:
+                output_text = generated_text
+            else:
+                output_text = extract_valid_output(generated_text, model_name=model_name)
+            
+            if output_text is not None:
+                valid_outputs.append((generated_text, output_text))
+        
+        print(f"  Generated {total_generated} total, {len(valid_outputs)}/{num_required} valid")
+    
+    return valid_outputs, total_generated
 
 
 def main():
@@ -262,22 +322,34 @@ def main():
     gc.collect()
     torch.cuda.empty_cache()
 
-    scored_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.scored_csv)
+    if args.model_name == "openai/gpt-oss-20b":
+        scored_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", "scored_train_harmful_prompts_cot5_out5[student].csv")
+    else:
+        scored_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.scored_csv)
 
-    scored_rows_deepseek_qwen = load_scored_csv(scored_csv_path)
-    quadrant_points = find_quadrant(scored_rows_deepseek_qwen)
+    scored_rows = load_scored_csv(scored_csv_path)
+    quadrant_points = find_quadrant(scored_rows)
 
-    # Get activations with sentence information
-    sentences= get_sentences(quadrant_points, index_number=args.index_number, cot_number=args.cot_number)
+    # Get sentences from the specified CoT
+    sentences = get_sentences(quadrant_points, index_number=args.index_number, cot_number=args.cot_number)
+
+    if args.model_name == "openai/gpt-oss-20b":
+        sentences.append("<|end|><|start|>assistant<|channel|>final<|message|>")
+
+    if args.first_sentence:
+        num_sentences = 1
+    else:
+        num_sentences = len(sentences)
+
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-    # Set up sampling parameters
+    
     sampling_params = SamplingParams(
         max_tokens=args.max_new_tokens,
         temperature=args.temperature,
+        skip_special_tokens=False
     )
 
-    # Initialize vLLM
     print("Initializing vLLM...")
     llm = LLM(
         model=args.model_name,
@@ -287,66 +359,78 @@ def main():
     )
     print("Model loaded successfully!")
 
-    # Get the original prompt for reference
-    original_prompt = quadrant_points[args.index_number-1]['prompt']
+    # Get the original prompt and format it
+    original_prompt = quadrant_points[args.index_number - 1]['prompt']
     chat = [{"role": "user", "content": original_prompt}]
-    formatted_prompt= tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
-    print(repr(formatted_prompt))
+    formatted_prompt = tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
 
-    # initial cot. if start_idx=3, then includes S1 + S2
-    initial_cot = ' '.join(sentences[:args.start_idx-1])
-    combined_thread = formatted_prompt + initial_cot
+    if args.model_name == "openai/gpt-oss-20b":
+        formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
+    print('formatted_prompt:', repr(formatted_prompt))
 
     # Store results for CSV
     results = []
     
-    # Get the original prompt for reference
-    original_prompt = quadrant_points[args.index_number-1]['prompt']
+    # Safety limit for maximum generations per sentence
+    max_total_generations = args.repetitions * args.max_retries_multiplier
 
-    for i in range(args.end_idx - args.start_idx + 1):
-        # if start_idx=3, this step now includes S3
-        add_to_cot = sentences[args.start_idx-1+i]
-        # augment the initial_cot
-        combined_thread = ' '.join([combined_thread, add_to_cot])
-        
-        # Current sentence index (1-indexed for clarity)
-        current_sentence_idx = args.start_idx + i
+    # Process each sentence position
+    for i in range(num_sentences):
+        current_sentence_idx = i + 1  # 1-indexed for clarity
+
+        # Build the prompt: formatted_prompt + sentences up to current position
+        cot_prefix = "".join(sentences[:current_sentence_idx])
+
+        combined_thread = formatted_prompt + cot_prefix
         
         print(f"\n{'='*60}")
-        print(f"Resampling from sentence S{current_sentence_idx}")
-        print(f"Generating {args.repetitions} rollouts...")
+        print(f"Resampling from sentence S{current_sentence_idx}/{num_sentences}")
+        print(f"Target: {args.repetitions} valid rollouts")
         
-        # Generate all repetitions in one batched call
-        outputs = llm.generate([combined_thread] * args.repetitions, sampling_params)
+        # Check if this is the last sentence (no </think> validation needed)
+        is_last_sentence = (current_sentence_idx == len(sentences))
         
-        for j, output in enumerate(outputs):
-            generated_text = output.outputs[0].text
-            
-            # Extract output after </think> tag
-            think_pattern = r'(.*?</think>)(.*)'
-            match = re.match(think_pattern, generated_text, re.DOTALL)
-            
-            # Only store result if </think> tag was found
-            if match:
-                output_text = match.group(2)
-                results.append({
-                    'prompt': original_prompt,
-                    'sentence_idx': current_sentence_idx,
-                    'resample_n': j + 1,
-                    'output': output_text
-                })
+        # Generate valid outputs
+        valid_outputs, total_generated = generate_valid_outputs(
+            llm=llm,
+            prompt=combined_thread,
+            sampling_params=sampling_params,
+            num_required=args.repetitions,
+            max_total_generations=max_total_generations,
+            is_last_sentence=is_last_sentence,
+            model_name=args.model_name
+        )
         
-        print(f"  {args.repetitions} rollouts completed")
+        # Report results
+        if len(valid_outputs) < args.repetitions:
+            print(f"  WARNING: Only obtained {len(valid_outputs)}/{args.repetitions} valid outputs "
+                  f"after {total_generated} generations (hit safety limit)")
+        else:
+            print(f"  Successfully obtained {args.repetitions} valid rollouts "
+                  f"(generated {total_generated} total)")
+        
+        # Add valid outputs to results
+        for j, (gen_text, output_text) in enumerate(valid_outputs):
+            results.append({
+                'prompt': original_prompt,
+                'sentence_idx': current_sentence_idx,
+                'resample_n': j + 1,
+                'combined_thread': combined_thread,
+                'generated_text': gen_text,
+                'output': output_text
+            })
+
+    if args.first_sentence:
+        output_dir = os.path.join(args.results_dir, args.model_name, "dataset", "first_sentence")
+    else:
+        output_dir = os.path.join(args.results_dir, args.model_name, "dataset")
+
 
     # Save results to CSV
-    output_csv_path = os.path.join(
-        args.results_dir, 
-        args.model_name, 
-        "dataset",
-        f"resampling_results_idx{args.index_number}_cot{args.cot_number}_s{args.start_idx}_e{args.end_idx}.csv"
+    output_csv_path = os.path.join(output_dir,
+        f"resampling_results_idx{args.index_number}_cot{args.cot_number}.csv"
     )
     
-    # Ensure directory exists
     os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
     
     df = pd.DataFrame(results)
