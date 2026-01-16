@@ -44,7 +44,6 @@ def parse_args():
                         help="Index from the dataset")
     parser.add_argument("--use_ortho", action="store_true",
                         help="Use the orthogonalized model instead of baseline")
-
     return parser.parse_args()
 
 
