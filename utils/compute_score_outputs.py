@@ -242,6 +242,8 @@ def main() -> None:
             if not os.path.exists(csv_path):
                 os.makedirs(dir_path, exist_ok=True)
                 print(f"Warning: Input CSV not found at {csv_path}")
+                print(f"  Skipping layer {layer} (ortho model may have produced no valid outputs)")
+                continue
 
             print(f"Scoring dataset: {input_csv}")
         
@@ -259,8 +261,8 @@ def main() -> None:
             # Check if scored CSV already exists
             if os.path.exists(output_csv_path):
                 print(f"Scored CSV already exists at {output_csv_path}")
-                print("Delete the file if you want to regenerate scores.")
-                return
+                print("  Skipping (delete the file if you want to regenerate scores).")
+                continue
 
             # Load data efficiently
             all_rows, fieldnames = load_data_efficiently(csv_path)

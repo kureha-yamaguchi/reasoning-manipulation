@@ -457,8 +457,13 @@ def main():
         for layer in args.layer.split(','):
             layer = layer.strip()  # Remove any whitespace
             # Construct local model path
-            local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
-            print(f"Loading model from local path: {local_model_path}")
+            if args.harmless:
+                local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}_harmless')
+            else:
+                local_model_path = os.path.join('results', args.model_name, f'ortho_model_{args.type}_layer_{layer}')
+            print(f"Loading model from local path: {local_model_path}")            
+            
+            
 
             # Initialize model and tokenizer
             print("Loading tokenizer...")
