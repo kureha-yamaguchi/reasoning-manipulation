@@ -23,24 +23,24 @@ echo "Log file: $LOG_FILE"
 echo "Model: $MODEL_NAME  | Type1: $TYPE1 | Type2: $TYPE2 | Layers: $TRY_LAYERS"
 echo ""
 
-echo "=== Step 1: Generate clean model datasets ==="
-uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "train_harmless_prompts.csv" 
-uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmless_prompts.csv" 
+# echo "=== Step 1: Generate clean model datasets ==="
+# uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "train_harmless_prompts.csv" 
+# uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmless_prompts.csv" 
 
-echo "=== Step 2: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "train_harmless_prompts_cot5_out5.csv" --input_dir dataset
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "test_harmless_prompts_cot5_out5.csv" --input_dir dataset
+# echo "=== Step 2: Compute score outputs ==="
+# uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "train_harmless_prompts_cot5_out5.csv" --input_dir dataset
+# uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_csv "test_harmless_prompts_cot5_out5.csv" --input_dir dataset
 
-echo "=== Step 3: Create refusal and non-refusal datasets (both cot and baseline) ==="
-uv run -m utils.filter_all_datasets --model_name "$MODEL_NAME" --scored_csv "scored_train_harmless_prompts_cot5_out5.csv" --harmless
+# echo "=== Step 3: Create refusal and non-refusal datasets (both cot and baseline) ==="
+# uv run -m utils.filter_all_datasets --model_name "$MODEL_NAME" --scored_csv "scored_train_harmless_prompts_cot5_out5.csv" --harmless
 
-echo "=== Step 4: Cache activations ==="
-uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE1" --harmless
-uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE2" --harmless
+# echo "=== Step 4: Cache activations ==="
+# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE1" --harmless
+# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "$TRY_LAYERS" --type "$TYPE2" --harmless
 
-echo "=== Step 5: Create orthogonal model ==="
-uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE1" --harmless
-uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE2" --harmless
+# echo "=== Step 5: Create orthogonal model ==="
+# uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE1" --harmless
+# uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE2" --harmless
 
 echo "=== Step 6: Batch generation (subset) ==="
 uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE1" --layer "$TRY_LAYERS" --harmless
@@ -61,14 +61,40 @@ BEST_LAYER2=$(uv run -m utils.get_best_layer --model_name "$MODEL_NAME" --type "
 echo "Best layer (baseline): $BEST_LAYER2"
 
 echo "=== Step 10: Final batch generation ==="
-uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE1" --layer "$BEST_LAYER1" --harmless
+if [ "$BEST_LAYER1" != "NONE" ]; then
+    uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE1" --layer "$BEST_LAYER1" --harmless
+else
+    echo "Skipping $TYPE1 final generation - no valid layer found"
+fi
 
-uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE2" --layer "$BEST_LAYER2" --harmless
+if [ "$BEST_LAYER2" != "NONE" ]; then
+    uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "test_harmful_prompts.csv" --type "$TYPE2" --layer "$BEST_LAYER2" --harmless
+else
+    echo "Skipping $TYPE2 final generation - no valid layer found"
+fi
 
 echo "=== Step 11: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE1}_layer_${BEST_LAYER1}_harmless.csv"
+if [ "$BEST_LAYER1" != "NONE" ]; then
+    uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE1}_layer_${BEST_LAYER1}_harmless.csv"
+else
+    echo "Skipping $TYPE1 scoring - no valid layer found"
+fi
 
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE2}_layer_${BEST_LAYER2}_harmless.csv"
+if [ "$BEST_LAYER2" != "NONE" ]; then
+    uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --input_dir attack_results --input_csv "ortho_output_test_harmful_prompts_${TYPE2}_layer_${BEST_LAYER2}_harmless.csv"
+else
+    echo "Skipping $TYPE2 scoring - no valid layer found"
+fi
 
 echo "=== Step 12: Plot boxplot comparison ==="
-uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "all" --layer "$BEST_LAYER1,$BEST_LAYER2" --harmless
+if [ "$BEST_LAYER1" != "NONE" ] && [ "$BEST_LAYER2" != "NONE" ]; then
+    uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "all" --layer "$BEST_LAYER1,$BEST_LAYER2" --harmless
+elif [ "$BEST_LAYER1" != "NONE" ]; then
+    echo "Only $TYPE1 has valid results - plotting single comparison"
+    uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "$TYPE1" --layer "$BEST_LAYER1" --harmless
+elif [ "$BEST_LAYER2" != "NONE" ]; then
+    echo "Only $TYPE2 has valid results - plotting single comparison"
+    uv run -m utils.plot_boxplot_comparison --model_name "$MODEL_NAME" --type "$TYPE2" --layer "$BEST_LAYER2" --harmless
+else
+    echo "No valid layers found for either type - skipping plot"
+fi

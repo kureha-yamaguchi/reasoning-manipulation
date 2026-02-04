@@ -30,10 +30,10 @@ def main():
 
     best_layer = data.get("best_layer")
     if best_layer is None:
-        print(f"ERROR: No 'best_layer' in {stats_file}", file=sys.stderr)
-        sys.exit(1)
-
-    print(best_layer)  # Only output the value
+        print("NONE", file=sys.stderr)
+        print("NONE")  # Output special value for shell script to detect
+    else:
+        print(best_layer)  # Only output the value
 
 
 if __name__ == "__main__":

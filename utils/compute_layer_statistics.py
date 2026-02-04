@@ -174,7 +174,8 @@ def main() -> None:
             results[layer] = {
                 'mean': float('nan'),
                 'std_dev': float('nan'),
-                'count': 0
+                'count': 0,
+                'weighted_score': float('-inf')
             }
             continue
         
@@ -257,11 +258,17 @@ def main() -> None:
     
     # Check if all layers were processed successfully
     failed_layers = [layer for layer in layers if results[layer]['count'] == 0]
+    successful_layers = [layer for layer in layers if results[layer]['count'] > 0]
+
     if failed_layers:
         print(f"\nWarning: Failed to process layers: {', '.join(failed_layers)}")
-        sys.exit(1)
+        print(f"  (These layers may have produced no valid CoT outputs due to orthogonalization corruption)")
+
+    if successful_layers:
+        print(f"\nSuccessfully processed {len(successful_layers)}/{len(layers)} layers: {', '.join(successful_layers)}")
     else:
-        print("\nAll layers processed successfully!")
+        print("\nError: All layers failed - no valid data to continue pipeline")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
