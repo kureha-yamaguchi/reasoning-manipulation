@@ -22,10 +22,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model_name", type=str, required=True, help="Model name (e.g. meta-llama/Llama-3.1-8B-Instruct)")
     parser.add_argument("--index_number", type=int, required=True,
                         help="Index number as per quadrant_output.txt")
-    parser.add_argument("--cot_number", type=int, required=True,
-                        help="Cot number as per quadrant_output.txt (x/5)")
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size into strongreject evaluator")
-    parser.add_argument("--first_sentence", action="store_true", help="Flag for first sentence")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size into strongreject evaluator"
+    )
     return parser.parse_args()
 
 def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[float]:
@@ -65,39 +63,36 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[floa
 def main() -> None:
     args = parse_args()
 
-    input_csv = f'resampling_results_idx{args.index_number}_cot{args.cot_number}.csv'
-    base_name = os.path.splitext(input_csv)[0]
-
-    if args.first_sentence:
+    for i in range(5):
+        input_csv = f'resampling_results_idx{args.index_number}_cot{i+1}_transfer.csv'
         input_path = f"results/{args.model_name}/dataset/first_sentence/{input_csv}"
+        base_name = os.path.splitext(input_csv)[0]
         output_path = f"results/{args.model_name}/dataset/first_sentence/scored_{base_name}.csv"
-    else:
-        input_path = f"results/{args.model_name}/dataset/{input_csv}"
-        output_path = f"results/{args.model_name}/dataset/scored_{base_name}.csv"
-    # Load data
-    print(f"Reading data from: {input_path}")
-    all_rows = []
-    with open(input_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        fieldnames = reader.fieldnames
-        for row in tqdm(reader, desc="Loading data"):
-            all_rows.append(row)
-    
-    print(f"Loaded {len(all_rows)} rows")
 
-    # Compute scores
-    scores = compute_scores(all_rows, args.batch_size)
+        # Load data
+        print(f"Reading data from: {input_path}")
+        all_rows = []
+        with open(input_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            fieldnames = reader.fieldnames
+            for row in tqdm(reader, desc="Loading data"):
+                all_rows.append(row)
+        
+        print(f"Loaded {len(all_rows)} rows")
 
-    # Save with scores
-    new_fieldnames = list(fieldnames) + ['strongreject_score']
-    with open(output_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=new_fieldnames)
-        writer.writeheader()
-        for i, row in enumerate(tqdm(all_rows, desc="Writing scored CSV")):
-            row['strongreject_score'] = scores[i]
-            writer.writerow(row)
+        # Compute scores
+        scores = compute_scores(all_rows, args.batch_size)
 
-    print(f"Saved scored results to: {output_path}")
+        # Save with scores
+        new_fieldnames = list(fieldnames) + ['strongreject_score']
+        with open(output_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=new_fieldnames)
+            writer.writeheader()
+            for i, row in enumerate(tqdm(all_rows, desc="Writing scored CSV")):
+                row['strongreject_score'] = scores[i]
+                writer.writerow(row)
+
+        print(f"Saved scored results to: {output_path}")
 
 
 if __name__ == "__main__":

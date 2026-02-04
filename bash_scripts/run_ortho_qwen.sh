@@ -1,20 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL_NAME="deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+# MODEL_NAME="deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
 # MODEL_NAME2="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
-# MODEL_NAME3="Qwen/Qwen3-8B"
+MODEL_NAME="Qwen/Qwen3-8B"
 TYPE1="cot"
 TYPE2="baseline"
-TRY_LAYERS="13,15,17,19,21,23"
+TRY_LAYERS="11,13,15,17,19,21,23"
 
-uv pip install git+https://github.com/b-d-e/strong_reject
-
-# Verify the installation is correct
-echo "=== Verifying strong_reject installation ==="
-uv pip show strong-reject | grep -E "(Name|Version|Location)"
-
-# Create log file with timestamp
+# Create log file with timestamdp
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -28,6 +22,10 @@ echo "Log file: $LOG_FILE"
 echo "Model: $MODEL_NAME  | Type1: $TYPE1 | Type2: $TYPE2 | Layers: $TRY_LAYERS"
 echo ""
 
+# echo "=== Step 4: Cache activations ==="
+# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "11" --type "$TYPE1"
+# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "11" --type "$TYPE2"
+
 # echo "=== Step 5: Create orthogonal model ==="
 # uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE1"
 
@@ -38,15 +36,15 @@ echo ""
 
 # uv run -m utils.batch_generation_cot_output --model_name "$MODEL_NAME" --input_csv "subset_5_test_harmful_prompts.csv" --type "$TYPE2" --layer "$TRY_LAYERS"
 
-echo "=== Step 7: Compute score outputs ==="
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$TRY_LAYERS" --input_dir attack_results --subset
+# echo "=== Step 7: Compute score outputs ==="
+# uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$TRY_LAYERS" --input_dir attack_results --subset
 
-uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$TRY_LAYERS" --input_dir attack_results --subset
+# uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$TRY_LAYERS" --input_dir attack_results --subset
 
-echo "=== Step 8: Compute layer statistics ==="
-uv run -m utils.compute_layer_statistics --model_name "$MODEL_NAME" --type "$TYPE1" --layer "$TRY_LAYERS"
+# echo "=== Step 8: Compute layer statistics ==="
+# uv run -m utils.compute_layer_statistics --model_name "$MODEL_NAME" --type "$TYPE1" --layer "$TRY_LAYERS"
 
-uv run -m utils.compute_layer_statistics --model_name "$MODEL_NAME" --type "$TYPE2" --layer "$TRY_LAYERS"
+# uv run -m utils.compute_layer_statistics --model_name "$MODEL_NAME" --type "$TYPE2" --layer "$TRY_LAYERS"
 
 echo "=== Step 9: Get best layer ==="
 BEST_LAYER1=$(uv run -m utils.get_best_layer --model_name "$MODEL_NAME" --type "$TYPE1" --try_layers "$TRY_LAYERS")
