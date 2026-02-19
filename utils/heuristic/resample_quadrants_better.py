@@ -1,5 +1,5 @@
 '''
-Docstring for utils.heuristic.resampling.
+Docstring for utils.heuristic.resample_quadrants_better.
 
 1. Reads in rows from scored_train_harmful_prompts_cot5_out5.csv
 2. Identifies points that lie in the quadrant. These are generations that have low standard deviation conditioned on the specific prompt-CoT but high standard deviation when conditioned only on the prompt.
@@ -10,7 +10,7 @@ Docstring for utils.heuristic.resampling.
 
 Example usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-uv run -m utils.heuristic.resample_quadrants \
+uv run -m utils.heuristic.resample_quadrants_better \
   --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --index_number 3\
   --cot_number 1 \

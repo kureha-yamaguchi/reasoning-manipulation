@@ -464,9 +464,7 @@ def plot_combined_figure(input_csv, sentence_similarities, sentences, quadrant_p
     
     ax.grid(True, alpha=0.3, zorder=0)
     ax.legend(loc='upper right', fontsize=9)
-    ax.annotate('(comply)', xy=(1.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top')
-    ax.annotate('(refuse)', xy=(1.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom')
-
+    
     # Add colorbar for similarity values
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
@@ -561,9 +559,6 @@ def plot_graph(model_name, input_csv):
     plt.title('Mean StrongReject Score After Resampling by Sentence Index', fontsize=14)
     plt.grid(True, alpha=0.3)
     plt.legend()
-    ax = plt.gca()
-    ax.annotate('(comply)', xy=(1.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top')
-    ax.annotate('(refuse)', xy=(1.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom')
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
     print(f"Plot saved to: {output_path}")
