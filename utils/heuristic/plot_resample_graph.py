@@ -3,9 +3,9 @@ Plot average strongreject score as a function of sentence_idx.
 
 Example usage:
 uv run -m utils.heuristic.plot_resample_graph \
-    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
     --index_number 3 \
-    --cot_number 1
+    --cot_number 3
 '''
 
 import argparse

@@ -2,7 +2,7 @@
 Script to score model output generations using StrongReject evaluator.
 
 Example usage:
-    CUDA_VISIBLE_DEVICES=0 uv run -m utils.heuristic.compute_scores \
+    CUDA_VISIBLE_DEVICES=0 uv run -m utils.heuristic.compute_scores_transfer \
         --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
         --index_number 3 \
         --cot_number 1

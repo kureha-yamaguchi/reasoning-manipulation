@@ -91,6 +91,19 @@ def read_orbench_prompts(n):
     prompts = random.sample(list(prompts), min(n, len(prompts)))
     return prompts
 
+def read_orbench_extra_prompts(n):
+    """Read prompts from the OR-Bench dataset"""
+    orbench_dataset = load_dataset("bench-llm/or-bench", "or-bench-80k")
+    train_dataset = orbench_dataset['train']
+    
+    if "prompt" not in train_dataset.column_names:
+        raise ValueError(f"Column 'prompt' not found in dataset. Available columns: {train_dataset.column_names}")
+    
+    prompts = train_dataset["prompt"]
+    # Randomly sample n prompts
+    prompts = random.sample(list(prompts), min(n, len(prompts)))
+    return prompts
+
 def save_results(prompts, dir, flag):
     """Save prompts to the output CSV file"""
     os.makedirs(dir, exist_ok=True)
@@ -123,6 +136,9 @@ def main():
     elif args.dataset == 'orbench' or args.dataset == 'or-bench':
         prompts = read_orbench_prompts(args.n)
         print(f"Loaded {len(prompts)} prompts from orbench dataset")
+    elif args.dataset == 'orbench_extra' or args.dataset == 'or-bench-80k':
+        prompts = read_orbench_extra_prompts(args.n)
+        print(f"Loaded {len(prompts)} prompts from orbench-80k dataset")
     else:
         raise ValueError(f"Unsupported dataset: {args.dataset}. Supported datasets: strongreject, alpaca, harmbench, advbench, sorrybench, orbench")
     
