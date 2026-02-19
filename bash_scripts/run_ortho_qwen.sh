@@ -8,7 +8,13 @@ TYPE1="cot"
 TYPE2="baseline"
 TRY_LAYERS="11,13,15,17,19,21,23"
 
-# Create log file with timestamdp
+# uv pip install git+https://github.com/b-d-e/strong_reject
+
+# Verify the installation is correct
+echo "=== Verifying strong_reject installation ==="
+uv pip show strong-reject | grep -E "(Name|Version|Location)"
+
+# Create log file with timestamp
 LOG_DIR="logs"
 mkdir -p "$LOG_DIR"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -22,10 +28,6 @@ echo "Log file: $LOG_FILE"
 echo "Model: $MODEL_NAME  | Type1: $TYPE1 | Type2: $TYPE2 | Layers: $TRY_LAYERS"
 echo ""
 
-# echo "=== Step 4: Cache activations ==="
-# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "11" --type "$TYPE1"
-# uv run -m utils.cache_activations --model_name "$MODEL_NAME" --layers "11" --type "$TYPE2"
-
 # echo "=== Step 5: Create orthogonal model ==="
 # uv run -m interventions.create_ortho_model --model_name "$MODEL_NAME" --layer "$TRY_LAYERS" --type "$TYPE1"
 
@@ -38,6 +40,8 @@ echo ""
 
 # echo "=== Step 7: Compute score outputs ==="
 # uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE1" --layers "$TRY_LAYERS" --input_dir attack_results --subset
+
+# uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$TRY_LAYERS" --input_dir attack_results --subset
 
 # uv run -m utils.compute_score_outputs --model_name "$MODEL_NAME" --type "$TYPE2" --layers "$TRY_LAYERS" --input_dir attack_results --subset
 

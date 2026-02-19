@@ -63,6 +63,8 @@ ax.legend([bp_base["boxes"][0], bp["boxes"][0], ax.collections[0]],
            'Resampling Distribution from Deepseek-Qwen', 
            'Output Target from DeepSeek-Llama'])
 ax.grid(True, alpha=0.3)
+ax.annotate('(comply)', xy=(1.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top')
+ax.annotate('(refuse)', xy=(1.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom')
 
 plt.tight_layout()
 plt.savefig(os.path.join('results', model_name, 'figures', f'cot_scores_plot_index_{index_number}_transfer.png'), dpi=150)

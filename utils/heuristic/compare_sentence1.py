@@ -35,6 +35,8 @@ ax.set_title('Output Target vs Resampling after the First CoT Sentence (25 rollo
 ax.set_xticks(cot_numbers)
 ax.legend([bp["boxes"][0], ax.collections[0]], ['Resampling Distribution', 'Output Target'])
 ax.grid(True, alpha=0.3)
+ax.annotate('(comply)', xy=(1.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top')
+ax.annotate('(refuse)', xy=(1.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom')
 
 plt.tight_layout()
 plt.savefig(os.path.join('results', model_name, 'figures', f'cot_scores_plot_index_{index_number}.png'), dpi=150)

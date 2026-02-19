@@ -60,7 +60,13 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help="For harmless nonrefusal, harmful refusal dataset configuration"
     )
-    
+    parser.add_argument(
+        "--max_rows",
+        type=int,
+        default=125,
+        help="Maximum possible generations (for weighting). Default: 125 (5 prompts * 5 cot_reps * 5 output_reps)"
+    )
+
     return parser.parse_args()
 
 
@@ -182,12 +188,13 @@ def main() -> None:
         # Compute statistics
         mean, std_dev = compute_statistics(scores)
         
-        # Compute weighted score: mean (no longer penalizing std_dev)
+        # Compute weighted score: mean scaled by success rate
+        # This treats failed generations as score 0, so layers with
+        # low success rates are penalised appropriately.
         if math.isnan(mean) or math.isnan(std_dev):
             weighted_score = float('-inf')
         else:
-            # weighted_score = mean - 2 * std_dev
-            weighted_score = mean
+            weighted_score = mean * (len(scores) / args.max_rows)
         
         results[layer] = {
             'mean': mean,
@@ -199,8 +206,7 @@ def main() -> None:
         print(f"  Found {len(scores)} scores")
         print(f"  Mean: {mean:.6f}")
         print(f"  Std Dev: {std_dev:.6f}")
-        # print(f"  Weighted Score (mean - 2×std_dev): {weighted_score:.6f}")
-        print(f"  Weighted Score (mean): {weighted_score:.6f}")
+        print(f"  Weighted Score (mean × count/{args.max_rows}): {weighted_score:.6f}")
         print()
     
     # Find best layer (maximum weighted score)

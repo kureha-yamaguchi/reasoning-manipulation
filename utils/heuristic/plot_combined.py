@@ -461,7 +461,9 @@ def plot_combined_figure(input_csv, sentence_similarities, sentences, quadrant_p
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', fontsize=9)
-    
+    ax1.annotate('(comply)', xy=(-0.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top', ha='right')
+    ax1.annotate('(refuse)', xy=(-0.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom', ha='right')
+
     # Adjust layout and save
     plt.tight_layout()
     
@@ -549,6 +551,9 @@ def plot_graph(model_name, input_csv):
     plt.title('Mean StrongReject Score After Resampling by Sentence Index', fontsize=14)
     plt.grid(True, alpha=0.3)
     plt.legend()
+    ax = plt.gca()
+    ax.annotate('(comply)', xy=(1.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top')
+    ax.annotate('(refuse)', xy=(1.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom')
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
     print(f"Plot saved to: {output_path}")

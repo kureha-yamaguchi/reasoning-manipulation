@@ -80,6 +80,8 @@ def main():
         plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer (baseline: {baseline_layer}, cot: {cot_layer})\n Model:{args.model_name} \n Rollouts (5 cot 5 output) per prompt in holdout set (487 harmful prompts)', fontsize=14)
         plt.xlabel('StrongReject Score', fontsize=12)
         plt.ylabel('')
+        ax.annotate('(comply)', xy=(1, 1.01), xycoords='axes fraction', fontsize=10, fontstyle='italic', ha='right')
+        ax.annotate('(refuse)', xy=(0, 1.01), xycoords='axes fraction', fontsize=10, fontstyle='italic', ha='left')
         plt.tight_layout()
 
         # Save plot
@@ -120,8 +122,10 @@ def main():
         plt.title(f'StrongReject Score Comparison: {args.type.upper()}, Layer {args.layer}\n Model:{args.model_name} \n Rollouts (5 cot 5 output) per prompt in holdout set (487 harmful prompts)', fontsize=14)
         plt.xlabel('StrongReject Score', fontsize=12)
         plt.ylabel('')
+        ax.annotate('(comply)', xy=(1, 1.01), xycoords='axes fraction', fontsize=10, fontstyle='italic', ha='right')
+        ax.annotate('(refuse)', xy=(0, 1.01), xycoords='axes fraction', fontsize=10, fontstyle='italic', ha='left')
         plt.tight_layout()
-    
+
         # Save plot
         output_dir = f"results/{args.model_name}/figures"
         os.makedirs(output_dir, exist_ok=True)
