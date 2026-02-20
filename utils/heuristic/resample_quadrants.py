@@ -1,5 +1,5 @@
 '''
-Docstring for utils.heuristic.resample_quadrants_better.
+Docstring for utils.heuristic.resample_quadrants.
 
 1. Reads in rows from scored_train_harmful_prompts_cot5_out5.csv
 2. Identifies points that lie in the quadrant. These are generations that have low standard deviation conditioned on the specific prompt-CoT but high standard deviation when conditioned only on the prompt.
