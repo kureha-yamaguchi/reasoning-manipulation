@@ -1,11 +1,16 @@
 '''
-Docstring for utils.heuristic.resample_transfer.
+utils.heuristic.resample_transfer
 
-1. Reads in rows from scored_train_harmful_prompts_cot5_out5.csv
-2. Identifies points that lie in the quadrant. These are generations that have low standard deviation conditioned on the specific prompt-CoT but high standard deviation when conditioned only on the prompt.
-3. Performs resampling with n rollouts for a given prompt_index, beginning at cot sentence S1 for both base model and transfer model
-4. Partitions into output (after close think tag)
-5. Saves generations
+Tests whether the first sentence of a harmful CoT from a base model can steer a
+transfer model toward similar outputs (a prefill/transfer attack).
+
+1. Load a scored CSV of harmful prompts (strongreject_score per generation).
+2. Find prompts in the target quadrant: low within-CoT score variance but high
+   across-CoT variance — i.e. the CoT opening deterministically steers the output.
+3. For the specified prompt, use each CoT's first sentence as a steering prefix.
+4. Resample N rollouts from both the base and transfer model using those prefixes,
+   extracting the text after </think> as the output.
+5. Save results to CSV, organised by model, prompt index, and CoT sentence index.
 
 
 Example usage:
@@ -13,7 +18,7 @@ CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.resample_transfer \
   --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-  --prompt_index 174
+  --prompt_index 174 \
   --repetitions 15
 '''
 
