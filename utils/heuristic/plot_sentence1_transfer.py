@@ -19,13 +19,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate multiple output rollouts per prompt for non-reasoning models"
     )
-    parser.add_argument("--index_number", type=int, required=True,
-                        help="Index number as per quadrant_output.txt")
     parser.add_argument("--prompt_index", type=int, required=True,
                         help="Original prompt index")
-    parser.add_argument("--from_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    parser.add_argument("--base_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="First CoT sentence taken from this model")
-    parser.add_argument("--to_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+    parser.add_argument("--transfer_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
                         help="Prefill attack applied on this model")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
@@ -95,20 +93,21 @@ def compute_stats_per_prompt_cot(
 def main():
     args = parse_args()
 
-    from_model_short = args.from_model.split("/")[-1]
-    to_model_short = args.to_model.split("/")[-1]
-    transfer_csv = f'scored_transfer_results_idx{args.index_number}_cot*_transfer_from_{from_model_short}.csv'
+    base_model_short = args.base_model.split("/")[-1]
+    transfer_model_short = args.transfer_model.split("/")[-1]
+    base_csv = f'scored_resampling_results_idx{args.prompt_index}_cot*.csv'
+    transfer_csv = f'scored_transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
 
     pattern_base = os.path.join(
         args.results_dir,
-        args.from_model,
+        args.base_model,
         'dataset',
         'resample',
-        f'scored_resampling_results_idx{args.index_number}_cot*.csv'
+        base_csv
     )
     pattern_transfer = os.path.join(
         args.results_dir,
-        args.to_model,
+        args.transfer_model,
         'dataset',
         'resample',
         transfer_csv
@@ -154,7 +153,7 @@ def main():
 
     # Target output score after full CoT conditioning (not just the first sentence)
     scored_csv = "scored_train_harmful_prompts_cot5_out5.csv"
-    scored_csv_path = os.path.join(args.results_dir, args.from_model, "dataset", scored_csv)
+    scored_csv_path = os.path.join(args.results_dir, args.base_model, "dataset", scored_csv)
     scored_rows = load_scored_csv(scored_csv_path)
     means = compute_stats_per_prompt_cot(scored_rows)
     output_target = means[args.prompt_index]
@@ -178,19 +177,19 @@ def main():
 
     ax.set_xlabel('CoT Number', fontsize=12)
     ax.set_ylabel('Score', fontsize=12)
-    ax.set_title(f"Transfer Efficacy of the First CoT Sentences from {from_model_short} to {to_model_short} \n Prompt={prompt[:60]} \n (Across {args.repetitions} rollouts)", fontsize=12)
+    ax.set_title(f"Transfer Efficacy of the First CoT Sentences from {base_model_short} to {transfer_model_short} \n Prompt={prompt[:60]} \n (Across {args.repetitions} rollouts)", fontsize=12)
     ax.set_xticks(cot_numbers)
     ax.set_xticklabels(cot_numbers)
     ax.legend([bp_base["boxes"][0], bp["boxes"][0], ax.collections[0]], 
-            [f'Resampling Distribution from {from_model_short}', 
-            f'Resampling Distribution from {to_model_short}', 
-            f'Output Target from {from_model_short}'])
+            [f'Resampling Distribution from {base_model_short}', 
+            f'Resampling Distribution from {transfer_model_short}', 
+            f'Output Target from {base_model_short}'])
     ax.grid(True, alpha=0.3)
     ax.annotate('(comply)', xy=(1.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top')
     ax.annotate('(refuse)', xy=(1.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom')
 
     plt.tight_layout()
-    save_path = os.path.join('results', args.to_model, 'figures', f'{os.path.splitext(transfer_csv)[0]}.png')
+    save_path = os.path.join('results', args.transfer_model, 'figures', f'{os.path.splitext(transfer_csv)[0]}.png')
     plt.savefig(save_path, dpi=150)
     plt.show()
 

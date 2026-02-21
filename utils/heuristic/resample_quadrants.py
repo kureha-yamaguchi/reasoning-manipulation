@@ -322,10 +322,7 @@ def main():
     gc.collect()
     torch.cuda.empty_cache()
 
-    if args.model_name == "openai/gpt-oss-20b":
-        scored_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", "scored_train_harmful_prompts_cot5_out5[student].csv")
-    else:
-        scored_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.scored_csv)
+    scored_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.scored_csv)
 
     scored_rows = load_scored_csv(scored_csv_path)
     quadrant_points = find_quadrant(scored_rows)

@@ -5,8 +5,8 @@ Example usage:
 
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.compute_scores_transfer \
-  --from_model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-  --to_model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
+  --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+  --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
   --index_number 3
 
 """
@@ -23,12 +23,14 @@ from strong_reject.evaluate import evaluate_dataset
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Score model generations using StrongReject evaluator")
-    parser.add_argument("--from_model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    parser.add_argument("--base_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="First CoT sentence taken from this model")
-    parser.add_argument("--to_model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+    parser.add_argument("--transfer_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
                         help="Prefill attack applied on this model")
-    parser.add_argument("--index_number", type=int, required=True,
-                        help="Index number as per quadrant_output.txt")
+    parser.add_argument("--prompt_index", type=int, required=True,
+                        help="Original prompt index")
+    parser.add_argument("--results_dir", type=str, default='results/',
+                        help="Results directory")
     parser.add_argument("--batch_size", type=int, default=32, help="Batch size into strongreject evaluator")
     return parser.parse_args()
 
@@ -62,29 +64,19 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[floa
 
     return scores
 
-def main() -> None:
-    args = parse_args()
-    from_model_short = args.from_model_name.split("/")[-1]
-    resample_dir = f"results/{args.to_model_name}/dataset/resample"
-    pattern = os.path.join(
-        resample_dir,
-        f'transfer_results_idx{args.index_number}_cot*_transfer_from_{from_model_short}.csv'
-    )
-
-    input_paths = sorted(glob.glob(pattern))
-    if not input_paths:
-        print(f"No input files found matching pattern: {pattern}")
-        return
-
-    print(f"Found {len(input_paths)} input file(s): {[os.path.basename(p) for p in input_paths]}")
-
+def save_scored(model_name, input_paths, args):
     for input_path in input_paths:
         input_csv = os.path.basename(input_path)
         base_name = os.path.splitext(input_csv)[0]
-        output_path = os.path.join(resample_dir, f"scored_{base_name}.csv")
-
+        output_path = os.path.join(
+            args.results_dir,
+            model_name,
+            'dataset',
+            'resample',
+            f"scored_{base_name}.csv")
         # Load data
         print(f"\nReading data from: {input_path}")
+
         all_rows = []
         with open(input_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -107,6 +99,46 @@ def main() -> None:
                 writer.writerow(row)
 
         print(f"Saved scored results to: {output_path}")
+
+def main() -> None:
+    args = parse_args()
+
+    base_model_short = args.base_model.split("/")[-1]
+
+    base_csv = f'scored_resampling_results_idx{args.prompt_index}_cot*.csv'
+    transfer_csv = f'scored_transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
+
+    pattern_base = os.path.join(
+        args.results_dir,
+        args.base_model,
+        'dataset',
+        'resample',
+        base_csv
+    )
+    pattern_transfer = os.path.join(
+        args.results_dir,
+        args.transfer_model,
+        'dataset',
+        'resample',
+        transfer_csv
+    )
+
+    input_paths_base = sorted(glob.glob(pattern_base))
+    input_paths_transfer = sorted(glob.glob(pattern_transfer))
+
+
+    if not input_paths_base:
+        print(f"No input files found matching pattern: {pattern_base}")
+        return
+    if not input_paths_transfer:
+        print(f"No input files found matching pattern: {pattern_transfer}")
+        return
+
+    print(f"Found {len(input_paths_base)} input file(s): {[os.path.basename(p) for p in input_paths_base]}")
+    print(f"Found {len(input_paths_transfer)} input file(s): {[os.path.basename(p) for p in input_paths_transfer]}")
+    
+    save_scored(args.base_model, input_paths_base, args)
+    save_scored(args.transfer_model, input_paths_transfer, args)
 
 
 if __name__ == "__main__":
