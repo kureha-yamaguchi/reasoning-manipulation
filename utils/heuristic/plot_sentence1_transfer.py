@@ -1,11 +1,30 @@
+"""
+Visualise the transfer efficacy of the first Chain-of-Thought (CoT) sentence
+across up to three models (base + two transfer targets) for a single prompt.
+
+For each CoT sample index the script loads per-rollout StrongREJECT scores
+from pre-scored CSV files and renders side-by-side boxplots so that the
+resampling distributions of the base model and both transfer models can be
+compared at a glance.  A scatter marker overlaid on each CoT position shows
+the *output target* score, i.e. the mean score obtained when the full CoT
+(not just the first sentence) is used as a prefill on the base model.
+
+Typical usage
+-------------
+python plot_sentence1_transfer.py \\
+    --prompt_index 0 \\
+    --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \\
+    --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \\
+    --transfer_model_2 deepseek-ai/DeepSeek-R1-Distill-Qwen-14B \\
+    --results_dir results/ \\
+    --repetitions 15
+
+Output
+------
+A PNG figure saved to:
+    results/<transfer_model>/figures/scored_transfer_results_idx<N>_cot*_transfer_from_<base>.png
+"""
 import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
-import os
-import glob
-import argparse
-import csv
-from typing import List, Dict, Tuple, Any
 
 from tqdm import tqdm
 from collections import defaultdict
@@ -15,7 +34,6 @@ import pandas as pd
 from matplotlib.gridspec import GridSpec
 
 def parse_args():
-    """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Generate multiple output rollouts per prompt for non-reasoning models"
     )
@@ -25,6 +43,8 @@ def parse_args():
                         help="First CoT sentence taken from this model")
     parser.add_argument("--transfer_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
                         help="Prefill attack applied on this model")
+    parser.add_argument("--transfer_model_2", type=str, default=None,
+                        help="Prefill attack also applied on this model")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
     parser.add_argument("--repetitions", type=int, default=15,
@@ -91,12 +111,10 @@ def compute_stats_per_prompt_cot(
     return means
 
 def main():
-    args = parse_args()
-
     base_model_short = args.base_model.split("/")[-1]
     transfer_model_short = args.transfer_model.split("/")[-1]
     base_csv = f'scored_resampling_results_idx{args.prompt_index}_cot*.csv'
-    transfer_csv = f'scored_transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
+    transfer_csv = f'scored_deepseek_transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
 
     pattern_base = os.path.join(
         args.results_dir,
@@ -112,9 +130,17 @@ def main():
         'resample',
         transfer_csv
     )
+    pattern_transfer2 = os.path.join(
+        args.results_dir,
+        args.transfer_model_2,
+        'dataset',
+        'resample',
+        transfer_csv
+    )
 
     input_paths_base = sorted(glob.glob(pattern_base))
     input_paths_transfer = sorted(glob.glob(pattern_transfer))
+    input_paths_transfer2 = sorted(glob.glob(pattern_transfer2))
     
     cot_numbers = [i+1 for i,_ in enumerate(input_paths_base)]
     print('cot_numbers', cot_numbers)
@@ -125,9 +151,13 @@ def main():
     if not input_paths_transfer:
         print(f"No input files found matching pattern: {pattern_transfer}")
         return
+    if not input_paths_transfer2:
+        print(f"No input files found matching pattern: {pattern_transfer2}")
+        return
 
     print(f"Found {len(input_paths_base)} input file(s): {[os.path.basename(p) for p in input_paths_base]}")
     print(f"Found {len(input_paths_transfer)} input file(s): {[os.path.basename(p) for p in input_paths_transfer]}")
+    print(f"Found {len(input_paths_transfer2)} input file(s): {[os.path.basename(p) for p in input_paths_transfer2]}")
 
     scores_all_base = []
     for input_path in input_paths_base:
@@ -140,16 +170,22 @@ def main():
         df = pd.read_csv(input_path)
         scores_all_transfer.append(df['strongreject_score'].values)
 
+    scores_all_transfer2 = []
+    for input_path in input_paths_transfer2:
+        df = pd.read_csv(input_path)
+        scores_all_transfer2.append(df['strongreject_score'].values)
+
     # Create figure
     fig, ax = plt.subplots(figsize=(10, 6))
 
     # Define offset and width for side-by-side boxplots
-    offset = 0.2
-    width = 0.35
+    offset = 0.25
+    width = 0.22
 
-    # Positions for the two sets of boxplots
+    # Positions for the three sets of boxplots
     positions_base = [x - offset for x in cot_numbers]
-    positions_transfer = [x + offset for x in cot_numbers]
+    positions_transfer = [x for x in cot_numbers]
+    positions_transfer2 = [x + offset for x in cot_numbers]
 
     # Target output score after full CoT conditioning (not just the first sentence)
     scored_csv = "scored_train_harmful_prompts_cot5_out5.csv"
@@ -165,11 +201,18 @@ def main():
                         boxprops=dict(facecolor='lightgreen'),
                         medianprops=dict(color='black'))
 
-    # Boxplot for transfer model (right side)
+    # Boxplot for transfer model (center)
     bp = ax.boxplot(scores_all_transfer, positions=positions_transfer, widths=width,
                     patch_artist=True, showfliers=False,
                     boxprops=dict(facecolor='lightblue'),
                     medianprops=dict(color='black'))
+
+    # Boxplot for transfer model 2 (right side)
+    transfer_model_2_short = args.transfer_model_2.split("/")[-1] if args.transfer_model_2 else "transfer_model_2"
+    bp2 = ax.boxplot(scores_all_transfer2, positions=positions_transfer2, widths=width,
+                     patch_artist=True, showfliers=False,
+                     boxprops=dict(facecolor='lightsalmon'),
+                     medianprops=dict(color='black'))
 
     # Red markers for output_target (no line)
     ax.scatter(cot_numbers, output_target, c='red', s=80, marker='s', 
@@ -180,16 +223,17 @@ def main():
     ax.set_title(f"Transfer Efficacy of the First CoT Sentences from {base_model_short} to {transfer_model_short} \n Prompt={prompt[:60]} \n (Across {args.repetitions} rollouts)", fontsize=12)
     ax.set_xticks(cot_numbers)
     ax.set_xticklabels(cot_numbers)
-    ax.legend([bp_base["boxes"][0], bp["boxes"][0], ax.collections[0]], 
+    ax.legend([bp_base["boxes"][0], bp["boxes"][0], bp2["boxes"][0], ax.collections[0]], 
             [f'Resampling Distribution from {base_model_short}', 
-            f'Resampling Distribution from {transfer_model_short}', 
+            f'Resampling Distribution from {transfer_model_short}',
+            f'Resampling Distribution from {transfer_model_2_short}',
             f'Output Target from {base_model_short}'])
     ax.grid(True, alpha=0.3)
     ax.annotate('(comply)', xy=(1.01, 1), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='top')
     ax.annotate('(refuse)', xy=(1.01, 0), xycoords='axes fraction', fontsize=10, fontstyle='italic', va='bottom')
 
     plt.tight_layout()
-    save_path = os.path.join('results', args.transfer_model, 'figures', f'{os.path.splitext(transfer_csv)[0]}.png')
+    save_path = os.path.join('figures', f'{os.path.splitext(transfer_csv)[0]}.png')
     plt.savefig(save_path, dpi=150)
     plt.show()
 

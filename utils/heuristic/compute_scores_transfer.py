@@ -7,7 +7,8 @@ CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.compute_scores_transfer \
   --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-  --index_number 3
+  --transfer_model_2 deepseek/deepseek-r1-0528:free \
+  --prompt_index 174
 
 """
 
@@ -27,6 +28,8 @@ def parse_args() -> argparse.Namespace:
                         help="First CoT sentence taken from this model")
     parser.add_argument("--transfer_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
                         help="Prefill attack applied on this model")
+    parser.add_argument("--transfer_model_2", type=str, default=None,
+                        help="Prefill attack also applied on this model")
     parser.add_argument("--prompt_index", type=int, required=True,
                         help="Original prompt index")
     parser.add_argument("--results_dir", type=str, default='results/',
@@ -105,8 +108,8 @@ def main() -> None:
 
     base_model_short = args.base_model.split("/")[-1]
 
-    base_csv = f'scored_resampling_results_idx{args.prompt_index}_cot*.csv'
-    transfer_csv = f'scored_transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
+    base_csv = f'resampling_results_idx{args.prompt_index}_cot*.csv'
+    transfer_csv = f'transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
 
     pattern_base = os.path.join(
         args.results_dir,
@@ -126,7 +129,6 @@ def main() -> None:
     input_paths_base = sorted(glob.glob(pattern_base))
     input_paths_transfer = sorted(glob.glob(pattern_transfer))
 
-
     if not input_paths_base:
         print(f"No input files found matching pattern: {pattern_base}")
         return
@@ -139,6 +141,21 @@ def main() -> None:
     
     save_scored(args.base_model, input_paths_base, args)
     save_scored(args.transfer_model, input_paths_transfer, args)
+
+    if args.transfer_model_2:
+        pattern_transfer2 = os.path.join(
+            args.results_dir,
+            args.transfer_model_2,
+            'dataset',
+            'resample',
+            transfer_csv
+        )
+        input_paths_transfer2 = sorted(glob.glob(pattern_transfer2))
+        if not input_paths_transfer2:
+            print(f"No input files found matching pattern: {pattern_transfer2}")
+            return
+        print(f"Found {len(input_paths_transfer2)} input file(s): {[os.path.basename(p) for p in input_paths_transfer2]}")
+        save_scored(args.transfer_model2, input_paths_transfer2, args)
 
 
 if __name__ == "__main__":

@@ -8,9 +8,11 @@ transfer model toward similar outputs (a prefill/transfer attack).
 2. Find prompts in the target quadrant: low within-CoT score variance but high
    across-CoT variance — i.e. the CoT opening deterministically steers the output.
 3. For the specified prompt, use each CoT's first sentence as a steering prefix.
-4. Resample N rollouts from both the base and transfer model using those prefixes,
-   extracting the text after </think> as the output.
-5. Save results to CSV, organised by model, prompt index, and CoT sentence index.
+4. Resample N rollouts from the base model and local transfer model using those
+   prefixes, extracting the text after </think> as the output.
+5. Optionally, resample N rollouts from DeepSeek R1 via the OpenRouter API,
+   passing the first sentence as an assistant prefill message to steer its CoT.
+6. Save results to CSV, organised by model, prompt index, and CoT sentence index.
 
 
 Example usage:
@@ -18,6 +20,7 @@ CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.resample_transfer \
   --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
+  --transfer_model_2 deepseek/deepseek-r1-0528:free \
   --prompt_index 174 \
   --repetitions 15
 '''
@@ -34,9 +37,14 @@ import pandas as pd
 import gc
 import re
 
+import time
+import requests
+
 import torch
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
+from dotenv import load_dotenv
+
 
 
 def parse_args():
@@ -46,8 +54,10 @@ def parse_args():
     )
     parser.add_argument("--base_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="First CoT sentence taken from this model")
-    parser.add_argument("--transfer_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+    parser.add_argument("--transfer_model", type=str, default=None,
                         help="Prefill attack applied on this model")
+    parser.add_argument("--transfer_model_2", type=str, default=None,
+                        help="OpenRouter model ID for the second transfer model")
     parser.add_argument("--prompt_index", type=int, required=True,
                         help="Original prompt index")
     parser.add_argument("--results_dir", type=str, default='results/',
@@ -66,6 +76,8 @@ def parse_args():
                         help="GPU memory utilization ratio")
     parser.add_argument("--max_retries_multiplier", type=int, default=10,
                         help="Maximum total generations = repetitions * this multiplier (safety limit)")
+    parser.add_argument("--openrouter_retry_delay", type=float, default=2.0,
+                        help="Seconds to wait between API retries on failure")
     return parser.parse_args()
 
 
@@ -493,6 +505,102 @@ def transfer_model_generate(original_prompt, first_sentences, args):
         print(f"Total rollouts generated: {len(results)}")
 
 
+def transfer_model_2_generate(original_prompt, first_sentences, args):
+    """
+    Resample rollouts using DeepSeek R1 via the OpenRouter API.
+
+    The prefill attack is implemented by passing the first sentence of each
+    base-model CoT as an assistant turn, steering R1's chain-of-thought before
+    it generates its response.
+    """
+    load_dotenv()
+    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+
+    base_model_short = args.base_model.split("/")[-1]
+    max_total_generations = args.repetitions * args.max_retries_multiplier
+
+    headers = {
+        "Authorization": f"Bearer {openrouter_api_key}",
+        "Content-Type": "application/json",
+    }
+
+    for i, first_sentence in enumerate(first_sentences):
+        results = []
+        current_cot_idx = i + 1
+        valid_outputs = []
+        total_generated = 0
+
+        # combined_thread mirrors the local model format: prompt + prefill sentence
+        combined_thread = original_prompt + first_sentence
+
+        print(f"\n{'='*60}")
+        print(f"[OpenRouter] CoT sentence {current_cot_idx} — target: {args.repetitions} valid rollouts")
+
+        while len(valid_outputs) < args.repetitions and total_generated < max_total_generations:
+            payload = {
+                "model": args.transfer_model_2,
+                "messages": [
+                    {"role": "user", "content": original_prompt},
+                    {"role": "assistant", "content": first_sentence},
+                ],
+            }
+
+            try:
+                response = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=120,
+                )
+                response.raise_for_status()
+                data = response.json()
+                generated_text = data["choices"][0]["message"]["content"]
+            except Exception as e:
+                print(f"  API error: {e} — retrying in {args.openrouter_retry_delay}s")
+                time.sleep(args.openrouter_retry_delay)
+                continue
+            finally:
+                total_generated += 1
+
+            output_text = extract_valid_output(generated_text)
+            if output_text is not None:
+                valid_outputs.append((generated_text, output_text))
+                print(f"  Generated {total_generated} total, {len(valid_outputs)}/{args.repetitions} valid")
+
+        if len(valid_outputs) < args.repetitions:
+            print(f"  WARNING: Only obtained {len(valid_outputs)}/{args.repetitions} valid outputs "
+                  f"after {total_generated} generations (hit safety limit)")
+        else:
+            print(f"  Successfully obtained {args.repetitions} valid rollouts "
+                  f"(generated {total_generated} total)")
+
+        # Add valid outputs to results
+        for j, (gen_text, output_text) in enumerate(valid_outputs):
+            results.append({
+                'prompt': original_prompt,
+                'sentence_idx': current_cot_idx,
+                'resample_n': j + 1,
+                'combined_thread': combined_thread,
+                'generated_text': gen_text,
+                'output': output_text,
+            })
+
+        # Save results to CSV
+        output_csv_path = os.path.join(
+            args.results_dir,
+            args.transfer_model_2.replace(":", "-"),
+            "dataset",
+            "resample",
+            f"transfer_results_idx{args.prompt_index}_cot{current_cot_idx}_transfer_from_{base_model_short}.csv",
+        )
+
+        os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
+        df = pd.DataFrame(results)
+        df.to_csv(output_csv_path, index=False)
+        print(f"\n{'='*60}")
+        print(f"OpenRouter transfer results saved to: {output_csv_path}")
+        print(f"Total rollouts generated: {len(results)}")
+
 
 def main():
     args = parse_args()
@@ -518,8 +626,11 @@ def main():
     print('first_sentences:', repr(first_sentences))
 
 
-    base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
-    transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    # base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    # if args.transfer_model:
+        # transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    if args.transfer_model_2:
+        transfer_model_2_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
 
 
 if __name__ == "__main__":
