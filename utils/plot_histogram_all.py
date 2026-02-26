@@ -83,8 +83,18 @@ def main():
     MODEL1 = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
     MODEL2 = "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
     MODEL3 = "Qwen/Qwen3-8B"
-    MODEL4 = "openai/gpt-oss-20b"
 
+<<<<<<< Updated upstream
+    model_names = [MODEL1, MODEL2, MODEL3]
+    # Shorter display names for the plot
+    display_names = ["DeepSeek-R1-Distill-Llama-8B", "DeepSeek-R1-Distill-Qwen-7B", "Qwen3-8B"]
+    
+    cot_layers = [17,17,17]
+    baseline_layers = [11,17,17]
+    cot_harmless_layers = [17,23,23]
+    baseline_harmless_layers = [13,15,15]
+    
+=======
     model_names = [MODEL1, MODEL2, MODEL3, MODEL4]
     display_names = ["DeepSeek-R1-Distill-Llama-8B", "DeepSeek-R1-Distill-Qwen-7B", "Qwen3-8B", "GPT-OSS-20B"]
 
@@ -102,7 +112,7 @@ def main():
 
     MAX_ROWS = 487 * 5 * 5  # 12175
 
-
+>>>>>>> Stashed changes
     all_data = []
     conditions = [
         ('before', 'Before\nintervention'),
