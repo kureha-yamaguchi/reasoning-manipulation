@@ -4,7 +4,6 @@ set -euo pipefail
 # Off-task eval pipeline: run Inspect evals on base vs ortho models
 # Uses vLLM to serve each model, runs AIME 2025, GPQA Diamond, and MATH
 
-export HF_HOME="/data/math-lasr/shil6499/huggingface/"
 export PYTHONUNBUFFERED=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
