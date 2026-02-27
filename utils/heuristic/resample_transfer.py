@@ -626,10 +626,10 @@ def main():
     print('first_sentences:', repr(first_sentences))
 
 
-    # base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
-    # if args.transfer_model:
-        # transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
-    if args.transfer_model_2:
+    base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    if args.transfer_model is not None:
+        transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    if args.transfer_model_2 is not None:
         transfer_model_2_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
 
 

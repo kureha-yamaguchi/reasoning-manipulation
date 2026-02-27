@@ -142,7 +142,7 @@ def main() -> None:
     save_scored(args.base_model, input_paths_base, args)
     save_scored(args.transfer_model, input_paths_transfer, args)
 
-    if args.transfer_model_2:
+    if args.transfer_model_2 is not None:
         pattern_transfer2 = os.path.join(
             args.results_dir,
             args.transfer_model_2,
