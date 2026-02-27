@@ -33,6 +33,9 @@ dependencies = [
     "nbformat>=5.10.4",
     "ipywidgets>=8.1.8",
     "strong-reject",
+    "openai>=2.17.0",
+    "inspect-ai",
+    "inspect-evals",
 ]
 
 [dependency-groups]
