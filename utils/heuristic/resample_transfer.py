@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.resample_transfer \
   --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-  --transfer_model_2 deepseek/deepseek-r1-0528:free \
+  --transfer_model_2 deepseek/deepseek-reasoner \
   --prompt_index 174 \
   --repetitions 15
 '''
@@ -39,6 +39,8 @@ import re
 
 import time
 import requests
+import litellm
+from litellm import completion
 
 import torch
 from transformers import AutoTokenizer
@@ -57,7 +59,7 @@ def parse_args():
     parser.add_argument("--transfer_model", type=str, default=None,
                         help="Prefill attack applied on this model")
     parser.add_argument("--transfer_model_2", type=str, default=None,
-                        help="OpenRouter model ID for the second transfer model")
+                        help="LiteLLM model ID for the second transfer model")
     parser.add_argument("--prompt_index", type=int, required=True,
                         help="Original prompt index")
     parser.add_argument("--results_dir", type=str, default='results/',
@@ -76,7 +78,7 @@ def parse_args():
                         help="GPU memory utilization ratio")
     parser.add_argument("--max_retries_multiplier", type=int, default=10,
                         help="Maximum total generations = repetitions * this multiplier (safety limit)")
-    parser.add_argument("--openrouter_retry_delay", type=float, default=2.0,
+    parser.add_argument("--retry_delay", type=float, default=2.0,
                         help="Seconds to wait between API retries on failure")
     return parser.parse_args()
 
@@ -211,22 +213,30 @@ def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.35):
 
 def split_cot_into_sentences(cot: str) -> List[str]:
     """
-    Split a chain-of-thought text into individual sentences.
+    Split chain-of-thought text into sentences.
+    
+    Handles punctuation inside quotes by requiring a new sentence to start 
+    with a capital letter. Does not include leading/trailing whitespace.
     
     Args:
         cot: The chain-of-thought text string
         
     Returns:
-        List of sentences
+        List of sentences (without leading/trailing whitespace)
     """
-    # Match a sentence ending in punctuation, plus any trailing whitespace
-    sentence_pattern = r'.*?[.!?](?:\s+|$)'
+    # Pattern breakdown:
+    # (?:^|\s+)           - start of string OR whitespace (not captured)
+    # (                   - begin capture group
+    #   .+?               - content (non-greedy)
+    #   [.!?]             - sentence-ending punctuation  
+    #   ["']?             - optional closing quote
+    # )                   - end capture group
+    # (?=\s+[A-Z]|\s*$)   - lookahead: whitespace+capital OR end of string
     
-    sentences = re.findall(sentence_pattern, cot)
+    pattern = r'(?:^|\s+)(.+?[.!?]["\']?)(?=\s+[A-Z]|\s*$)'
+    matches = re.findall(pattern, cot)
     
-    # Filter out truly empty matches (but keep whitespace intact)
-    sentences = [s for s in sentences if s]
-    return sentences
+    return [m for m in matches if m]
 
 
 def get_first_sentences(quadrant_points, prompt_index):
@@ -507,22 +517,17 @@ def transfer_model_generate(original_prompt, first_sentences, args):
 
 def transfer_model_2_generate(original_prompt, first_sentences, args):
     """
-    Resample rollouts using DeepSeek R1 via the OpenRouter API.
+    Resample rollouts using a LiteLLM-compatible model (e.g. DeepSeek R1).
 
     The prefill attack is implemented by passing the first sentence of each
-    base-model CoT as an assistant turn, steering R1's chain-of-thought before
-    it generates its response.
+    base-model CoT as an assistant turn with prefix=True, steering the model's
+    chain-of-thought before it generates its response.
     """
     load_dotenv()
-    openrouter_api_key = os.environ.get("OPENROUTER_API_KEY")
+    litellm._turn_on_debug()
 
     base_model_short = args.base_model.split("/")[-1]
     max_total_generations = args.repetitions * args.max_retries_multiplier
-
-    headers = {
-        "Authorization": f"Bearer {openrouter_api_key}",
-        "Content-Type": "application/json",
-    }
 
     for i, first_sentence in enumerate(first_sentences):
         results = []
@@ -534,38 +539,37 @@ def transfer_model_2_generate(original_prompt, first_sentences, args):
         combined_thread = original_prompt + first_sentence
 
         print(f"\n{'='*60}")
-        print(f"[OpenRouter] CoT sentence {current_cot_idx} — target: {args.repetitions} valid rollouts")
+        print(f"[LiteLLM] CoT sentence {current_cot_idx} — target: {args.repetitions} valid rollouts")
 
         while len(valid_outputs) < args.repetitions and total_generated < max_total_generations:
-            payload = {
-                "model": args.transfer_model_2,
-                "messages": [
-                    {"role": "user", "content": original_prompt},
-                    {"role": "assistant", "content": first_sentence},
-                ],
-            }
-
             try:
-                response = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
+                response = completion(
+                    model=args.transfer_model_2,
+                    temperature=args.temperature,
+                    max_tokens=args.max_new_tokens,
+                    messages=[
+                        {"role": "user", "content": original_prompt},
+                        {
+                            "role": "assistant",
+                            "content": "<think>\n" + first_sentence,
+                            "prefix": True,
+                        },
+                    ],
                     timeout=120,
                 )
-                response.raise_for_status()
-                data = response.json()
-                generated_text = data["choices"][0]["message"]["content"]
+                generated_text = response.choices[0].message.content
             except Exception as e:
-                print(f"  API error: {e} — retrying in {args.openrouter_retry_delay}s")
-                time.sleep(args.openrouter_retry_delay)
-                continue
-            finally:
+                print(f"  API error: {e} — retrying in {args.retry_delay}s")
+                time.sleep(args.retry_delay)
                 total_generated += 1
+                continue
+
+            total_generated += 1
 
             output_text = extract_valid_output(generated_text)
             if output_text is not None:
                 valid_outputs.append((generated_text, output_text))
-                print(f"  Generated {total_generated} total, {len(valid_outputs)}/{args.repetitions} valid")
+            print(f"  Generated {total_generated} total, {len(valid_outputs)}/{args.repetitions} valid")
 
         if len(valid_outputs) < args.repetitions:
             print(f"  WARNING: Only obtained {len(valid_outputs)}/{args.repetitions} valid outputs "
@@ -598,7 +602,7 @@ def transfer_model_2_generate(original_prompt, first_sentences, args):
         df = pd.DataFrame(results)
         df.to_csv(output_csv_path, index=False)
         print(f"\n{'='*60}")
-        print(f"OpenRouter transfer results saved to: {output_csv_path}")
+        print(f"LiteLLM transfer results saved to: {output_csv_path}")
         print(f"Total rollouts generated: {len(results)}")
 
 
@@ -626,9 +630,9 @@ def main():
     print('first_sentences:', repr(first_sentences))
 
 
-    base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
-    if args.transfer_model is not None:
-        transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    # base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    # if args.transfer_model is not None:
+    #     transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
     if args.transfer_model_2 is not None:
         transfer_model_2_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
 
