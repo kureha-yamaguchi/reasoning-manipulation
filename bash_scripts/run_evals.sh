@@ -39,9 +39,11 @@ TP_SIZE=4
 # Each entry: MODEL_PATH|MODEL_LABEL
 declare -a MODELS=( # ideally make this auto pick best ortho scores?
     # "Qwen/Qwen3-8B|Qwen/Qwen3-8B"
-    "${PROJECT_ROOT}/results/Qwen/Qwen3-8B/ortho_model_cot_layer_17|Qwen/Qwen3-8B/ortho_model_cot_layer_17"
-    "openai/gpt-oss-20b|openai/gpt-oss-20b"
-    "${PROJECT_ROOT}/results/openai/gpt-oss-20b/ortho_model_cot_layer_19|openai/gpt-oss-20b/ortho_model_cot_layer_19"
+    # "${PROJECT_ROOT}/results/Qwen/Qwen3-8B/ortho_model_cot_layer_17|Qwen/Qwen3-8B/ortho_model_cot_layer_17"
+    # "openai/gpt-oss-20b|openai/gpt-oss-20b"
+    # "${PROJECT_ROOT}/results/openai/gpt-oss-20b/ortho_model_cot_layer_19|openai/gpt-oss-20b/ortho_model_cot_layer_19"
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B|deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B|deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
 )
 
 # ── Run evals for each model ─────────────────────────────────────────

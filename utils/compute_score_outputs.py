@@ -149,17 +149,18 @@ def load_data_efficiently(csv_path: str) -> Tuple[List[Dict[str, str]], List[str
 
 
 def save_scored_csv(
-    original_rows: List[Dict[str, str]], 
-    scores: List[float], 
+    original_rows: List[Dict[str, str]],
+    score_columns: Dict[str, List[float]],
     original_fieldnames: List[str],
     output_path: str
 ) -> None:
     """
-    Save original CSV data with added StrongReject scores.
-    
+    Save original CSV data with added StrongReject scores and subscores.
+
     Args:
         original_rows: Original CSV rows as dictionaries
-        scores: StrongReject evaluation scores
+        score_columns: Dict mapping score column names to lists of scores.
+            Expected keys: "score" (main), and optionally "refusal", "convincingness", "specificity".
         original_fieldnames: Original CSV fieldnames
         output_path: Path to save the scored CSV
     """
@@ -167,35 +168,46 @@ def save_scored_csv(
     output_dir = os.path.dirname(output_path)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
-    
-    # Add strongreject_score to fieldnames if not already present
+
+    # Build the list of score columns to add
+    score_field_map = {
+        "score": "strongreject_score",
+        "refusal": "strongreject_refusal",
+        "convincingness": "strongreject_convincingness",
+        "specificity": "strongreject_specificity",
+    }
+
     new_fieldnames = list(original_fieldnames)
-    if 'strongreject_score' not in new_fieldnames:
-        new_fieldnames.append('strongreject_score')
-    
+    for key, csv_col in score_field_map.items():
+        if key in score_columns and csv_col not in new_fieldnames:
+            new_fieldnames.append(csv_col)
+
     # Write CSV with scores
     with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=new_fieldnames)
         writer.writeheader()
-        
+
         for i, row in enumerate(tqdm(original_rows, desc="Writing scored CSV")):
-            # Copy original row and add score
             scored_row = row.copy()
-            scored_row['strongreject_score'] = scores[i]
+            for key, csv_col in score_field_map.items():
+                if key in score_columns:
+                    scored_row[csv_col] = score_columns[key][i]
             writer.writerow(scored_row)
-    
+
     print(f"Successfully saved {len(original_rows)} rows with scores to {output_path}")
 
 
-def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[float]:
+def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str, List[float]]:
     """
     Evaluate output scores using StrongReject evaluator.
-    
+
     Args:
         all_rows: List of rows from the CSV file
+        batch_size: Batch size for evaluation
 
     Returns:
-        List of StrongReject scores
+        Dict mapping score column names to lists of scores.
+        Keys: "score", "refusal", "convincingness", "specificity"
     """
 
     # Extract prompts and outputs for evaluation
@@ -212,14 +224,19 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[floa
     print("Evaluating outputs with StrongReject...")
     evaluator_results = evaluate_dataset(
         output_dataset,
-        ["strongreject_finetuned"],
+        ["strongreject_rubric"],
         batch_size=batch_size
     )
-    
-    scores = evaluator_results["score"]
-    print(f"Generated {len(scores)} scores")
 
-    return scores
+    score_columns = {}
+    score_columns["score"] = evaluator_results["score"]
+    for subscore in ("refusal", "convincingness", "specificity"):
+        if subscore in evaluator_results.column_names:
+            score_columns[subscore] = evaluator_results[subscore]
+
+    print(f"Generated {len(score_columns['score'])} scores with columns: {list(score_columns.keys())}")
+
+    return score_columns
 
 
 def main() -> None:

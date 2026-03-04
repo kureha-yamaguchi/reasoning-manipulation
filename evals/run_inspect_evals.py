@@ -138,7 +138,7 @@ def build_vllm_cmd(args) -> list[str]:
     return cmd
 
 
-def wait_for_server(port: int, timeout: int = 600, interval: int = 10) -> bool:
+def wait_for_server(port: int, timeout: int = 6000, interval: int = 10) -> bool:
     """Wait for the vLLM server to be healthy."""
     import urllib.request
     import urllib.error
@@ -187,6 +187,7 @@ def run_inspect_eval(
         str(temperature),
         "--max-tokens",
         str(max_tokens),
+        "--no-fail-on-error",
     ]
 
     extra = BENCHMARK_EXTRA_ARGS.get(benchmark, [])
