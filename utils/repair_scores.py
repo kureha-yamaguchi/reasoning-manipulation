@@ -10,7 +10,7 @@ Example usage
 
     STRONGREJECT_VLLM_URL=http://localhost:8000/v1 \
     uv run -m utils.repair_scores \
-    --scored_csv results/openai/gpt-oss-20b/dataset/scored_train_harmful_prompts_cot5_out5.csv
+    --scored_csv results/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/dataset/scored_train_harmful_prompts_cot5_out5.csv
 
 """
 

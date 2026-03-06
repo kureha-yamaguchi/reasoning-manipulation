@@ -3,7 +3,7 @@ Simple script to push a dataset to Hugging Face Hub.
 uv run -m utils.csv_to_hf \
   --hf_username kureha295 \
   --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-  --dataset train_harmful_prompts_cot5_out5.csv
+  --dataset scored_train_harmful_prompts_cot5_out5.csv
 """
 
 from datasets import Dataset, DatasetDict
