@@ -2,7 +2,7 @@
 Simple script to pull a dataset from Hugging Face Hub and save as CSV.
 uv run -m utils.csv_from_hf \
   --hf_username kureha295 \
-  --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+  --model_name Qwen/Qwen3-8B \
   --dataset train_harmful_prompts_cot5_out5
 """
 

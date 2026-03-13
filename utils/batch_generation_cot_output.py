@@ -219,7 +219,8 @@ def stage1_generate_cots(
         batch_end = min(batch_start + args.batch_size, len(prompts))
         batch_prompts = prompts[batch_start:batch_end]
         
-        print(f"\nProcessing batch {batch_start//args.batch_size + 1}: prompts {batch_start+1}-{batch_end}")
+        pct = batch_end / len(prompts) * 100
+        print(f"\nProcessing batch {batch_start//args.batch_size + 1}: prompts {batch_start+1}-{batch_end} / {len(prompts)} ({pct:.0f}%)")
         
         # Create repeated prompts for this batch
         repeated_prompts = []
@@ -330,7 +331,8 @@ def stage2_generate_outputs(
         batch_end = min(batch_start + args.batch_size // args.output_repetitions, len(cot_results))
         batch_cots = cot_results[batch_start:batch_end]
         
-        print(f"\nProcessing batch: CoT responses {batch_start+1}-{batch_end}")
+        pct = batch_end / len(cot_results) * 100
+        print(f"\nProcessing batch: CoT responses {batch_start+1}-{batch_end} / {len(cot_results)} ({pct:.0f}%)")
         
         # First, collect all unique prompts for batch template application
         unique_prompts = [cot_result["prompt"] for cot_result in batch_cots]
@@ -510,7 +512,8 @@ def main():
                 output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}_harmless.csv')
             else:
                 output_csv = os.path.join('results', args.model_name, 'attack_results', f'ortho_output_{input_csv_name}_{args.type}_layer_{layer}.csv')
-            
+
+            os.makedirs(os.path.dirname(output_csv), exist_ok=True)
             generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
 
             del llm, tokenizer

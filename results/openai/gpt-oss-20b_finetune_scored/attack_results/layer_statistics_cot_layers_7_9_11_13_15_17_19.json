@@ -1,0 +1,45 @@
+{
+  "7": {
+    "mean": NaN,
+    "std_dev": NaN,
+    "count": 0,
+    "weighted_score": -Infinity
+  },
+  "9": {
+    "mean": NaN,
+    "std_dev": NaN,
+    "count": 0,
+    "weighted_score": -Infinity
+  },
+  "11": {
+    "mean": NaN,
+    "std_dev": NaN,
+    "count": 0,
+    "weighted_score": -Infinity
+  },
+  "13": {
+    "mean": NaN,
+    "std_dev": NaN,
+    "count": 0,
+    "weighted_score": -Infinity
+  },
+  "15": {
+    "mean": 0.5025625375600962,
+    "std_dev": 0.09446142175961829,
+    "count": 65,
+    "weighted_score": 0.26133251953125003
+  },
+  "17": {
+    "mean": 0.3302990986750676,
+    "std_dev": 0.21153561110970054,
+    "count": 65,
+    "weighted_score": 0.17175553131103516
+  },
+  "19": {
+    "mean": 0.4250059661865234,
+    "std_dev": 0.1642674050845903,
+    "count": 125,
+    "weighted_score": 0.4250059661865234
+  },
+  "best_layer": "19"
+}

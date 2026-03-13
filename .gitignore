@@ -2,6 +2,15 @@
 ortho_model*
 !ortho_model*.csv
 
+results/*/*/dataset*
+results/*/*/attack_results/*
+results/*/*/ortho*
+results/*/*/activations/*
+results/*/*_finetune_scored
+results/*/*/refusal_dir
+
+!results/*/*/attack_results/*.json
+
 results/openai/gpt-oss-20b/dataset/*
 
 scored_ortho_output_test_*.csv

@@ -1,0 +1,39 @@
+{
+  "13": {
+    "mean": 0.905,
+    "std_dev": 0.22972195676372523,
+    "count": 125,
+    "weighted_score": 0.905
+  },
+  "15": {
+    "mean": 0.951,
+    "std_dev": 0.15135143892449826,
+    "count": 125,
+    "weighted_score": 0.951
+  },
+  "17": {
+    "mean": 0.959,
+    "std_dev": 0.14179153257397784,
+    "count": 125,
+    "weighted_score": 0.959
+  },
+  "19": {
+    "mean": 0.957,
+    "std_dev": 0.13386319448866324,
+    "count": 125,
+    "weighted_score": 0.957
+  },
+  "21": {
+    "mean": 0.951,
+    "std_dev": 0.16566094406074347,
+    "count": 125,
+    "weighted_score": 0.951
+  },
+  "23": {
+    "mean": 0.965,
+    "std_dev": 0.11837270282541304,
+    "count": 125,
+    "weighted_score": 0.965
+  },
+  "best_layer": "23"
+}

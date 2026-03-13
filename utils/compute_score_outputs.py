@@ -8,7 +8,7 @@ Clean model paradigm
 Example usage (analysing training dataset output train_harmful_prompts_cot5_out5.csv):
     CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
     uv run -m utils.compute_score_outputs \
-    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
+    --model_name Qwen/Qwen3-8B \
     --input_csv train_harmful_prompts_cot5_out5.csv \
     --input_dir dataset 
 

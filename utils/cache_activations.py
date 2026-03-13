@@ -41,6 +41,10 @@ def parse_args():
     parser.add_argument('--type', type=str, default='baseline', 
                         help="CoT tokens (cot) or 3 or 5 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     parser.add_argument("--harmless", action="store_true", help="For harmless datasets")
+    parser.add_argument("--refusal_threshold", type=float, default=0.05,
+                        help="Lower threshold used for refusal filtering (default: 0.05)")
+    parser.add_argument("--nonrefusal_threshold", type=float, default=0.6,
+                        help="Upper threshold used for non-refusal filtering (default: 0.6)")
     return parser.parse_args()
 
 def is_harmony_model(model_name):
@@ -206,12 +210,12 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
     if args.harmless:
-        nonrefusal_dataset = f"nonrefusal_0.6_{args.type}_harmless.csv"
+        nonrefusal_dataset = f"nonrefusal_{args.nonrefusal_threshold}_{args.type}_harmless.csv"
         cache_activations(model_name=args.model_name, dataset=nonrefusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, harmless=True)
 
     else:
-        refusal_dataset = f"refusal_0.05_{args.type}.csv"
-        nonrefusal_dataset = f"nonrefusal_0.6_{args.type}.csv"
+        refusal_dataset = f"refusal_{args.refusal_threshold}_{args.type}.csv"
+        nonrefusal_dataset = f"nonrefusal_{args.nonrefusal_threshold}_{args.type}.csv"
 
         # Process both datasets
         cache_activations(model_name=args.model_name, dataset=refusal_dataset, layers=layers, type=args.type, tokenizer=tokenizer, refusal=True)
