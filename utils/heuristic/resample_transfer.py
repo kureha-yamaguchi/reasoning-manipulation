@@ -20,7 +20,7 @@ CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.resample_transfer \
   --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-  --transfer_model_2 deepseek/deepseek-reasoner \
+  --transfer_model_2 openrouter/deepseek/deepseek-r1 \
   --prompt_index 174 \
   --repetitions 15
 '''
@@ -517,11 +517,15 @@ def transfer_model_generate(original_prompt, first_sentences, args):
 
 def transfer_model_2_generate(original_prompt, first_sentences, args):
     """
-    Resample rollouts using a LiteLLM-compatible model (e.g. DeepSeek R1).
+    Resample rollouts using DeepSeek R1 via OpenRouter.
 
     The prefill attack is implemented by passing the first sentence of each
     base-model CoT as an assistant turn with prefix=True, steering the model's
     chain-of-thought before it generates its response.
+
+    For openrouter/deepseek/deepseek-r1, reasoning is returned separately in
+    response.choices[0].message.reasoning_content, while the final output is
+    in response.choices[0].message.content (no </think> parsing needed).
     """
     load_dotenv()
     litellm._turn_on_debug()
@@ -534,9 +538,6 @@ def transfer_model_2_generate(original_prompt, first_sentences, args):
         current_cot_idx = i + 1
         valid_outputs = []
         total_generated = 0
-
-        # combined_thread mirrors the local model format: prompt + prefill sentence
-        combined_thread = original_prompt + first_sentence
 
         print(f"\n{'='*60}")
         print(f"[LiteLLM] CoT sentence {current_cot_idx} — target: {args.repetitions} valid rollouts")
@@ -551,13 +552,21 @@ def transfer_model_2_generate(original_prompt, first_sentences, args):
                         {"role": "user", "content": original_prompt},
                         {
                             "role": "assistant",
-                            "content": "<think>\n" + first_sentence,
+                            "content": first_sentence,
                             "prefix": True,
                         },
                     ],
                     timeout=120,
                 )
-                generated_text = response.choices[0].message.content
+                # For DeepSeek R1 via OpenRouter: reasoning is in reasoning_content,
+                # final output is directly in content (no </think> tag to parse)
+                message = response.choices[0].message
+                reasoning_text = getattr(message, 'reasoning_content', '') or ''
+                output_text = message.content or ''
+                
+                # Reconstruct full generated_text for logging (prefill + reasoning + output)
+                generated_text = first_sentence + reasoning_text + output_text
+                
             except Exception as e:
                 print(f"  API error: {e} — retrying in {args.retry_delay}s")
                 time.sleep(args.retry_delay)
@@ -566,9 +575,9 @@ def transfer_model_2_generate(original_prompt, first_sentences, args):
 
             total_generated += 1
 
-            output_text = extract_valid_output(generated_text)
-            if output_text is not None:
-                valid_outputs.append((generated_text, output_text))
+            # All responses are valid since output is returned directly (no </think> check needed)
+            if output_text:
+                valid_outputs.append((generated_text, output_text, reasoning_text))
             print(f"  Generated {total_generated} total, {len(valid_outputs)}/{args.repetitions} valid")
 
         if len(valid_outputs) < args.repetitions:
@@ -579,13 +588,13 @@ def transfer_model_2_generate(original_prompt, first_sentences, args):
                   f"(generated {total_generated} total)")
 
         # Add valid outputs to results
-        for j, (gen_text, output_text) in enumerate(valid_outputs):
+        for j, (gen_text, output_text, reasoning_text) in enumerate(valid_outputs):
             results.append({
                 'prompt': original_prompt,
                 'sentence_idx': current_cot_idx,
                 'resample_n': j + 1,
-                'combined_thread': combined_thread,
                 'generated_text': gen_text,
+                'reasoning_content': reasoning_text,
                 'output': output_text,
             })
 

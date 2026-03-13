@@ -24,12 +24,17 @@ A PNG figure saved to:
     figures/scored_transfer_results_idx<N>_cot*_transfer_from_<base>.png
 """
 import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import glob
+import argparse
+import csv
+from typing import List, Dict, Tuple, Any
 
 from tqdm import tqdm
 from collections import defaultdict
-import statistics 
-import matplotlib.pyplot as plt
-import pandas as pd
+import statistics
 from matplotlib.gridspec import GridSpec
 
 def parse_args():
@@ -110,10 +115,12 @@ def compute_stats_per_prompt_cot(
     return means
 
 def main():
+    args = parse_args()
+
     base_model_short = args.base_model.split("/")[-1]
     transfer_model_short = args.transfer_model.split("/")[-1]
     base_csv = f'scored_resampling_results_idx{args.prompt_index}_cot*.csv'
-    transfer_csv = f'scored_deepseek_transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
+    transfer_csv = f'scored_transfer_results_idx{args.prompt_index}_cot*_transfer_from_{base_model_short}.csv'
 
     pattern_base = os.path.join(
         args.results_dir,

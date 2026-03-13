@@ -7,7 +7,7 @@ CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.compute_scores_transfer \
   --base_model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
   --transfer_model deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
-  --transfer_model_2 deepseek/deepseek-r1-0528:free \
+  --transfer_model_2 deepseek/deepseek-reasoner \
   --prompt_index 174
 
 """
@@ -139,8 +139,8 @@ def main() -> None:
     print(f"Found {len(input_paths_base)} input file(s): {[os.path.basename(p) for p in input_paths_base]}")
     print(f"Found {len(input_paths_transfer)} input file(s): {[os.path.basename(p) for p in input_paths_transfer]}")
     
-    save_scored(args.base_model, input_paths_base, args)
-    save_scored(args.transfer_model, input_paths_transfer, args)
+    # save_scored(args.base_model, input_paths_base, args)
+    # save_scored(args.transfer_model, input_paths_transfer, args)
 
     if args.transfer_model_2 is not None:
         pattern_transfer2 = os.path.join(
@@ -155,7 +155,7 @@ def main() -> None:
             print(f"No input files found matching pattern: {pattern_transfer2}")
             return
         print(f"Found {len(input_paths_transfer2)} input file(s): {[os.path.basename(p) for p in input_paths_transfer2]}")
-        save_scored(args.transfer_model2, input_paths_transfer2, args)
+        save_scored(args.transfer_model_2, input_paths_transfer2, args)
 
 
 if __name__ == "__main__":

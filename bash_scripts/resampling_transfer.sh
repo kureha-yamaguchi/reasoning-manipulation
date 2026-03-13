@@ -5,8 +5,9 @@ set -euo pipefail
 # MODEL_NAME=Qwen/Qwen3-8B
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 TRANSFER_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+TRANSFER_MODEL2=openrouter/deepseek/deepseek-r1
+
 REPETITION=15
-PROMPT_INDEX=174
 
 # Create log file with timestamp
 LOG_DIR="logs"
@@ -21,11 +22,46 @@ echo "Started at: $(date)"
 echo "Log file: $LOG_FILE"
 echo ""
 
+# PROMPT_INDEX=174
+
+# echo "=== Step 1: Perform resampling ==="
+# uv run -m utils.heuristic.resample_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+
+# echo "=== Step 2: Compute scores ==="
+# uv run -m utils.heuristic.compute_scores_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" 
+
+# echo "=== Step 3: Plot results ==="
+# uv run -m utils.heuristic.plot_sentence1_transfer_3models --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+
+# PROMPT_INDEX=292
+
+# echo "=== Step 1: Perform resampling ==="
+# uv run -m utils.heuristic.resample_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+
+# echo "=== Step 2: Compute scores ==="
+# uv run -m utils.heuristic.compute_scores_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" 
+
+# echo "=== Step 3: Plot results ==="
+# uv run -m utils.heuristic.plot_sentence1_transfer_3models --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+
+PROMPT_INDEX=595
+
 echo "=== Step 1: Perform resampling ==="
-uv run -m utils.heuristic.resample_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+uv run -m utils.heuristic.resample_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
 
 echo "=== Step 2: Compute scores ==="
-uv run -m utils.heuristic.compute_scores_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --prompt_index "$PROMPT_INDEX" 
+uv run -m utils.heuristic.compute_scores_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" 
 
 echo "=== Step 3: Plot results ==="
-uv run -m utils.heuristic.plot_sentence1_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+uv run -m utils.heuristic.plot_sentence1_transfer_3models --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+
+PROMPT_INDEX=621
+
+echo "=== Step 1: Perform resampling ==="
+uv run -m utils.heuristic.resample_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
+
+echo "=== Step 2: Compute scores ==="
+uv run -m utils.heuristic.compute_scores_transfer --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" 
+
+echo "=== Step 3: Plot results ==="
+uv run -m utils.heuristic.plot_sentence1_transfer_3models --base_model "$BASE_MODEL" --transfer_model "$TRANSFER_MODEL" --transfer_model_2 "$TRANSFER_MODEL2" --prompt_index "$PROMPT_INDEX" --repetitions "$REPETITION"
