@@ -2,8 +2,8 @@
 set -euo pipefail
 
 MODEL_NAMES=(
-    # deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-    # deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+    deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
     Qwen/Qwen3-8B
     openai/gpt-oss-20b
 )
