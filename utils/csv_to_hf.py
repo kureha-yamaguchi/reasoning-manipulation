@@ -97,6 +97,14 @@ def main():
     
     # Load CSV into a pandas DataFrame, then convert to dict
     df = pd.read_csv(CSV_PATH)
+
+    # Drop rows with any NaN values
+    rows_before = len(df)
+    df = df.dropna()
+    rows_dropped = rows_before - len(df)
+    if rows_dropped > 0:
+        print(f"⚠️  Dropped {rows_dropped} rows containing NaN values ({len(df)} rows remaining)")
+
     data = df.to_dict(orient="list")
 
     # Push the dataset

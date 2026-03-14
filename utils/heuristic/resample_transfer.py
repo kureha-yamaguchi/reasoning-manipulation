@@ -28,7 +28,7 @@ uv run -m utils.heuristic.resample_transfer \
 import csv
 import os
 import argparse
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 
 from tqdm import tqdm
 from collections import defaultdict
@@ -64,8 +64,6 @@ def parse_args():
                         help="Original prompt index")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
-    parser.add_argument("--scored_csv", type=str, default='scored_train_harmful_prompts_cot5_out5.csv',
-                        help="Scored CSV file with prompts")
     parser.add_argument("--repetitions", type=int, default=15,
                         help="Number of output variations per prompt")
     parser.add_argument("--max_new_tokens", type=int, default=2048,
@@ -83,31 +81,43 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_scored_csv(csv_path: str) -> List[Dict[str, str]]:
+def load_scored_csv(csv_paths: Union[str, List[str]]) -> List[Dict[str, str]]:
     """
-    Load CSV data with pre-computed scores.
+    Load CSV data with pre-computed scores from one or more files.
     
     Args:
-        csv_path: Path to the CSV file containing scores
+        csv_paths: Path to a CSV file or list of paths to CSV files containing scores
     
     Returns:
         List of dictionaries containing all CSV data including scores
     """
-    print(f"Loading scored data from: {csv_path}")
+    if isinstance(csv_paths, str):
+        csv_paths = [csv_paths]
     
-    # First pass: count rows for progress bar
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        total_rows = sum(1 for _ in reader)
-    
-    # Second pass: load data with progress bar
     all_rows = []
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in tqdm(reader, total=total_rows, desc="Loading scored data"):
-            all_rows.append(row)
+    skipped_count = 0
     
-    print(f"Loaded {len(all_rows)} rows")
+    for csv_path in csv_paths:
+        print(f"Loading scored data from: {csv_path}")
+        
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            total_rows = sum(1 for _ in reader)
+        
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in tqdm(reader, total=total_rows, desc=f"Loading {os.path.basename(csv_path)}"):
+                # Skip rows with empty or invalid scores
+                if row.get('strongreject_score', '').strip():
+                    all_rows.append(row)
+                else:
+                    skipped_count += 1
+        
+        print(f"Loaded rows from {os.path.basename(csv_path)}")
+    
+    print(f"Total loaded: {len(all_rows)} rows from {len(csv_paths)} file(s)")
+    if skipped_count > 0:
+        print(f"Skipped {skipped_count} rows with empty scores")
     return all_rows
 
 
@@ -625,25 +635,31 @@ def main():
     gc.collect()
     torch.cuda.empty_cache()
 
-    scored_csv_path = os.path.join(args.results_dir, args.base_model, "dataset", args.scored_csv)
+    scored_csv1 = "scored_train_harmful_prompts_cot5_out5.csv"
+    scored_csv2 = 'scored_orbench_extra_prompts_cot5_out5.csv'
 
-    scored_rows = load_scored_csv(scored_csv_path)
+    scored_csv_path1 = os.path.join(args.results_dir, args.base_model, "dataset", scored_csv1)
+    scored_csv_path2 = os.path.join(args.results_dir, args.base_model, "dataset", scored_csv2)
+
+    scored_rows = load_scored_csv([scored_csv_path1, scored_csv_path2])
+
+    print(f"Total reasoning samples: {len(scored_rows)}")
+
     quadrant_points = find_quadrant(scored_rows)
 
     # Get the original prompt and format it
     original_prompt = next((item['prompt'] for item in quadrant_points if item["prompt_idx"] == args.prompt_index), None)
-    # original_prompt = quadrant_points[args.index_number - 1]['prompt']
 
     # Get sentences from the specified CoT
     first_sentences = get_first_sentences(quadrant_points, args.prompt_index)
     print('first_sentences:', repr(first_sentences))
 
 
-    # base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
-    # if args.transfer_model is not None:
-    #     transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
-    if args.transfer_model_2 is not None:
-        transfer_model_2_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    base_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    if args.transfer_model is not None:
+        transfer_model_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
+    # if args.transfer_model_2 is not None:
+    #     transfer_model_2_generate(original_prompt=original_prompt, first_sentences=first_sentences, args=args)
 
 
 if __name__ == "__main__":

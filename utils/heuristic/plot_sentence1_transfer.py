@@ -112,7 +112,20 @@ def compute_stats_per_prompt_cot(
     prompt_to_stats = defaultdict(lambda: {'means': []})
     
     for (prompt, cot_rep_n), rows in tqdm(cot_groups.items(), desc="Processing CoT groups"):
-        chunk_scores = [float(row['strongreject_score']) for row in rows]
+        chunk_scores = []
+        for row in rows:
+            val = row.get('strongreject_score', '')
+            if val in ('', 'nan', 'NaN', None):
+                continue
+            try:
+                score = float(val)
+            except (ValueError, TypeError):
+                continue
+            if np.isnan(score):
+                continue
+            chunk_scores.append(score)
+        if not chunk_scores:
+            continue
         mean = statistics.mean(chunk_scores)
         prompt_to_stats[prompt]['means'].append(mean)
 
@@ -130,12 +143,14 @@ def plot_two_models(args, input_paths_base, input_paths_transfer, cot_numbers,
     prompt = None
     for input_path in input_paths_base:
         df = pd.read_csv(input_path)
-        prompt = df['prompt'][0]
+        df = df.dropna(subset=['strongreject_score'])
+        prompt = df['prompt'].iloc[0] if prompt is None else prompt
         scores_all_base.append(df['strongreject_score'].values)
 
     scores_all_transfer = []
     for input_path in input_paths_transfer:
         df = pd.read_csv(input_path)
+        df = df.dropna(subset=['strongreject_score'])
         scores_all_transfer.append(df['strongreject_score'].values)
 
     # Create figure
@@ -202,17 +217,20 @@ def plot_three_models(args, input_paths_base, input_paths_transfer, input_paths_
     prompt = None
     for input_path in input_paths_base:
         df = pd.read_csv(input_path)
-        prompt = df['prompt'][0]
+        df = df.dropna(subset=['strongreject_score'])
+        prompt = df['prompt'].iloc[0] if prompt is None else prompt
         scores_all_base.append(df['strongreject_score'].values)
 
     scores_all_transfer = []
     for input_path in input_paths_transfer:
         df = pd.read_csv(input_path)
+        df = df.dropna(subset=['strongreject_score'])
         scores_all_transfer.append(df['strongreject_score'].values)
 
     scores_all_transfer2 = []
     for input_path in input_paths_transfer2:
         df = pd.read_csv(input_path)
+        df = df.dropna(subset=['strongreject_score'])
         scores_all_transfer2.append(df['strongreject_score'].values)
 
     # Create figure
