@@ -16,7 +16,7 @@ import argparse
 import csv
 import glob
 import os
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from tqdm import tqdm
 from datasets import Dataset
 from strong_reject.evaluate import evaluate_dataset
@@ -34,38 +34,49 @@ def parse_args() -> argparse.Namespace:
                         help="Original prompt index")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size into strongreject evaluator")
+    parser.add_argument("--batch_size", type=int, default=8, help="Batch size into strongreject evaluator")
     return parser.parse_args()
 
-def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[float]:
+def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str, List[float]]:
     """
     Evaluate output scores using StrongReject evaluator.
 
     Args:
         all_rows: List of rows from the CSV file
+        batch_size: Batch size for evaluation
 
     Returns:
-        List of StrongReject scores
+        Dict mapping score column names to lists of scores.
+        Keys: "score", "refusal", "convincingness", "specificity"
     """
+
+    # Extract prompts and outputs for evaluation
     prompts = [row["prompt"] for row in all_rows]
     outputs = [row["output"] for row in all_rows]
 
+    # Create output dataset for evaluation
     output_dataset: Dataset = Dataset.from_dict({
         "forbidden_prompt": prompts,
         "response": outputs
     })
 
+    # Evaluate outputs using StrongReject
     print("Evaluating outputs with StrongReject...")
     evaluator_results = evaluate_dataset(
         output_dataset,
-        ["strongreject_finetuned"],
+        ["strongreject_rubric"],
         batch_size=batch_size
     )
 
-    scores = evaluator_results["score"]
-    print(f"Generated {len(scores)} scores")
+    score_columns = {}
+    score_columns["score"] = evaluator_results["score"]
+    for subscore in ("refusal", "convincingness", "specificity"):
+        if subscore in evaluator_results.column_names:
+            score_columns[subscore] = evaluator_results[subscore]
 
-    return scores
+    print(f"Generated {len(score_columns['score'])} scores with columns: {list(score_columns.keys())}")
+
+    return score_columns
 
 def save_scored(model_name, input_paths, args):
     for input_path in input_paths:
@@ -80,6 +91,14 @@ def save_scored(model_name, input_paths, args):
         # Load data
         print(f"\nReading data from: {input_path}")
 
+        # Build the list of score columns to add
+        score_field_map = {
+            "score": "strongreject_score",
+            "refusal": "strongreject_refusal",
+            "convincingness": "strongreject_convincingness",
+            "specificity": "strongreject_specificity",
+        }
+
         all_rows = []
         with open(input_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
@@ -90,16 +109,26 @@ def save_scored(model_name, input_paths, args):
         print(f"Loaded {len(all_rows)} rows")
 
         # Compute scores
-        scores = compute_scores(all_rows, args.batch_size)
+        score_columns = compute_scores(all_rows, args.batch_size)
 
         # Save with scores
-        new_fieldnames = list(fieldnames) + ['strongreject_score']
-        with open(output_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=new_fieldnames)
+        new_fieldnames = list(fieldnames)
+
+        for key, csv_col in score_field_map.items():
+            if key in score_columns and csv_col not in new_fieldnames:
+                new_fieldnames.append(csv_col)
+
+        # Write CSV with scores
+        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=new_fieldnames)
             writer.writeheader()
-            for idx, row in enumerate(tqdm(all_rows, desc="Writing scored CSV")):
-                row['strongreject_score'] = scores[idx]
-                writer.writerow(row)
+
+            for i, row in enumerate(tqdm(all_rows, desc="Writing scored CSV")):
+                scored_row = row.copy()
+                for key, csv_col in score_field_map.items():
+                    if key in score_columns:
+                        scored_row[csv_col] = score_columns[key][i]
+                writer.writerow(scored_row)
 
         print(f"Saved scored results to: {output_path}")
 
@@ -139,23 +168,23 @@ def main() -> None:
     print(f"Found {len(input_paths_base)} input file(s): {[os.path.basename(p) for p in input_paths_base]}")
     print(f"Found {len(input_paths_transfer)} input file(s): {[os.path.basename(p) for p in input_paths_transfer]}")
     
-    # save_scored(args.base_model, input_paths_base, args)
-    # save_scored(args.transfer_model, input_paths_transfer, args)
+    save_scored(args.base_model, input_paths_base, args)
+    save_scored(args.transfer_model, input_paths_transfer, args)
 
-    if args.transfer_model_2 is not None:
-        pattern_transfer2 = os.path.join(
-            args.results_dir,
-            args.transfer_model_2,
-            'dataset',
-            'resample',
-            transfer_csv
-        )
-        input_paths_transfer2 = sorted(glob.glob(pattern_transfer2))
-        if not input_paths_transfer2:
-            print(f"No input files found matching pattern: {pattern_transfer2}")
-            return
-        print(f"Found {len(input_paths_transfer2)} input file(s): {[os.path.basename(p) for p in input_paths_transfer2]}")
-        save_scored(args.transfer_model_2, input_paths_transfer2, args)
+    # if args.transfer_model_2 is not None:
+    #     pattern_transfer2 = os.path.join(
+    #         args.results_dir,
+    #         args.transfer_model_2,
+    #         'dataset',
+    #         'resample',
+    #         transfer_csv
+    #     )
+    #     input_paths_transfer2 = sorted(glob.glob(pattern_transfer2))
+    #     if not input_paths_transfer2:
+    #         print(f"No input files found matching pattern: {pattern_transfer2}")
+    #         return
+    #     print(f"Found {len(input_paths_transfer2)} input file(s): {[os.path.basename(p) for p in input_paths_transfer2]}")
+    #     save_scored(args.transfer_model_2, input_paths_transfer2, args)
 
 
 if __name__ == "__main__":
