@@ -39,8 +39,6 @@ def parse_args():
                         help="First CoT sentence taken from this model")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
-    parser.add_argument("--train_csv", type=str, default='train_harmful_prompts_cot5_out5.csv',
-                        help="Scored CSV file with prompts")
     parser.add_argument("--max_new_tokens", type=int, default=2048,
                         help="Maximum tokens for generation")
     parser.add_argument("--temperature", type=float, default=0.6,
@@ -312,10 +310,17 @@ def rollout_generate(results, args):
 
 def main():
     args = parse_args()
-    csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.train_csv)
-    output_csv_path = f"{os.path.splitext(csv_path)[0]}_rollout_s1_fast.csv"
+    csv1 = "train_harmful_prompts_cot5_out5.csv"
+    csv2 = 'orbench_extra_prompts_cot5_out5.csv'
 
-    df = pd.read_csv(csv_path)
+    csv_path1 = os.path.join(args.results_dir, args.model_name, "dataset", csv1)
+    csv_path2 = os.path.join(args.results_dir, args.model_name, "dataset", csv2)
+    output_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", 'combined_datasets_rollout_s1.csv')
+
+    df1 = pd.read_csv(csv_path1)
+    df2 = pd.read_csv(csv_path2)
+    df = pd.concat([df1, df2], ignore_index=True)
+
     print(f"Total reasoning samples: {len(df)}")
     # df = df.head(1)
     # Group and count in one step
