@@ -13,7 +13,7 @@ Workflow:
     5. Save results with prompt, seed sentence, and generated outputs
 
 Usage:
-    python rollout_s1.py --model_name <model> --train_csv <input.csv>
+    python rollout_s1_fast.py --model_name <model> --train_csv <input.csv>
 """
 
 from builtins import Exception, bool, enumerate, float, int, len, min, print, repr, str
@@ -121,73 +121,6 @@ def extract_valid_output(generated_text: str, model_name: str = None) -> str | N
         return match.group(2)
     return None
 
-def generate_valid_outputs(
-    llm: LLM,
-    model_name: str,
-    prompt: str,
-    max_tokens: int,
-    temperature: float,
-    num_required: int,
-    max_total_generations: int,
-    is_last_sentence: bool
-) -> Tuple[List[Tuple[str, str]], int]: # type: ignore
-    """
-    Generate exactly num_required valid outputs using n parameter.
-    
-    With high success rates, this typically completes in one batch.
-    If some outputs are invalid (missing </think> tag), subsequent 
-    iterations generate exactly the number still needed.
-    
-    Args:
-        llm: The vLLM model instance
-        prompt: The input prompt to generate from
-        max_tokens: Maximum tokens for generation
-        temperature: Sampling temperature
-        num_required: Number of valid outputs needed
-        max_total_generations: Safety limit on total generations
-        is_last_sentence: If True, all outputs are valid (no </think> check needed)
-    
-    Returns:
-        Tuple of (list of (generated_text, output_text) tuples, total_generated count)
-    """
-    valid_outputs = []
-    total_generated = 0
-    
-    while len(valid_outputs) < num_required and total_generated < max_total_generations:
-        # Generate exactly what we still need
-        num_to_generate = min(
-            num_required - len(valid_outputs),
-            max_total_generations - total_generated
-        )
-        
-        # Use n parameter instead of duplicating prompts
-        sampling_params = SamplingParams(
-            n=num_to_generate,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        
-        outputs = llm.generate([prompt], sampling_params)
-        total_generated += num_to_generate
-        
-        # Filter for valid outputs - outputs[0] contains all n generations
-        for out in outputs[0].outputs:
-            if len(valid_outputs) >= num_required:
-                break
-            
-            generated_text = out.text
-            
-            if is_last_sentence:
-                output_text = generated_text
-            else:
-                output_text = extract_valid_output(generated_text, model_name)
-            
-            if output_text is not None:
-                valid_outputs.append((generated_text, output_text))
-        
-        print(f"  Generated {total_generated} total, {len(valid_outputs)}/{num_required} valid")
-    
-    return valid_outputs, total_generated
 
 def rollout_generate(results, args):
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
@@ -209,7 +142,11 @@ def rollout_generate(results, args):
         
         chat = [{"role": "user", "content": original_prompt}]
         formatted_prompt = tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
+        if args.model_name == "openai/gpt-oss-20b":
+            formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
+
         combined_thread = formatted_prompt + first_sentence
+        print('combined_thread:', repr(combined_thread))
         
         prompt_data.append({
             'idx': idx,
@@ -249,7 +186,7 @@ def rollout_generate(results, args):
             
             # Extract valid outputs from batch results
             for out in output.outputs:
-                generated_text = out.text
+                generated_text = tokenizer.decode(out.token_ids, skip_special_tokens=False)
                 output_text = extract_valid_output(generated_text, args.model_name)
                 
                 if output_text is not None:
@@ -276,7 +213,7 @@ def rollout_generate(results, args):
                 total_generated += num_to_generate
                 
                 for out in retry_outputs[0].outputs:
-                    generated_text = out.text
+                    generated_text = tokenizer.decode(out.token_ids, skip_special_tokens=False)
                     output_text = extract_valid_output(generated_text, args.model_name)
                     
                     if output_text is not None:
