@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# # Terminal 1: Start vLLM server once
+# CUDA_VISIBLE_DEVICES=0 vllm serve openai/gpt-oss-20b \
+#     --tensor-parallel-size 1 \
+#     --gpu-memory-utilization 0.5
+
+
 MODEL_NAMES=(
     deepseek-ai/DeepSeek-R1-Distill-Llama-8B
     deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
@@ -8,8 +14,8 @@ MODEL_NAMES=(
     openai/gpt-oss-20b
 )
 
-REPETITION=15
-NUM_ROWS=30
+REPETITION=10
+NUM_ROWS=50
 
 # Create log file with timestamp
 LOG_DIR="logs"
@@ -40,8 +46,10 @@ for MODEL_NAME in "${MODEL_NAMES[@]}"; do
     echo "=== Step 2: Compute scores ==="
     uv run -m utils.heuristic.compute_scores_rollouts --model_name "$MODEL_NAME" --repetitions $REPETITION
 
+    echo "=== Step 3: Plot figure ==="
+    uv run -m utils.heuristic.plot_matrix --model_name "$MODEL_NAME" --repetitions "$REPETITION"
+
 done
-# echo "=== Step 3: Plot figure ==="
-# uv run -m utils.heuristic.plot_resample_graph --model_name "$MODEL_NAME" --index_number "$INDEX_NUM" --cot_number "$COT_NUM" --repetitions "$REPETITION"
+
 
 

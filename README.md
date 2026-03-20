@@ -312,6 +312,36 @@ uv run -m utils.compute_score_outputs \
   --input_dir dataset
 ```
 
+### Experiment 3: Aggregated results that capture the differences between the reasoning trace trajectories between models.
+
+> [!NOTE]
+> EXPERIMENT 3. you can use workflow bash script `stats_ex3.sh` in order to run experiment 3, which generates refusal and nonrefusal rollout generation heatmaps for each model.
+
+`utils/heuristic/rollout_full_cot.py` randomly samples `n=50` prompt-cot sequences that reliably lead to refusal and non-refusal (sampled from the refusal and non-refusal CoT datasets unique to each model, `refusal_0.2_cot.csv` and `refusal_0.2_cot.csv`). For each sentence in the reasoning trace, S_i, it generates `k=10` rollouts conditioned on the prompt and CoT sentence up to and including it, "prompt + S_1 + S_2 + S_3 + ... + S_i". The first `k=10` rollouts are from "prompt", and the next `k=10` rollouts are from "prompt + S1", so on and so forth. The generations are saved as `full_resample_*_rep_{repetitions}.csv`.
+
+```bash
+uv run -m utils.heuristic.rollout_full_cot \
+  --model_name {model_name} \
+  --repetitions {repetitions} \
+  --n {num_rows}
+```
+
+`utils/heuristic/compute_scores_rollouts` computes the scores for these rollout generations.
+
+```bash
+uv run -m utils.heuristic.compute_scores_rollouts \
+  --model_name {model_name} \
+  --repetitions {repetitions}
+```
+
+`utils/heuristic/plot_matrix` builds a matrix where rows are prompt-cot sequences and columns are normalised sentence positions,  with cell colour representing the mean score at that point averaged across `k=10` rollouts. This gives a birds-eye view of the sampled dataset, making it easy to spot how safety decisions are made throughout the CoT. The very far left datapoint in the heatmap corresponds to generation from just "prompt" and as you move further right, generations from "prompt + S_1 + S_2 + S_3 + ... + S_i", with increasing depth in the reasoning trace. This is repeated for `n=50` refusal prompt-cot sequence and `n=50` non-refusal prompt-cot sequence.
+
+```bash
+uv run -m utils.heuristic.plot_matrix \
+  --model_name {model_name} \
+  --repetitions {repetitions}
+```
+
 ## Prompt-based Attacks 
 
 This GCG-style implementation is adapted from GraySwanAI's [nanoGCG](https://github.com/GraySwanAI/nanoGCG) (MIT license), with the adition of activation caution minimisation (via dot product with pre-computed cautious vector).
