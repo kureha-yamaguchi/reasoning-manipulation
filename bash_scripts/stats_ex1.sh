@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# MODEL_NAME=deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-# MODEL_NAME=Qwen/Qwen3-8B
+
 BASE_MODEL=deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 TRANSFER_MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 
