@@ -26,7 +26,7 @@ Output Files:
             Contains prompts where {percentage_threshold}% of outputs have scores above upper threshold
 
 Usage:
-    uv -m utils.filter_all_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+    uv run -m utils.filter_all_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
 """
 
 import argparse
@@ -63,13 +63,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--cot_lower_threshold",
         type=float,
-        default=0.05,
+        default=0.20,
         help="CoT lower threshold for creating refusal dataset"
     )
     parser.add_argument(
         "--cot_upper_threshold",
         type=float,
-        default=0.6,
+        default=0.80,
         help="CoT upper threshold for creating non-refusal dataset"
     )
     
@@ -77,13 +77,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--baseline_lower_threshold",
         type=float,
-        default=0.05,
+        default=0.20,
         help="Baseline lower threshold for creating refusal dataset"
     )
     parser.add_argument(
         "--baseline_upper_threshold",
         type=float,
-        default=0.60,
+        default=0.80,
         help="Baseline upper threshold for creating non-refusal dataset"
     )
     parser.add_argument(
