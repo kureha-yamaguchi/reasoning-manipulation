@@ -1,5 +1,5 @@
 """
-Script to score model output generations using StrongReject evaluator.
+Script to score model output generations using rubric based StrongReject evaluator.
 
 Example usage:
 

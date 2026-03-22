@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
                         help="Results directory")
     parser.add_argument("--batch_size", type=int, default=8, 
                         help="Batch size into strongreject evaluator")
-    parser.add_argument("--repetitions", type=int, default=5,
+    parser.add_argument("--repetitions", type=int, default=10,
                         help="Number of output variations per prompt")
     return parser.parse_args()
 
@@ -47,9 +47,17 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str,
     outputs = [row["output"] for row in all_rows]
 
     # Create output dataset for evaluation
+    # Pre-populate score columns so the schema is consistent across all
+    # multiprocessing workers (avoids KeyError when some batches don't
+    # return every subscore).
+    n = len(prompts)
     output_dataset: Dataset = Dataset.from_dict({
         "forbidden_prompt": prompts,
-        "response": outputs
+        "response": outputs,
+        "score": [float('nan')] * n,
+        "refusal": [float('nan')] * n,
+        "convincingness": [float('nan')] * n,
+        "specificity": [float('nan')] * n,
     })
 
     # Evaluate outputs using StrongReject
@@ -76,6 +84,10 @@ def save_scored(input_paths, args):
             os.path.dirname(input_path),
             f'scored_{os.path.basename(input_path)}'
         )
+        if os.path.exists(output_path):
+            print(f"\nSkipping {input_path} — scored file already exists: {output_path}")
+            continue
+            
         # Load data
         print(f"\nReading data from: {input_path}")
 
@@ -125,6 +137,8 @@ def main() -> None:
 
     input_csv = f'full_resample_*_rep_{args.repetitions}.csv'
 
+    # Score Refusal
+    print("=====Scoring refusal=====")
     pattern_refusal = os.path.join(
         args.results_dir,
         args.model_name,
@@ -132,6 +146,15 @@ def main() -> None:
         'refusal',
         input_csv
     )
+    input_paths_refusal = sorted(glob.glob(pattern_refusal))
+    if not input_paths_refusal:
+        print(f"No input files found matching pattern: {pattern_refusal}")
+        return
+    print(f"Found {len(input_paths_refusal)} input file(s): {[os.path.basename(p) for p in input_paths_refusal]}")
+    save_scored(input_paths_refusal, args)
+
+    # Score Nonrefusal
+    print("=====Scoring nonrefusal=====")
     pattern_nonrefusal = os.path.join(
         args.results_dir,
         args.model_name,
@@ -139,21 +162,11 @@ def main() -> None:
         'nonrefusal',
         input_csv
     )
-
-    input_paths_refusal = sorted(glob.glob(pattern_refusal))
     input_paths_nonrefusal = sorted(glob.glob(pattern_nonrefusal))
-
-    if not input_paths_refusal:
-        print(f"No input files found matching pattern: {pattern_refusal}")
-        return
     if not input_paths_nonrefusal:
         print(f"No input files found matching pattern: {pattern_nonrefusal}")
         return
-    
-    print(f"Found {len(input_paths_refusal)} input file(s): {[os.path.basename(p) for p in input_paths_refusal]}")
     print(f"Found {len(input_paths_nonrefusal)} input file(s): {[os.path.basename(p) for p in input_paths_nonrefusal]}")
-
-    save_scored(input_paths_refusal, args)
     save_scored(input_paths_nonrefusal, args)
 
 
