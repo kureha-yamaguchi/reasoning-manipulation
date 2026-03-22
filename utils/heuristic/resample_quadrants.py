@@ -10,16 +10,15 @@ Docstring for utils.heuristic.resample_quadrants.
 
 Example usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-uv run -m utils.heuristic.resample_quadrants_better \
+uv run -m utils.heuristic.resample_quadrants \
   --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-  --index_number 3\
-  --cot_number 1 \
+  --prompt_number 174,246,309
 '''
 
 import csv
 import os
 import argparse
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 
 from tqdm import tqdm
 from collections import defaultdict
@@ -38,19 +37,15 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate multiple output rollouts per prompt for non-reasoning models"
     )
-    parser.add_argument("--index_number", type=int, required=True,
-                        help="Index number as per quadrant_output.txt")
-    parser.add_argument("--cot_number", type=int, required=True,
-                        help="Cot number as per quadrant_output.txt (x/5)")
+    parser.add_argument("--prompt_index", type=lambda s: [int(x) for x in s.split(',')],
+                        required=True, help="Comma-separated prompt indices (e.g. 12,14,16)")
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="Model to use for generation")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
-    parser.add_argument("--scored_csv", type=str, default='scored_train_harmful_prompts_cot5_out5.csv',
-                        help="Scored CSV file with prompts")
-    parser.add_argument("--repetitions", type=int, default=15,
+    parser.add_argument("--repetitions", type=int, default=10,
                         help="Number of output variations per prompt")
-    parser.add_argument("--max_new_tokens", type=int, default=2048,
+    parser.add_argument("--max_new_tokens", type=int, default=4096,
                         help="Maximum tokens for generation")
     parser.add_argument("--temperature", type=float, default=0.6,
                         help="Temperature for sampling")
@@ -60,35 +55,46 @@ def parse_args():
                         help="GPU memory utilization ratio")
     parser.add_argument("--max_retries_multiplier", type=int, default=10,
                         help="Maximum total generations = repetitions * this multiplier (safety limit)")
-    parser.add_argument("--first_sentence", action="store_true", help="Flag for first sentence")
     return parser.parse_args()
 
 
-def load_scored_csv(csv_path: str) -> List[Dict[str, str]]:
+def load_scored_csv(csv_paths: Union[str, List[str]]) -> List[Dict[str, str]]:
     """
-    Load CSV data with pre-computed scores.
+    Load CSV data with pre-computed scores from one or more files.
     
     Args:
-        csv_path: Path to the CSV file containing scores
+        csv_paths: Path to a CSV file or list of paths to CSV files containing scores
     
     Returns:
         List of dictionaries containing all CSV data including scores
     """
-    print(f"Loading scored data from: {csv_path}")
+    if isinstance(csv_paths, str):
+        csv_paths = [csv_paths]
     
-    # First pass: count rows for progress bar
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        total_rows = sum(1 for _ in reader)
-    
-    # Second pass: load data with progress bar
     all_rows = []
-    with open(csv_path, 'r', encoding='utf-8') as f:
-        reader = csv.DictReader(f)
-        for row in tqdm(reader, total=total_rows, desc="Loading scored data"):
-            all_rows.append(row)
+    skipped_count = 0
     
-    print(f"Loaded {len(all_rows)} rows")
+    for csv_path in csv_paths:
+        print(f"Loading scored data from: {csv_path}")
+        
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            total_rows = sum(1 for _ in reader)
+        
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in tqdm(reader, total=total_rows, desc=f"Loading {os.path.basename(csv_path)}"):
+                # Skip rows with empty or invalid scores
+                if row.get('strongreject_score', '').strip():
+                    all_rows.append(row)
+                else:
+                    skipped_count += 1
+        
+        print(f"Loaded rows from {os.path.basename(csv_path)}")
+    
+    print(f"Total loaded: {len(all_rows)} rows from {len(csv_paths)} file(s)")
+    if skipped_count > 0:
+        print(f"Skipped {skipped_count} rows with empty scores")
     return all_rows
 
 
@@ -194,34 +200,37 @@ def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.35):
 
 def split_cot_into_sentences(cot: str) -> List[str]:
     """
-    Split a chain-of-thought text into individual sentences,
-    preserving trailing whitespace for each sentence.
+    PRESERVES LEADING WHITESPACES
+    Split chain-of-thought text into sentences with leading whitespace.
+    
+    Each sentence after the first carries a leading space so that
+    "".join(sentences) reconstructs the original spacing and tokens
+    align with BPE's leading-whitespace convention.
     
     Args:
         cot: The chain-of-thought text string
         
     Returns:
-        List of sentences (with trailing whitespace preserved)
+        List of sentences. The first has no leading whitespace; all
+        subsequent sentences have a single leading space.
     """
-    # Match a sentence ending in punctuation, plus any trailing whitespace
-    sentence_pattern = r'.*?[.!?](?:\s+|$)'
+    # \s*          - leading whitespace (none for first sentence, space for rest)
+    # .*?          - content (non-greedy)
+    # [.!?]["']?   - sentence-ending punctuation + optional closing quote
+    # (?=\s|$)     - lookahead: whitespace or end of string
     
-    sentences = re.findall(sentence_pattern, cot)
+    pattern = r'\s*.*?(?:[.!?]["\']?(?=\s|$)|</?think>)'
+    sentences = re.findall(pattern, cot)
     
-    # Filter out truly empty matches (but keep whitespace intact)
-    sentences = [s for s in sentences if s]
-    return sentences
+    return [s for s in sentences if s]
 
 
-def get_sentences(quadrant_points, index_number=19, cot_number=1):
+def get_sentences(quadrant_points, prompt_index):
     """Extract sentences from specified quadrant point."""
-    gc.collect()
-    torch.cuda.empty_cache()
-
-    index_number -= 1
-    cot_number -= 1
-    cot = quadrant_points[index_number]['cots'][cot_number]
-    sentences = split_cot_into_sentences(cot)
+    sentences = []
+    cots = next((item['cots'] for item in quadrant_points if item["prompt_idx"] == prompt_index), None)
+    for cot in cots:
+        sentences.append(split_cot_into_sentences(cot))
     
     return sentences
 
@@ -254,6 +263,7 @@ def extract_valid_output(generated_text: str, model_name: str = None) -> str | N
 
 def generate_valid_outputs(
     llm: LLM,
+    tokenizer: AutoTokenizer,
     prompt: str,
     sampling_params: SamplingParams,
     num_required: int,
@@ -297,7 +307,7 @@ def generate_valid_outputs(
             if len(valid_outputs) >= num_required:
                 break
             
-            generated_text = output.outputs[0].text
+            generated_text = tokenizer.decode(output.outputs[0].token_ids, skip_special_tokens=False)
             
             if is_last_sentence:
                 output_text = generated_text
@@ -311,6 +321,94 @@ def generate_valid_outputs(
     
     return valid_outputs, total_generated
 
+def save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, dir, args):
+
+    original_prompt = next((item['prompt'] for item in quadrant_points if item["prompt_idx"] == idx), None)
+
+    # Get all sentences from the specified prompt in quadrant points
+    sentences_list = get_sentences(quadrant_points, idx)
+
+    for cot_number, sentences in enumerate(sentences_list):
+
+        if args.model_name == "openai/gpt-oss-20b":
+            sentences.append("<|end|><|start|>assistant<|channel|>final<|message|>")
+        
+        chat = [{"role": "user", "content": original_prompt}]
+        formatted_prompt = tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
+
+        if args.model_name == "openai/gpt-oss-20b":
+            formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
+
+        print('formatted_prompt:', repr(formatted_prompt))
+
+        # Store results for CSV
+        results = []
+        
+        # Safety limit for maximum generations per sentence
+        max_total_generations = args.repetitions * args.max_retries_multiplier
+
+        num_sentences = len(sentences)
+
+        # Process each sentence position
+        for i in range(num_sentences + 1):
+            current_sentence_idx = i # starting from just generations from the prompt
+
+            # Build the prompt: formatted_prompt + sentences up to current position
+            cot_prefix = "".join(sentences[:current_sentence_idx])
+
+            combined_thread = formatted_prompt + cot_prefix
+            
+            print(f"\n{'='*60}")
+            print(f"Resampling from sentence S{current_sentence_idx}/{num_sentences}")
+            print(f"Target: {args.repetitions} valid rollouts")
+            
+            # Check if this is the last sentence (no </think> validation needed)
+            is_last_sentence = (current_sentence_idx == len(sentences))
+            
+            # Generate valid outputs
+            valid_outputs, total_generated = generate_valid_outputs(
+                llm=llm,
+                tokenizer=tokenizer,
+                prompt=combined_thread,
+                sampling_params=sampling_params,
+                num_required=args.repetitions,
+                max_total_generations=max_total_generations,
+                is_last_sentence=is_last_sentence,
+                model_name=args.model_name
+            )
+            
+            # Report results
+            if len(valid_outputs) < args.repetitions:
+                print(f"  WARNING: Only obtained {len(valid_outputs)}/{args.repetitions} valid outputs "
+                    f"after {total_generated} generations (hit safety limit)")
+            else:
+                print(f"  Successfully obtained {args.repetitions} valid rollouts "
+                    f"(generated {total_generated} total)")
+            
+            # Add valid outputs to results
+            for j, (gen_text, output_text) in enumerate(valid_outputs):
+                results.append({
+                    'prompt': original_prompt,
+                    'sentence_idx': current_sentence_idx,
+                    'resample_n': j + 1,
+                    'combined_thread': combined_thread,
+                    'generated_text': gen_text,
+                    'output': output_text
+                })
+
+
+        # Save results to CSV
+        output_csv_path = os.path.join(dir, 'quadrants',
+            f"full_resample_prompt{idx}_cot{cot_number}_rep_{args.repetitions}.csv"
+        )
+        
+        os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
+        
+        df = pd.DataFrame(results)
+        df.to_csv(output_csv_path, index=False)
+        print(f"\n{'='*60}")
+        print(f"Results saved to: {output_csv_path}")
+        print(f"Total rollouts generated: {len(results)}")
 
 def main():
     args = parse_args()
@@ -321,23 +419,6 @@ def main():
     print(f"CUDA available: {torch.cuda.is_available()}")
     gc.collect()
     torch.cuda.empty_cache()
-
-    scored_csv_path = os.path.join(args.results_dir, args.model_name, "dataset", args.scored_csv)
-
-    scored_rows = load_scored_csv(scored_csv_path)
-    quadrant_points = find_quadrant(scored_rows)
-
-    # Get sentences from the specified CoT
-    sentences = get_sentences(quadrant_points, index_number=args.index_number, cot_number=args.cot_number)
-
-    if args.model_name == "openai/gpt-oss-20b":
-        sentences.append("<|end|><|start|>assistant<|channel|>final<|message|>")
-
-    if args.first_sentence:
-        num_sentences = 1
-    else:
-        num_sentences = len(sentences)
-
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     
@@ -356,85 +437,24 @@ def main():
     )
     print("Model loaded successfully!")
 
-    # Get the original prompt and format it
-    original_prompt = quadrant_points[args.index_number - 1]['prompt']
-    chat = [{"role": "user", "content": original_prompt}]
-    formatted_prompt = tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
+    # Datasets
 
-    if args.model_name == "openai/gpt-oss-20b":
-        formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
-    print('formatted_prompt:', repr(formatted_prompt))
+    scored_csv1 = "scored_train_harmful_prompts_cot5_out5.csv"
+    scored_csv2 = 'scored_orbench_extra_prompts_cot5_out5.csv'
 
-    # Store results for CSV
-    results = []
-    
-    # Safety limit for maximum generations per sentence
-    max_total_generations = args.repetitions * args.max_retries_multiplier
+    dir = os.path.join(args.results_dir, args.model_name, "dataset")
 
-    # Process each sentence position
-    for i in range(num_sentences):
-        current_sentence_idx = i + 1  # 1-indexed for clarity
+    scored_csv_path1 = os.path.join(dir, scored_csv1)
+    scored_csv_path2 = os.path.join(dir, scored_csv2)
 
-        # Build the prompt: formatted_prompt + sentences up to current position
-        cot_prefix = "".join(sentences[:current_sentence_idx])
+    scored_rows = load_scored_csv([scored_csv_path1, scored_csv_path2])
+    print(f"Total reasoning samples: {len(scored_rows)}")
 
-        combined_thread = formatted_prompt + cot_prefix
-        
-        print(f"\n{'='*60}")
-        print(f"Resampling from sentence S{current_sentence_idx}/{num_sentences}")
-        print(f"Target: {args.repetitions} valid rollouts")
-        
-        # Check if this is the last sentence (no </think> validation needed)
-        is_last_sentence = (current_sentence_idx == len(sentences))
-        
-        # Generate valid outputs
-        valid_outputs, total_generated = generate_valid_outputs(
-            llm=llm,
-            prompt=combined_thread,
-            sampling_params=sampling_params,
-            num_required=args.repetitions,
-            max_total_generations=max_total_generations,
-            is_last_sentence=is_last_sentence,
-            model_name=args.model_name
-        )
-        
-        # Report results
-        if len(valid_outputs) < args.repetitions:
-            print(f"  WARNING: Only obtained {len(valid_outputs)}/{args.repetitions} valid outputs "
-                  f"after {total_generated} generations (hit safety limit)")
-        else:
-            print(f"  Successfully obtained {args.repetitions} valid rollouts "
-                  f"(generated {total_generated} total)")
-        
-        # Add valid outputs to results
-        for j, (gen_text, output_text) in enumerate(valid_outputs):
-            results.append({
-                'prompt': original_prompt,
-                'sentence_idx': current_sentence_idx,
-                'resample_n': j + 1,
-                'combined_thread': combined_thread,
-                'generated_text': gen_text,
-                'output': output_text
-            })
+    quadrant_points = find_quadrant(scored_rows)
 
-    if args.first_sentence:
-        output_dir = os.path.join(args.results_dir, args.model_name, "dataset", "first_sentence")
-    else:
-        output_dir = os.path.join(args.results_dir, args.model_name, "dataset")
-
-
-    # Save results to CSV
-    output_csv_path = os.path.join(output_dir,
-        f"resampling_results_idx{args.index_number}_cot{args.cot_number}.csv"
-    )
-    
-    os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
-    
-    df = pd.DataFrame(results)
-    df.to_csv(output_csv_path, index=False)
-    print(f"\n{'='*60}")
-    print(f"Results saved to: {output_csv_path}")
-    print(f"Total rollouts generated: {len(results)}")
+    # repeat for every prompt in quadrant
+    for idx in args.prompt_index:
+        save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, dir, args)
 
 
 if __name__ == "__main__":

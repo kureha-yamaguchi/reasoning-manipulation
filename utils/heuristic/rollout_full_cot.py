@@ -1,19 +1,3 @@
-'''
-Docstring for utils.heuristic.rollout_full_cot.
-
-1. Reads in rows from scored_train_harmful_prompts_cot5_out5.csv
-2. Identifies points that lie in the quadrant. These are generations that have low standard deviation conditioned on the specific prompt-CoT but high standard deviation when conditioned only on the prompt.
-3. Performs resampling with n rollouts for a given index_number and cot_number in the quadrant, beginning at cot sentence S1 and ending at the last sentence S(len(sentences))
-4. Partitions into output (after close think tag)
-5. Saves generations
-
-
-Example usage:
-CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-uv run -m utils.heuristic.rollout_full_cot \
-  --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B
-'''
-
 import csv
 import os
 import argparse
@@ -110,7 +94,7 @@ def split_cot_into_sentences(cot: str) -> List[str]:
     # [.!?]["']?   - sentence-ending punctuation + optional closing quote
     # (?=\s|$)     - lookahead: whitespace or end of string
     
-    pattern = r'\s*.*?[.!?]["\']?(?=\s|$)'
+    pattern = r'\s*.*?(?:[.!?]["\']?(?=\s|$)|</?think>)'
     sentences = re.findall(pattern, cot)
     
     return [s for s in sentences if s]
@@ -244,8 +228,8 @@ def save_rollouts(llm, tokenizer, sampling_params, csv_path, args):
 
         num_sentences = len(sentences)
         # Process each sentence position
-        for i in range(num_sentences):
-            current_sentence_idx = i + 1  # 1-indexed for clarity
+        for i in range(num_sentences + 1):
+            current_sentence_idx = i # 1-indexed for clarity
 
             # Build the prompt: formatted_prompt + sentences up to current position
             cot_prefix = "".join(sentences[:current_sentence_idx])
