@@ -6,8 +6,8 @@ from typing import List, Optional, Union
 
 @dataclass
 class GCGConfig:
-    num_steps: int = 150
-    optim_str_init: Union[str, List[str]] = "x x x x x x x x x x x x x x x x x x x x"
+    num_steps: int = 500
+    optim_str_init: Union[str, List[str]] = "x x x x x x x x x x x x x x x x x x x x"  # 20 tokens
     search_width: int = 512
     batch_size: Optional[int] = None
     topk: int = 256
@@ -20,11 +20,10 @@ class GCGConfig:
     use_prefix_cache: bool = True
 
     # IRIS parameters
-    beta: float = 0.5
+    beta: float = 0.75
     use_iris: bool = True
     refusal_mode: str = "cot"  # "cot" or "baseline"
-    refusal_layer: Optional[int] = None  # None => use best layer from model config
-    extended_gen_tokens: int = 15
+    refusal_layer: Optional[int] = None  # Layer to load refusal vector from (None => best layer)
     target_tokens: int = 20
 
     # Generation

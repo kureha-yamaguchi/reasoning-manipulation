@@ -17,9 +17,8 @@ from transformers.cache_utils import DynamicCache
 
 from prompt_attack.buffer import AttackBuffer
 from prompt_attack.config import GCGConfig
-from prompt_attack.generation import generate_extended_tokens
 from prompt_attack.hooks import ActivationHookManager
-from prompt_attack.losses import combined_loss, refusal_direction_loss, token_forcing_loss
+from prompt_attack.losses import combined_loss, multi_layer_refusal_loss, token_forcing_loss
 from prompt_attack.sampling import filter_ids, sample_ids_from_grad
 from prompt_attack.utils import (
     INIT_CHARS,
@@ -51,7 +50,11 @@ class GCGResult:
 
 class GCG:
     """GCG+IRIS optimizer: optimizes an adversarial suffix to minimize a combined
-    token-forcing + refusal-direction loss."""
+    token-forcing + refusal-direction loss.
+
+    IRIS loss (Eq. 8, Huang et al. NAACL 2025): computed on the last INPUT
+    token's hidden state across ALL layers, not on output/generated tokens.
+    """
 
     def __init__(
         self,
@@ -87,10 +90,16 @@ class GCG:
             if wandb.run is not None:
                 wandb.finish()
             self.using_wandb = True
+            wandb_cfg = asdict(config)
+            # Merge any extra config (e.g. model name) from wandb_config
+            extra = config.wandb_config.get("config", {})
+            wandb_cfg.update(extra)
             wandb.init(
                 project=config.wandb_config.get("project", "gcg-iris"),
                 entity=config.wandb_config.get("entity"),
-                config=asdict(config),
+                config=wandb_cfg,
+                tags=config.wandb_config.get("tags"),
+                group=config.wandb_config.get("group"),
             )
             if wandb.run is not None:
                 name = config.wandb_config.get("name")
@@ -103,7 +112,7 @@ class GCG:
         atexit.register(self._cleanup)
 
     def _setup_iris(self, refusal_vector: Optional[Tensor], refusal_vector_path: Optional[str]):
-        """Load refusal vector and register activation hooks."""
+        """Load refusal vector and register activation hooks on ALL layers."""
         if refusal_vector is not None:
             self.refusal_vec = refusal_vector.to(self.model.device, self.model.dtype)
         elif refusal_vector_path:
@@ -116,11 +125,11 @@ class GCG:
         # Unit-normalize
         self.refusal_vec = self.refusal_vec / self.refusal_vec.norm()
 
-        # Register hooks
-        layer_idx = self.config.refusal_layer
-        if layer_idx is None:
-            raise ValueError("refusal_layer must be set when use_iris=True")
-        self.hook_manager = ActivationHookManager(self.model, [layer_idx])
+        # Register hooks on ALL layers (IRIS paper: sum across all layers)
+        num_layers = len(self.model.model.layers)
+        all_layers = list(range(num_layers))
+        self.hook_manager = ActivationHookManager(self.model, all_layers)
+        logger.info(f"IRIS: hooked all {num_layers} layers for refusal loss")
 
     def _cleanup(self):
         if self.using_wandb and wandb.run is not None:
@@ -164,6 +173,20 @@ class GCG:
                 v = self.prefix_cache.value_cache[layer_idx].expand(batch_size, -1, -1, -1)
             expanded.update(k, v, layer_idx)
         return expanded
+
+    def _iris_token_range(self, input_embeds: Tensor) -> tuple[int, int]:
+        """Token range for IRIS loss: from suffix start to end of target tokens.
+
+        Covers the adversarial suffix + template tokens + target CoT tokens.
+        With prefix cache: [optim, after, target] — starts at 0.
+        Without prefix cache: [before, optim, after, target] — starts after before.
+        """
+        if self.prefix_cache:
+            start = 0  # suffix starts at beginning (before is in cache)
+        else:
+            start = self.before_embeds.shape[1]  # skip before tokens
+        end = input_embeds.shape[1]  # through end of target
+        return start, end
 
     # ── Core optimization ────────────────────────────────────────────
 
@@ -242,7 +265,7 @@ class GCG:
         for step in tqdm(range(config.num_steps)):
             self.step = step
 
-            # 1) Compute gradient (batch=1, with extended gen for IRIS)
+            # 1) Compute gradient (batch=1)
             grad = self._compute_gradient(optim_ids)
 
             with torch.no_grad():
@@ -257,7 +280,7 @@ class GCG:
 
                 n_candidates = sampled_ids.shape[0]
 
-                # 3) Evaluate candidates (no extended gen)
+                # 3) Evaluate candidates
                 cand_embeds = self._assemble_embeds(
                     self.embedding_layer(sampled_ids), batch_size=n_candidates
                 )
@@ -307,7 +330,8 @@ class GCG:
     def _compute_gradient(self, optim_ids: Tensor) -> Tensor:
         """Compute gradient of combined loss w.r.t. one-hot token matrix.
 
-        For IRIS: generates extended tokens (batch=1) to get CoT activations.
+        IRIS loss is computed over suffix+target token positions across all
+        layers. No extended generation needed — everything is in the forward pass.
         """
         if self.hook_manager:
             self.hook_manager.clear()
@@ -321,51 +345,36 @@ class GCG:
 
         input_embeds = self._assemble_embeds(optim_embeds, batch_size=1)
 
-        # Extended generation for IRIS (batch=1 only)
-        use_iris = self.config.use_iris and self.config.beta > 0.0 and self.refusal_vec is not None
-        if use_iris and self.config.extended_gen_tokens > 0:
-            extended = generate_extended_tokens(
-                self.model, self.embedding_layer, input_embeds,
-                self.config.extended_gen_tokens, self.prefix_cache,
-            )
-            # Final forward pass with full extended sequence to get activations
-            if self.prefix_cache:
-                final_out = self.model(inputs_embeds=extended, past_key_values=self.prefix_cache)
-            else:
-                final_out = self.model(inputs_embeds=extended)
+        # Single forward pass
+        if self.prefix_cache:
+            out = self.model(inputs_embeds=input_embeds, past_key_values=self.prefix_cache)
         else:
-            extended = input_embeds
-            if self.prefix_cache:
-                final_out = self.model(inputs_embeds=input_embeds, past_key_values=self.prefix_cache)
-            else:
-                final_out = self.model(inputs_embeds=input_embeds)
+            out = self.model(inputs_embeds=input_embeds)
 
-        logits = final_out.logits
+        logits = out.logits
 
-        # Token forcing loss (over target token positions in original input)
-        orig_len = input_embeds.shape[1]
-        shift = orig_len - self.target_ids.shape[1]
+        # Token forcing loss (over target token positions)
+        shift = input_embeds.shape[1] - self.target_ids.shape[1]
         target_logits = logits[:, shift - 1 : shift - 1 + self.target_ids.shape[1], :]
         t_loss = token_forcing_loss(target_logits, self.target_ids)
 
         if self.using_wandb:
             self.wandb_metrics["token_loss"] = t_loss.mean().item()
 
-        # IRIS loss
+        # IRIS loss: suffix through target tokens, across all layers
+        use_iris = self.config.use_iris and self.config.beta > 0.0 and self.refusal_vec is not None
         if use_iris and self.hook_manager and self.hook_manager.activations:
-            layer_idx = self.config.refusal_layer
-            act = self.hook_manager.activations.get(layer_idx)
-            if act is not None:
-                # Region: from target start to end of extended sequence
-                target_start = shift
-                act_end = act.shape[1]
-                r_loss = refusal_direction_loss(act, self.refusal_vec, target_start, act_end)
-                loss = combined_loss(t_loss, r_loss, self.config.beta)
-                if self.using_wandb:
-                    self.wandb_metrics["refusal_loss"] = r_loss.mean().item()
-                    self.wandb_metrics["combined_loss"] = loss.mean().item()
-            else:
-                loss = t_loss
+            iris_start, iris_end = self._iris_token_range(input_embeds)
+            r_loss = multi_layer_refusal_loss(
+                self.hook_manager.activations, self.refusal_vec, iris_start, iris_end,
+            )
+
+            loss = combined_loss(t_loss, r_loss, self.config.beta)
+
+            if self.using_wandb:
+                self.wandb_metrics["refusal_loss"] = r_loss.mean().item()
+                self.wandb_metrics["combined_loss"] = loss.mean().item()
+                self.wandb_metrics["n_layers_hooked"] = len(self.hook_manager.activations)
         else:
             loss = t_loss
 
@@ -375,10 +384,12 @@ class GCG:
     # ── Candidate evaluation ─────────────────────────────────────────
 
     def _evaluate_candidates(self, search_batch_size: int, input_embeds: Tensor) -> Tensor:
-        """Evaluate candidate suffixes. No extended generation — uses target-token
-        activations only for IRIS."""
-        all_loss = []
+        """Evaluate candidate suffixes.
 
+        Single forward pass per batch — IRIS loss over suffix+target token
+        range across all layers. No extended generation needed.
+        """
+        all_loss = []
         use_iris = self.config.use_iris and self.config.beta > 0.0 and self.refusal_vec is not None
         prefix_cache_batch = None
 
@@ -400,23 +411,19 @@ class GCG:
                 logits = out.logits
 
                 # Token forcing loss
-                orig_len = input_embeds.shape[1]
-                shift = orig_len - self.target_ids.shape[1]
+                shift = input_embeds.shape[1] - self.target_ids.shape[1]
                 target_logits = logits[:, shift - 1 : shift - 1 + self.target_ids.shape[1], :]
                 target_labels = self.target_ids.expand(bs, -1)
                 t_loss = token_forcing_loss(target_logits, target_labels)
 
-                # IRIS loss (over target token positions only — no extended gen)
+                # IRIS loss: suffix through target, across all layers
                 if use_iris and self.hook_manager and self.hook_manager.activations:
-                    layer_idx = self.config.refusal_layer
-                    act = self.hook_manager.activations.get(layer_idx)
-                    if act is not None:
-                        target_start = shift
-                        target_end = orig_len
-                        r_loss = refusal_direction_loss(act, self.refusal_vec, target_start, target_end)
-                        batch_loss = combined_loss(t_loss, r_loss, self.config.beta)
-                    else:
-                        batch_loss = t_loss
+                    iris_start, iris_end = self._iris_token_range(input_embeds)
+                    r_loss = multi_layer_refusal_loss(
+                        self.hook_manager.activations, self.refusal_vec,
+                        iris_start, iris_end,
+                    )
+                    batch_loss = combined_loss(t_loss, r_loss, self.config.beta)
                 else:
                     batch_loss = t_loss
 

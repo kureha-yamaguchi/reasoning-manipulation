@@ -13,19 +13,21 @@ def generate_extended_tokens(
 ) -> Tensor:
     """Generate additional tokens via greedy decoding, appending embeddings.
 
-    Used during the gradient step (batch=1) to get CoT activations for IRIS.
-    The returned tensor includes the original input_embeds + extended tokens,
-    maintaining gradient flow from the original input_embeds.
+    Works for any batch size. Uses KV cache from the initial forward pass so
+    each additional token is O(1) rather than O(seq_len).
+
+    The returned tensor includes the original input_embeds concatenated with
+    the generated token embeddings, maintaining gradient flow from input_embeds.
 
     Args:
         model: The language model.
         embed_layer: Model's embedding layer.
-        input_embeds: [1, seq_len, hidden_dim] — initial embeddings.
+        input_embeds: [batch, seq_len, hidden_dim] — initial embeddings.
         n_tokens: Number of additional tokens to generate.
-        past_key_values: Optional KV cache for prefix.
+        past_key_values: Optional KV cache for prefix (from before input_embeds).
 
     Returns:
-        extended_embeds: [1, seq_len + n_tokens, hidden_dim]
+        extended_embeds: [batch, seq_len + n_tokens, hidden_dim]
     """
     if n_tokens <= 0:
         return input_embeds
@@ -39,8 +41,8 @@ def generate_extended_tokens(
     kv_cache = output.past_key_values
 
     for _ in range(n_tokens):
-        next_id = output.logits[:, -1:, :].argmax(dim=-1)  # [1, 1]
-        next_embed = embed_layer(next_id)  # [1, 1, hidden_dim]
+        next_id = output.logits[:, -1:, :].argmax(dim=-1)  # [batch, 1]
+        next_embed = embed_layer(next_id)  # [batch, 1, hidden_dim]
         extended = torch.cat([extended, next_embed], dim=1)
 
         output = model(

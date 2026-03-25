@@ -37,13 +37,20 @@ TP_SIZE=4
 
 # ── Model configurations ─────────────────────────────────────────────
 # Each entry: MODEL_PATH|MODEL_LABEL
-declare -a MODELS=( # ideally make this auto pick best ortho scores?
-    # "Qwen/Qwen3-8B|Qwen/Qwen3-8B"
-    # "${PROJECT_ROOT}/results/Qwen/Qwen3-8B/ortho_model_cot_layer_17|Qwen/Qwen3-8B/ortho_model_cot_layer_17"
-    # "openai/gpt-oss-20b|openai/gpt-oss-20b"
-    # "${PROJECT_ROOT}/results/openai/gpt-oss-20b/ortho_model_cot_layer_19|openai/gpt-oss-20b/ortho_model_cot_layer_19"
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B|deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
-    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B|deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+declare -a MODELS=(
+    # ── Ortho models (best layers from .best_layer_* files) ──
+    # Qwen3-8B: cot=23, baseline=17
+    "${PROJECT_ROOT}/results/Qwen/Qwen3-8B/ortho_model_cot_layer_23|Qwen/Qwen3-8B/ortho_model_cot_layer_23"
+    "${PROJECT_ROOT}/results/Qwen/Qwen3-8B/ortho_model_baseline_layer_17|Qwen/Qwen3-8B/ortho_model_baseline_layer_17"
+    # gpt-oss-20b: cot=19, baseline=15
+    "${PROJECT_ROOT}/results/openai/gpt-oss-20b/ortho_model_cot_layer_19|openai/gpt-oss-20b/ortho_model_cot_layer_19"
+    "${PROJECT_ROOT}/results/openai/gpt-oss-20b/ortho_model_baseline_layer_15|openai/gpt-oss-20b/ortho_model_baseline_layer_15"
+    # DeepSeek-R1-Distill-Llama-8B: cot=23, baseline=15
+    "${PROJECT_ROOT}/results/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/ortho_model_cot_layer_23|deepseek-ai/DeepSeek-R1-Distill-Llama-8B/ortho_model_cot_layer_23"
+    "${PROJECT_ROOT}/results/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/ortho_model_baseline_layer_15|deepseek-ai/DeepSeek-R1-Distill-Llama-8B/ortho_model_baseline_layer_15"
+    # DeepSeek-R1-Distill-Qwen-7B: cot=21, baseline=17
+    "${PROJECT_ROOT}/results/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/ortho_model_cot_layer_21|deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/ortho_model_cot_layer_21"
+    "${PROJECT_ROOT}/results/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/ortho_model_baseline_layer_17|deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/ortho_model_baseline_layer_17"
 )
 
 # ── Run evals for each model ─────────────────────────────────────────

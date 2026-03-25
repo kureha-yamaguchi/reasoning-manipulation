@@ -3,9 +3,9 @@
 Usage:
     python -m prompt_attack.run_attack \
         --model deepseek-llama-8b \
-        --beta 0.5 \
+        --beta 0.75 \
         --num-gpus 4 \
-        --num-steps 150 \
+        --num-steps 500 \
         --refusal-mode cot \
         --target-tokens 20
 """
@@ -23,7 +23,9 @@ from transformers import AutoTokenizer
 from prompt_attack.config import GCGConfig
 from prompt_attack.models import MODEL_REGISTRY, get_model_config
 from prompt_attack.runner import (
+    get_always_refused_prompts,
     get_common_prompts,
+    get_model_refused_prompts,
     get_output_csv_path,
     prepare_input_data,
     run_experiment_batch,
@@ -40,12 +42,12 @@ def parse_args():
     parser.add_argument("--beta", type=float, required=True,
                         help="IRIS weight (0.0=pure GCG, 1.0=pure IRIS)")
     parser.add_argument("--num-gpus", type=int, default=4)
-    parser.add_argument("--num-steps", type=int, default=150)
+    parser.add_argument("--num-steps", type=int, default=500)
     parser.add_argument("--refusal-mode", type=str, default="cot",
                         choices=["cot", "baseline"])
     parser.add_argument("--target-tokens", type=int, default=20,
                         help="Number of CoT tokens to use as target")
-    parser.add_argument("--extended-gen-tokens", type=int, default=15)
+    parser.add_argument("--search-width", type=int, default=512)
     parser.add_argument("--eval-frequency", type=int, default=25)
     parser.add_argument("--num-prompts", type=int, default=50,
                         help="Number of prompts to attack")
@@ -54,6 +56,12 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--use-common-prompts", action="store_true",
                         help="Use intersection of prompts across all models")
+    parser.add_argument("--refused-only", action="store_true",
+                        help="Only attack prompts the model always refuses (unattacked)")
+    parser.add_argument("--refused-threshold", type=float, default=0.1,
+                        help="Max mean StrongREJECT score to count as 'always refused' (default: 0.1)")
+    parser.add_argument("--run-tag", type=str, default="",
+                        help="Tag appended to output filenames to separate runs (e.g. 'v2')")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     return parser.parse_args()
@@ -77,11 +85,11 @@ def main():
 
     config = GCGConfig(
         num_steps=args.num_steps,
+        search_width=args.search_width,
         beta=args.beta,
         use_iris=args.beta > 0.0,
         refusal_mode=args.refusal_mode,
         refusal_layer=refusal_layer,
-        extended_gen_tokens=args.extended_gen_tokens,
         target_tokens=args.target_tokens,
         eval_frequency=args.eval_frequency,
         seed=args.seed,
@@ -90,8 +98,8 @@ def main():
         think_end_token=model_config.think_end,
         wandb_config={
             "entity": "reasoning_attacks",
-            "project": "gcg-iris-clean",
-            "name": f"{args.model}_beta{args.beta}_{args.refusal_mode}",
+            "project": "gcg-iris-new",
+            **({"tags": [args.run_tag], "group": args.run_tag} if args.run_tag else {}),
         },
     )
 
@@ -100,7 +108,20 @@ def main():
 
     # Get prompt subset
     prompt_subset = None
-    if args.use_common_prompts:
+    if args.refused_only:
+        # Try universal set first (all models refuse), fall back to per-model
+        all_configs = [get_model_config(alias) for alias in MODEL_REGISTRY]
+        universal, is_universal = get_always_refused_prompts(
+            all_configs, max_mean_score=args.refused_threshold, min_prompts=args.num_prompts,
+        )
+        if is_universal:
+            logger.info(f"Using {len(universal)} universally refused prompts")
+            prompt_subset = universal[:args.num_prompts]
+        else:
+            per_model = get_model_refused_prompts(model_config, max_mean_score=args.refused_threshold)
+            logger.info(f"Universal set too small; using {len(per_model)} per-model refused prompts")
+            prompt_subset = per_model[:args.num_prompts]
+    elif args.use_common_prompts:
         all_configs = [get_model_config(alias) for alias in MODEL_REGISTRY]
         common = get_common_prompts(all_configs, args.refusal_mode)
         logger.info(f"Found {len(common)} common prompts across all models")
@@ -125,7 +146,7 @@ def main():
         results_dir = str(RESULTS_ROOT / model_config.results_subdir / "prompt_attack")
 
     output_csv = get_output_csv_path(
-        results_dir, args.model, args.beta, args.refusal_mode
+        results_dir, args.model, args.beta, args.refusal_mode, args.run_tag
     )
     os.makedirs(results_dir, exist_ok=True)
 
