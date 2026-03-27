@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch_size",
         type=int,
-        default=32,
+        default=8,
         help="Batch size into strongreject evaluator"
     )
     parser.add_argument(
@@ -225,7 +225,8 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str,
     evaluator_results = evaluate_dataset(
         output_dataset,
         ["strongreject_rubric"],
-        batch_size=batch_size
+        batch_size=batch_size,
+        num_proc=1
     )
 
     score_columns = {}
