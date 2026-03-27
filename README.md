@@ -341,6 +341,36 @@ uv run -m utils.heuristic.plot_matrix \
   --model_name {model_name} \
   --repetitions {repetitions}
 ```
+### Experiment 4: Rollouts along CoT depth for high variance prompts
+
+> [!NOTE]
+> EXPERIMENT 4. you can use workflow bash script `stats_ex4.sh` in order to run experiment 4, which generates rollout generation heatmaps for each model for 8 high variance prompts
+
+`utils/heuristic/resample_quadrants.py` identifies "high-variance" prompts that lie in the target quadrant — cases with low within-CoT variance but high across-CoT variance, i.e. the CoT is the hinge that strongly steers the output. For each selected prompt (specified by `--prompt_index`), it loads scored generations from `scored_train_harmful_prompts_cot5_out5.csv` and `scored_orbench_extra_prompts_cot5_out5.csv`. For each CoT in the quadrant, it generates `--repetitions` valid output rollouts at each CoT prefix depth, starting from just the prompt ("S0") and adding one more sentence at a time ("S1", "S1+S2", ...) up to the full CoT. Results are saved as `full_resample_prompt{idx}_cot{cot_number}_rep_{repetitions}.csv` under `results/{model_name}/dataset/quadrants/`.
+
+```bash
+uv run -m utils.heuristic.resample_quadrants \
+  --model_name {model_name} \
+  --prompt_index {prompt_index} \
+  --repetitions {repetitions}
+```
+
+`utils/heuristic/compute_scores_rollouts.py` scores the rollout generations for the quadrant prompts using the StrongReject evaluator. Pass `--quadrant` to read from the `quadrants/` subdirectory. Results are saved as `scored_full_resample_prompt{idx}_cot{cot_number}_rep_{repetitions}.csv`.
+
+```bash
+uv run -m utils.heuristic.compute_scores_rollouts \
+  --model_name {model_name} \
+  --repetitions {repetitions} \
+  --quadrant
+```
+
+`utils/heuristic/plot_quadrant_matrix.py` produces a two-panel figure for each model. The top panel is a heatmap where rows are (prompt, CoT) pairs — clustered and labelled by prompt index — and columns are normalised CoT sentence positions in [0, 1], with cell colour representing the mean StrongReject score at that depth. The bottom panel shows the mean standard deviation of rollout scores across all (prompt, CoT) pairs as a function of CoT depth. This visualises exactly where in the reasoning trace safety decisions become determined.
+
+```bash
+uv run -m utils.heuristic.plot_quadrant_matrix \
+  --model_name {model_name} \
+  --repetitions {repetitions}
+```
 
 ## Prompt-based Attacks 
 
