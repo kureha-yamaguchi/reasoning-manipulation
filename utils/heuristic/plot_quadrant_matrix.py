@@ -3,14 +3,8 @@ Plot heatmap of mean StrongReject score over prompt × normalised CoT sentence p
 plus line graphs of aggregated mean and standard deviation across prompts.
 
 Each row is one (prompt, cot) pair from a CSV file.
-Rows are clustered by prompt index, with horizontal borders separating groups.
-Sentence indices are normalised to [0, 1] and interpolated so that traces
-of different lengths are comparable.
-
-Example usage:
-uv run -m utils.heuristic.plot_quadrant_matrix \
-    --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --repetitions 10
+Rows are clustered by prompt index, with horizontal borders separating groups
+and square brackets on the y-axis labelling each cluster with its prompt index.
 '''
 
 import argparse
@@ -19,6 +13,7 @@ import os
 import re
 
 import matplotlib.pyplot as plt
+import matplotlib.transforms as mtransforms
 import numpy as np
 import pandas as pd
 
@@ -36,6 +31,8 @@ def parse_args():
                         help="Number of output variations per prompt + CoT prefix")
     parser.add_argument("--n_bins", type=int, default=30,
                         help="Number of bins for normalised sentence position")
+    parser.add_argument("--no_colorbar", action="store_true",
+                        help="Omit the colorbar from the figure")
     return parser.parse_args()
 
 
@@ -53,15 +50,6 @@ def build_matrices(input_paths: list[str],
                    n_bins: int) -> tuple[np.ndarray, np.ndarray]:
     """
     Build (num_files × n_bins) matrices of per-sentence mean and std scores.
-
-    For each CSV (one prompt+cot's resampling rollouts):
-      1. Group by sentence_idx, compute mean and std across repetitions.
-      2. Normalise sentence_idx to [0, 1].
-      3. Linearly interpolate both onto a uniform grid of n_bins points.
-
-    Returns:
-        mean_matrix:  (num_files, n_bins) — mean score per sentence per file.
-        std_matrix:   (num_files, n_bins) — std of scores per sentence per file.
     """
     bin_centres = np.linspace(0.0, 1.0, n_bins)
 
@@ -73,7 +61,6 @@ def build_matrices(input_paths: list[str],
 
         max_idx = df['sentence_idx'].max()
         if max_idx == 0:
-            # Only one sentence position — fill with constant
             mean_val = df['strongreject_score'].mean()
             std_val = df['strongreject_score'].std()
             mean_matrix[row_idx, :] = mean_val
@@ -98,15 +85,6 @@ def build_matrices(input_paths: list[str],
 
 
 def plot_matrix(input_paths: list[str], args):
-    """
-    Plot a 2-row figure:
-      Row 0: heatmap of per-(prompt, cot) mean score, clustered by prompt index.
-      Row 1: line graph of per-file std averaged across all files (± std across files).
-
-    Rows within each prompt cluster are sorted by cot index.
-    Horizontal borders separate prompt clusters.
-    Y-axis labels show the prompt index.
-    """
     if not input_paths:
         print("No data to plot.")
         return
@@ -117,85 +95,103 @@ def plot_matrix(input_paths: list[str], args):
         prompt_idx, cot_idx = extract_prompt_cot(path)
         file_info.append({'path': path, 'prompt_idx': prompt_idx, 'cot_idx': cot_idx})
 
-    # Sort: primary by prompt_idx, secondary by cot_idx
     file_info.sort(key=lambda x: (x['prompt_idx'], x['cot_idx']))
     sorted_paths = [f['path'] for f in file_info]
 
-    # Build matrices in the clustered order
     mean_mat, std_mat = build_matrices(sorted_paths, args.n_bins)
 
-    # Compute cluster boundaries (for borders) and tick positions (for labels)
+    # Cluster boundaries
     prompt_indices_ordered = [f['prompt_idx'] for f in file_info]
     unique_prompts = []
-    cluster_boundaries = []  # row indices where a new prompt group starts
+    cluster_boundaries = []
     for i, pi in enumerate(prompt_indices_ordered):
         if i == 0 or pi != prompt_indices_ordered[i - 1]:
             unique_prompts.append(pi)
             cluster_boundaries.append(i)
-    cluster_boundaries.append(len(file_info))  # sentinel for the last group
-
-    # Tick position = centre of each cluster; label = prompt index
-    ytick_positions = []
-    ytick_labels = []
-    for g, pi in enumerate(unique_prompts):
-        start = cluster_boundaries[g]
-        end = cluster_boundaries[g + 1]
-        ytick_positions.append((start + end - 1) / 2.0)
-        ytick_labels.append(str(pi))
+    cluster_boundaries.append(len(file_info))
 
     n_rows = mean_mat.shape[0]
     bin_centres = np.linspace(0.0, 1.0, args.n_bins)
 
-    # ── Figure layout: 2 rows × 2 cols (heatmap + colorbar, line plot + empty) ──
+    # ── Figure layout ──
     heatmap_height = max(3, 0.35 * n_rows)
     line_height = 3.0
     panel_width = 7
     cbar_width = 0.4
-    fig_width = panel_width + cbar_width + 1.5
+    fig_width = panel_width + (0 if args.no_colorbar else cbar_width + 1.5)
     fig_height = heatmap_height + line_height
-
     fig = plt.figure(figsize=(fig_width, fig_height))
-    gs = fig.add_gridspec(
-        2, 2,
-        height_ratios=[heatmap_height, line_height],
-        width_ratios=[1, cbar_width / panel_width],
-        hspace=0.15, wspace=0.08
-    )
+    if args.no_colorbar:
+        gs = fig.add_gridspec(
+            2, 1,
+            height_ratios=[heatmap_height, line_height],
+            hspace=0.2
+        )
+    else:
+        gs = fig.add_gridspec(
+            2, 2,
+            height_ratios=[heatmap_height, line_height],
+            width_ratios=[1, cbar_width / panel_width],
+            hspace=0.2, wspace=0.2
+        )
 
     # ── Row 0: Heatmap ──
     ax_heat = fig.add_subplot(gs[0, 0])
     im = ax_heat.imshow(mean_mat, aspect='auto',
-                        cmap='RdYlGn_r', vmin=0.0, vmax=1.0,
+                        cmap='Reds', vmin=0.0, vmax=1.0,
                         interpolation='nearest')
 
-    # X-axis: normalised position
+    # X-axis
     tick_positions_x = np.linspace(0, args.n_bins - 1, 6)
     tick_labels_x = [f'{v:.1f}' for v in np.linspace(0, 1, 6)]
     ax_heat.set_xticks(tick_positions_x)
-    ax_heat.set_xticklabels(tick_labels_x)
-    ax_heat.set_xlabel('Normalised CoT Sentence Position', fontsize=11)
+    ax_heat.set_xticklabels(tick_labels_x, fontsize=22)
+    ax_heat.set_xlabel('Normalised CoT Sentence Position', fontsize=22)
+    ax_heat.tick_params(axis='x', labelsize=22)
 
-    # Y-axis: prompt index labels at cluster centres
-    ax_heat.set_yticks(ytick_positions)
-    ax_heat.set_yticklabels(ytick_labels, fontsize=9)
-    ax_heat.set_ylabel('Prompt Index', fontsize=11)
+    # Y-axis: square brackets grouping rows by prompt
+    ax_heat.set_yticks([])
+    ax_heat.set_ylabel('Prompt Index', fontsize=22, labelpad=55)
 
-    # Draw horizontal borders between prompt clusters
-    for boundary in cluster_boundaries[1:-1]:  # skip first (top) and sentinel (bottom)
+    trans = mtransforms.blended_transform_factory(ax_heat.transAxes, ax_heat.transData)
+    x_tip = -0.012
+    x_base = -0.028
+    x_text = -0.038
+
+    gap = 0.15  # half-gap in data (row) units
+
+    for g, pi in enumerate(unique_prompts):
+        start = cluster_boundaries[g] - 0.5 + gap
+        end = cluster_boundaries[g + 1] - 0.5 - gap
+        centre = (start + end) / 2.0
+
+        ax_heat.plot(
+            [x_base, x_tip, x_tip, x_base],
+            [start, start, end, end],
+            transform=trans, color='black', linewidth=1.5,
+            clip_on=False, solid_capstyle='butt',
+        )
+        ax_heat.text(
+            x_text, centre, str(pi),
+            transform=trans, ha='right', va='center', fontsize=18,
+        )
+
+    # Horizontal borders between prompt clusters
+    for boundary in cluster_boundaries[1:-1]:
         ax_heat.axhline(y=boundary - 0.5, color='white', linewidth=2.5)
 
-    # ax_heat.set_title('Mean StrongReject Score by CoT Position', fontsize=12)
-
     # Colorbar
-    cbar_ax = fig.add_subplot(gs[0, 1])
-    cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.set_label('Mean StrongReject Score', fontsize=11)
-    cbar.ax.annotate('comply', xy=(0.5, 1.02), xycoords='axes fraction',
-                     fontsize=9, fontstyle='italic', ha='center')
-    cbar.ax.annotate('refuse', xy=(0.5, -0.03), xycoords='axes fraction',
-                     fontsize=9, fontstyle='italic', ha='center')
+    if not args.no_colorbar:
+        cbar_ax = fig.add_subplot(gs[0, 1])
+        cbar = fig.colorbar(im, cax=cbar_ax)
+        cbar.set_label('Mean StrongReject Score', fontsize=22)
+        cbar.ax.tick_params(labelsize=22)
+        cbar.ax.annotate('comply', xy=(0.5, 1.02), xycoords='axes fraction',
+                         fontsize=18, fontstyle='italic', ha='center')
+        cbar.ax.annotate('refuse', xy=(0.5, -0.03), xycoords='axes fraction',
+                         fontsize=18, fontstyle='italic', ha='center')
 
-    # ── Row 1: Std (across repetitions) averaged across all files ──
+    # ── Row 1: Std across rollouts averaged across files ──
     ax_line = fig.add_subplot(gs[1, 0])
 
     avg_std = np.nanmean(std_mat, axis=0)
@@ -208,8 +204,9 @@ def plot_matrix(input_paths: list[str], args):
                          alpha=0.25, color='#2166ac')
     ax_line.set_xlim(0, 1)
     ax_line.set_ylim(0, 0.5)
-    ax_line.set_xlabel('Normalised CoT Sentence Position', fontsize=11)
-    ax_line.set_ylabel('Mean Std Dev\n(across rollouts)', fontsize=10)
+    ax_line.set_xlabel('Normalised CoT Sentence Position', fontsize=22)
+    ax_line.set_ylabel('Mean Std Dev\n(across rollouts)', fontsize=20)
+    ax_line.tick_params(labelsize=22)
     ax_line.grid(True, alpha=0.3)
 
     # Save
@@ -217,9 +214,9 @@ def plot_matrix(input_paths: list[str], args):
     os.makedirs(out_dir, exist_ok=True)
     output_path = os.path.join(
         out_dir,
-        f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}.png'
+        f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}.pdf'
     )
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.savefig(output_path, bbox_inches='tight')
     plt.close()
     print(f"Heatmap saved to: {output_path}")
 
