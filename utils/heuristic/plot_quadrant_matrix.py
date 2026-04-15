@@ -5,6 +5,9 @@ plus line graphs of aggregated mean and standard deviation across prompts.
 Each row is one (prompt, cot) pair from a CSV file.
 Rows are clustered by prompt index, with horizontal borders separating groups
 and square brackets on the y-axis labelling each cluster with its prompt index.
+
+uv run -m utils.heuristic.plot_quadrant_matrix --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --no_colorbar
+uv run -m utils.heuristic.plot_quadrant_matrix --model_name openai/gpt-oss-20b
 '''
 
 import argparse
@@ -121,22 +124,27 @@ def plot_matrix(input_paths: list[str], args):
     fig_width = panel_width + (0 if args.no_colorbar else cbar_width + 1.5)
     fig_height = heatmap_height + line_height
     fig = plt.figure(figsize=(fig_width, fig_height))
+
+    model_short = args.model_name.split('/')[-1]
+    fig.suptitle(model_short, fontsize=22, fontweight='bold', y=1.0)
+    fig.subplots_adjust(top=0.97)
+
     if args.no_colorbar:
         gs = fig.add_gridspec(
             2, 1,
-            height_ratios=[heatmap_height, line_height],
+            height_ratios=[line_height, heatmap_height],
             hspace=0.2
         )
     else:
         gs = fig.add_gridspec(
             2, 2,
-            height_ratios=[heatmap_height, line_height],
+            height_ratios=[line_height, heatmap_height],
             width_ratios=[1, cbar_width / panel_width],
             hspace=0.2, wspace=0.2
         )
 
-    # ── Row 0: Heatmap ──
-    ax_heat = fig.add_subplot(gs[0, 0])
+    # ── Row 1: Heatmap ──
+    ax_heat = fig.add_subplot(gs[1, 0])
     im = ax_heat.imshow(mean_mat, aspect='auto',
                         cmap='Reds', vmin=0.0, vmax=1.0,
                         interpolation='nearest')
@@ -178,11 +186,11 @@ def plot_matrix(input_paths: list[str], args):
 
     # Horizontal borders between prompt clusters
     for boundary in cluster_boundaries[1:-1]:
-        ax_heat.axhline(y=boundary - 0.5, color='white', linewidth=2.5)
+        ax_heat.axhline(y=boundary - 0.5, color='white', linewidth=5.0)
 
     # Colorbar
     if not args.no_colorbar:
-        cbar_ax = fig.add_subplot(gs[0, 1])
+        cbar_ax = fig.add_subplot(gs[1, 1])
         cbar = fig.colorbar(im, cax=cbar_ax)
         cbar.set_label('Mean StrongReject Score', fontsize=22)
         cbar.ax.tick_params(labelsize=22)
@@ -191,8 +199,8 @@ def plot_matrix(input_paths: list[str], args):
         cbar.ax.annotate('refuse', xy=(0.5, -0.03), xycoords='axes fraction',
                          fontsize=18, fontstyle='italic', ha='center')
 
-    # ── Row 1: Std across rollouts averaged across files ──
-    ax_line = fig.add_subplot(gs[1, 0])
+    # ── Row 0: Std across rollouts averaged across files ──
+    ax_line = fig.add_subplot(gs[0, 0])
 
     avg_std = np.nanmean(std_mat, axis=0)
     std_of_std = np.nanstd(std_mat, axis=0)
