@@ -117,15 +117,6 @@ uv run -m utils.filter_all_datasets \
   --scored_csv scored_train_harmful_prompts_cot5_out5.csv
 ```
 
-<!-- `utils/create_train_test_split.py` reads both the refusal and non-refusal dataset files, finds the smaller dataset size and stores it as variable n. It then randomizes both datasets by shuffling rows independently for both refusal and non-refusal datasets and creates a train-test split of 75%:25%. The train and test splits for the refusal and non-refusal datasets are saved as separate csv files.
-
-```bash
-uv run -m utils.create_train_test_split --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --train_set_split 0.75
-``` -->
-
-<!-- > [!NOTE]
-> We have provided the alpaca_instructions_100.csv. To create it from scratch, download `alpaca_data_cleaned.json` from https://github.com/gururise/AlpacaDataCleaned and run `utils/alpaca.py`. -->
-
 ## Activations
 
 > [!NOTE]
@@ -148,7 +139,7 @@ uv run -m utils.cache_activations \
 </div>
 
 > [!NOTE]
-> Optionally, you can visualise the PCA plots for the reusal and non-refusal activations to help determine which layer is best at separating the transformer residual stream activations using `interventions/visualise_pca.ipynb`.
+> Optionally, you can visualise the PCA plots for the refusal and non-refusal activations to help determine which layer is best at separating the transformer residual stream activations using `interventions/visualise_pca.ipynb`.
 
 ## Intervention
 
