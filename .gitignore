@@ -21,6 +21,9 @@ annotations
 
 scored_train_harmful_prompts_cot5_out5.csv
 train_harmful_prompts_cot5_out5.csv
+
+scored_test_harmful_prompts_cot5_out5.csv
+test_harmful_prompts_cot5_out5.csv
 finetune_eval/* 
 
 *.eval
