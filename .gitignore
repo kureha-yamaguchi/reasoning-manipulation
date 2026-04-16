@@ -24,6 +24,13 @@ train_harmful_prompts_cot5_out5.csv
 
 scored_test_harmful_prompts_cot5_out5.csv
 test_harmful_prompts_cot5_out5.csv
+
+scored_orbench_extra_prompts_cot5_out5.csv
+orbench_extra_prompts_cot5_out5.csv
+
+legacy/*
+
+
 finetune_eval/* 
 
 *.eval
