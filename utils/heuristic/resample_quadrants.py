@@ -1,18 +1,28 @@
 '''
-Docstring for utils.heuristic.resample_quadrants.
+utils.heuristic.resample_quadrants
 
-1. Reads in rows from scored_train_harmful_prompts_cot5_out5.csv
-2. Identifies points that lie in the quadrant. These are generations that have low standard deviation conditioned on the specific prompt-CoT but high standard deviation when conditioned only on the prompt.
-3. Performs resampling with n rollouts for a given index_number and cot_number in the quadrant, beginning at cot sentence S1 and ending at the last sentence S(len(sentences))
-4. Partitions into output (after close think tag)
-5. Saves generations
+Targeted resampling of "quadrant" prompts — those where the chain-of-thought
+is the key determinant of harmful compliance.
+
+Pipeline:
+1. Loads pre-scored CSV files (prompt, cot, strongreject_score per row).
+2. Computes two variance measures per prompt:
+     - Within-CoT variance: std dev of output scores given a fixed (prompt, CoT).
+     - Across-CoT variance: std dev of output scores across all CoTs for a prompt.
+3. Selects "quadrant" prompts: low within-CoT variance (< x_threshold) AND
+   high across-CoT variance (> y_threshold). These are prompts where each
+   individual CoT reliably produces consistent outputs, but different CoTs
+   lead to very different outcomes — i.e. the reasoning path is the switch.
+4. Randomly samples n prompts from the quadrant and saves their indices.
+5. For each sampled prompt and each of its CoTs, performs progressive
+   resampling: iterates from 0 sentences of the CoT prefix up to the full CoT, generating `repetitions` rollouts at each position. Skips any prompt that already has output files on disk.
+6. Saves rollouts to CSV files under <results_dir>/<model_name>/dataset/quadrants/.
 
 
 Example usage:
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
 uv run -m utils.heuristic.resample_quadrants \
   --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-  --prompt_number 174,246,309
 '''
 
 import csv
@@ -25,6 +35,7 @@ from collections import defaultdict
 import statistics 
 import pandas as pd
 import gc
+import random
 import re
 
 import torch
@@ -37,16 +48,20 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Generate multiple output rollouts per prompt for non-reasoning models"
     )
-    parser.add_argument("--prompt_index", type=lambda s: [int(x) for x in s.split(',')],
-                        required=True, help="Comma-separated prompt indices (e.g. 12,14,16)")
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="Model to use for generation")
     parser.add_argument("--results_dir", type=str, default='results/',
                         help="Results directory")
     parser.add_argument("--repetitions", type=int, default=10,
                         help="Number of output variations per prompt")
-    parser.add_argument("--max_new_tokens", type=int, default=4096,
-                        help="Maximum tokens for generation")
+    parser.add_argument("--x_threshold", type=float, default=0.03,
+                        help="Upper bound on x axis for selecting high-variance points")
+    parser.add_argument("--y_threshold", type=float, default=0.43,
+                        help="Lower bound on y axis for selecting high-variance points")
+    parser.add_argument("--n", type=int, default=32,
+                        help="Number of rows to randomly select from high-variance set")
+    parser.add_argument("--random_seed", type=int, default=42,
+                        help="Random seed for reproducibility")
     parser.add_argument("--temperature", type=float, default=0.6,
                         help="Temperature for sampling")
     parser.add_argument("--tensor_parallel_size", type=int, default=1,
@@ -174,7 +189,7 @@ def compute_stats_per_prompt(
     return means, std_devs, prompts
 
 
-def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.35):
+def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.43):
     """Find data points in the target quadrant based on variance thresholds."""
     quadrant_points = []
     means_ij, std_devs_ij, cots = compute_stats_per_prompt_cot(scored_rows)
@@ -185,7 +200,7 @@ def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.35):
 
     for i in range(n):
         if per_prompt_avgs[i] < x_threshold and std_devs_i[i] > y_threshold:
-            dict = {
+            point = {
                 "prompt_idx": i,
                 "prompt": prompts[i],
                 "cots": cots[i],
@@ -193,7 +208,7 @@ def find_quadrant(scored_rows, x_threshold=0.03, y_threshold=0.35):
                 "std dev conditioned on CoT": [f"{x:.2f}" for x in std_devs_ij[i]],
                 "std dev conditioned on prompt": f"{std_devs_i[i]:.2f}"
             }
-            quadrant_points.append(dict)
+            quadrant_points.append(point)
     
     return quadrant_points
 
@@ -321,7 +336,7 @@ def generate_valid_outputs(
     
     return valid_outputs, total_generated
 
-def save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, dir, args):
+def save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, quadrants_dir, args):
 
     original_prompt = next((item['prompt'] for item in quadrant_points if item["prompt_idx"] == idx), None)
 
@@ -398,7 +413,7 @@ def save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, dir, ar
 
 
         # Save results to CSV
-        output_csv_path = os.path.join(dir, 'quadrants',
+        output_csv_path = os.path.join(quadrants_dir,
             f"full_resample_prompt{idx}_cot{cot_number}_rep_{args.repetitions}.csv"
         )
         
@@ -412,6 +427,7 @@ def save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, dir, ar
 
 def main():
     args = parse_args()
+    random.seed(args.random_seed)
 
     if not args.tensor_parallel_size:
         args.tensor_parallel_size = torch.cuda.device_count()
@@ -423,7 +439,6 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     
     sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
         temperature=args.temperature,
         skip_special_tokens=False
     )
@@ -438,23 +453,50 @@ def main():
     print("Model loaded successfully!")
 
     # Datasets
-
     scored_csv1 = "scored_train_harmful_prompts_cot5_out5.csv"
     scored_csv2 = 'scored_orbench_extra_prompts_cot5_out5.csv'
+    scored_csv3 = "scored_test_harmful_prompts_cot5_out5.csv"
+
 
     dir = os.path.join(args.results_dir, args.model_name, "dataset")
 
     scored_csv_path1 = os.path.join(dir, scored_csv1)
     scored_csv_path2 = os.path.join(dir, scored_csv2)
+    scored_csv_path3 = os.path.join(dir, scored_csv3)
 
-    scored_rows = load_scored_csv([scored_csv_path1, scored_csv_path2])
+    scored_rows = load_scored_csv([scored_csv_path1, scored_csv_path2, scored_csv_path3])
     print(f"Total reasoning samples: {len(scored_rows)}")
 
-    quadrant_points = find_quadrant(scored_rows)
+    quadrant_points = find_quadrant(scored_rows, x_threshold=args.x_threshold, y_threshold=args.y_threshold)
 
-    # repeat for every prompt in quadrant
-    for idx in args.prompt_index:
-        save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, dir, args)
+    # randomly sample n prompt indices from quadrant points
+    all_indices = [item['prompt_idx'] for item in quadrant_points]
+    sampled_indices = random.sample(all_indices, min(args.n, len(all_indices)))
+
+    print(f"Sampled {len(sampled_indices)} from quadrant.")
+
+    # save this list of prompt indices in text file
+    quadrants_dir = os.path.join(dir, 'quadrants')
+    os.makedirs(quadrants_dir, exist_ok=True)
+
+    indices_path = os.path.join(quadrants_dir, 'sampled_prompt_indices.txt')
+    with open(indices_path, 'w') as f:
+        f.write('\n'.join(str(i) for i in sampled_indices))
+    print(f"Saved {len(sampled_indices)} sampled prompt indices to: {indices_path}")
+
+    # repeat for every prompt in sampled quadrant
+    for idx in sampled_indices:
+
+        # do not repeat for idx that have already been resampled
+        existing = [
+            f for f in os.listdir(quadrants_dir)
+            if re.match(rf"full_resample_prompt{idx}_cot\d+_rep_{args.repetitions}\.csv", f)
+        ]
+        if existing:
+            print(f"Skipping prompt {idx}: found existing file(s) {existing}")
+            continue
+
+        save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, quadrants_dir, args)
 
 
 if __name__ == "__main__":
