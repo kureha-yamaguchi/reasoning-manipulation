@@ -283,7 +283,7 @@ In this section, we are using the new strongreject evaluator and the combined (h
     --repetitions {repetitions}
 ```
 
-### Experiment 2: Transfer attacks using 1st CoT sentence as a prefill attack across DeepSeek distill models and original DeepSeek R1
+<!-- ### Experiment 2: Transfer attacks using 1st CoT sentence as a prefill attack across DeepSeek distill models and original DeepSeek R1
 
 > [!NOTE]
 > EXPERIMENT 2. you can use workflow bash script `stats_ex2.sh` in order to run experiment 2, which generates rollouts using the first CoT sentence to complete table 2.
@@ -301,9 +301,9 @@ uv run -m utils.compute_score_outputs \
   --model_name {model_name} \
   --input_csv combined_datasets_rollout_s1.csv \
   --input_dir dataset
-```
+``` -->
 
-### Experiment 3: Aggregated results that capture the differences between the reasoning trace trajectories between models.
+<!-- ### Experiment 3: Aggregated results that capture the differences between the reasoning trace trajectories between models.
 
 > [!NOTE]
 > EXPERIMENT 3. you can use workflow bash script `stats_ex3.sh` in order to run experiment 3, which generates refusal and nonrefusal rollout generation heatmaps for each model.
@@ -330,12 +330,12 @@ uv run -m utils.heuristic.compute_scores_rollouts \
 ```bash
 uv run -m utils.heuristic.plot_matrix \
   --model_name {model_name} \
-  --repetitions {repetitions}
-```
-### Experiment 4: Rollouts along CoT depth for high variance prompts
+  --repetitions {repetitions} -->
+<!-- ``` -->
+### Experiment 2: Rollouts along CoT depth for high variance prompts
 
 > [!NOTE]
-> EXPERIMENT 4. you can use workflow bash script `stats_ex4.sh` in order to run experiment 4, which generates rollout generation heatmaps for each model for 8 high variance prompts
+> EXPERIMENT 2. you can use workflow bash script `stats_ex2.sh` in order to run experiment 4, which generates rollout generation heatmaps for each model for 8 high variance prompts
 
 `utils/heuristic/resample_quadrants.py` identifies "high-variance" prompts that lie in the target quadrant — cases with low within-CoT variance but high across-CoT variance, i.e. the CoT is the hinge that strongly steers the output. For each selected prompt (specified by `--prompt_index`), it loads scored generations from `scored_train_harmful_prompts_cot5_out5.csv` and `scored_orbench_extra_prompts_cot5_out5.csv`. For each CoT in the quadrant, it generates `--repetitions` valid output rollouts at each CoT prefix depth, starting from just the prompt ("S0") and adding one more sentence at a time ("S1", "S1+S2", ...) up to the full CoT. Results are saved as `full_resample_prompt{idx}_cot{cot_number}_rep_{repetitions}.csv` under `results/{model_name}/dataset/quadrants/`.
 
