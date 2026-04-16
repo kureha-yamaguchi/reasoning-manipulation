@@ -192,7 +192,7 @@ def plot_matrix(input_paths: list[str], args):
     if not args.no_colorbar:
         cbar_ax = fig.add_subplot(gs[1, 1])
         cbar = fig.colorbar(im, cax=cbar_ax)
-        cbar.set_label('Mean StrongReject Score', fontsize=22)
+        cbar.set_label('Mean StrongREJECT Score', fontsize=22)
         cbar.ax.tick_params(labelsize=22)
         cbar.ax.annotate('comply', xy=(0.5, 1.02), xycoords='axes fraction',
                          fontsize=18, fontstyle='italic', ha='center')

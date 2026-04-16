@@ -40,7 +40,7 @@ def parse_args():
 
 def print_stats(label: str, paths: list[str]) -> None:
     if not paths:
-        print(f"  [no files found]\n")
+        print("  [no files found]\n")
         return
 
     rows = []
