@@ -36,6 +36,8 @@ def parse_args():
                         help="Number of bins for normalised sentence position")
     parser.add_argument("--no_colorbar", action="store_true",
                         help="Omit the colorbar from the figure")
+    parser.add_argument("--random_sample", action="store_true",
+                        help="Trim heatmap to ~3 random examples per model")
     return parser.parse_args()
 
 
@@ -99,6 +101,20 @@ def plot_matrix(input_paths: list[str], args):
         file_info.append({'path': path, 'prompt_idx': prompt_idx, 'cot_idx': cot_idx})
 
     file_info.sort(key=lambda x: (x['prompt_idx'], x['cot_idx']))
+
+
+    if args.random_sample:
+        N=3
+        h = 0.3
+    else:
+        N=32
+        h = 0.05
+
+    all_prompts = list(dict.fromkeys(f['prompt_idx'] for f in file_info))
+    sampled = np.random.choice(all_prompts, size=min(N, len(all_prompts)), replace=False)
+    sampled_set = set(sampled)
+    file_info = [f for f in file_info if f['prompt_idx'] in sampled_set]
+
     sorted_paths = [f['path'] for f in file_info]
 
     mean_mat, std_mat = build_matrices(sorted_paths, args.n_bins)
@@ -124,23 +140,29 @@ def plot_matrix(input_paths: list[str], args):
     fig_width = panel_width + (0 if args.no_colorbar else cbar_width + 1.5)
     fig_height = heatmap_height + line_height
     fig = plt.figure(figsize=(fig_width, fig_height))
+    if args.model_name == 'openai/gpt-oss-20b':
+        model_short = 'GPT-OSS-20B'
+    else:
+        model_short = args.model_name.split('/')[-1]
+    title_margin_inches = 0.35
+    top = 1.0 - title_margin_inches / fig_height
+    fig.suptitle(model_short, fontsize=22, fontweight='bold', y=top + 0.01)
+    fig.subplots_adjust(top=top)
 
-    model_short = args.model_name.split('/')[-1]
-    fig.suptitle(model_short, fontsize=22, fontweight='bold', y=1.0)
-    fig.subplots_adjust(top=0.97)
+
 
     if args.no_colorbar:
         gs = fig.add_gridspec(
             2, 1,
             height_ratios=[line_height, heatmap_height],
-            hspace=0.2
+            hspace=h
         )
     else:
         gs = fig.add_gridspec(
             2, 2,
             height_ratios=[line_height, heatmap_height],
             width_ratios=[1, cbar_width / panel_width],
-            hspace=0.2, wspace=0.2
+            hspace=h, wspace=0.2
         )
 
     # ── Row 1: Heatmap ──
@@ -159,7 +181,8 @@ def plot_matrix(input_paths: list[str], args):
 
     # Y-axis: square brackets grouping rows by prompt
     ax_heat.set_yticks([])
-    ax_heat.set_ylabel('Prompt Index', fontsize=22, labelpad=55)
+    if args.no_colorbar:
+        ax_heat.set_ylabel('Prompt Index', fontsize=22, labelpad=55)
 
     trans = mtransforms.blended_transform_factory(ax_heat.transAxes, ax_heat.transData)
     x_tip = -0.012
@@ -213,17 +236,24 @@ def plot_matrix(input_paths: list[str], args):
     ax_line.set_xlim(0, 1)
     ax_line.set_ylim(0, 0.5)
     ax_line.set_xlabel('Normalised CoT Sentence Position', fontsize=22)
-    ax_line.set_ylabel('Mean Std Dev\n(across rollouts)', fontsize=20)
+    if args.no_colorbar:
+        ax_line.set_ylabel('Mean Std Dev\n(across rollouts)', fontsize=20)
     ax_line.tick_params(labelsize=22)
     ax_line.grid(True, alpha=0.3)
 
     # Save
     out_dir = os.path.join(args.results_dir, args.model_name, 'figures')
     os.makedirs(out_dir, exist_ok=True)
-    output_path = os.path.join(
-        out_dir,
-        f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}.pdf'
-    )
+    if args.random_sample:
+        output_path = os.path.join(
+            out_dir,
+            f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}_sampled.pdf'
+        )
+    else:
+        output_path = os.path.join(
+            out_dir,
+            f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}.pdf'
+        )
     plt.savefig(output_path, bbox_inches='tight')
     plt.close()
     print(f"Heatmap saved to: {output_path}")

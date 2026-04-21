@@ -56,12 +56,14 @@ def parse_args():
                         help="Number of output variations per prompt")
     parser.add_argument("--x_threshold", type=float, default=0.03,
                         help="Upper bound on x axis for selecting high-variance points")
-    parser.add_argument("--y_threshold", type=float, default=0.43,
+    parser.add_argument("--y_threshold", type=float, default=0.4,
                         help="Lower bound on y axis for selecting high-variance points")
     parser.add_argument("--n", type=int, default=32,
                         help="Number of rows to randomly select from high-variance set")
     parser.add_argument("--random_seed", type=int, default=42,
                         help="Random seed for reproducibility")
+    parser.add_argument("--max_new_tokens", type=int, default=16384,
+                        help="Maximum tokens for generation")
     parser.add_argument("--temperature", type=float, default=0.6,
                         help="Temperature for sampling")
     parser.add_argument("--tensor_parallel_size", type=int, default=1,
@@ -439,6 +441,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
     
     sampling_params = SamplingParams(
+        max_tokens=args.max_new_tokens,
         temperature=args.temperature,
         skip_special_tokens=False
     )
@@ -448,7 +451,7 @@ def main():
         model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
-        trust_remote_code=True,
+        trust_remote_code=True
     )
     print("Model loaded successfully!")
 
@@ -495,6 +498,8 @@ def main():
         if existing:
             print(f"Skipping prompt {idx}: found existing file(s) {existing}")
             continue
+
+        print(f"resampling for prompt_index: {idx}")
 
         save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, quadrants_dir, args)
 
