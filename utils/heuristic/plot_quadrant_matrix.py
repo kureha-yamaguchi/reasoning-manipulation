@@ -14,6 +14,7 @@ import argparse
 import glob
 import os
 import re
+from collections import Counter
 
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
@@ -103,31 +104,43 @@ def plot_matrix(input_paths: list[str], args):
     file_info.sort(key=lambda x: (x['prompt_idx'], x['cot_idx']))
 
 
-    if args.random_sample:
-        N=3
-        h = 0.3
-    else:
-        N=32
-        h = 0.05
-
     all_prompts = list(dict.fromkeys(f['prompt_idx'] for f in file_info))
-    sampled = np.random.choice(all_prompts, size=min(N, len(all_prompts)), replace=False)
-    sampled_set = set(sampled)
-    file_info = [f for f in file_info if f['prompt_idx'] in sampled_set]
 
-    sorted_paths = [f['path'] for f in file_info]
+    if args.random_sample:
+        h = 0.3
 
-    mean_mat, std_mat = build_matrices(sorted_paths, args.n_bins)
+        # Line plot: N=32 random prompts
+        sampled_line = set(np.random.choice(all_prompts, size=min(32, len(all_prompts)), replace=False))
+        file_info_line = [f for f in file_info if f['prompt_idx'] in sampled_line]
 
-    # Cluster boundaries
-    prompt_indices_ordered = [f['prompt_idx'] for f in file_info]
+        # Heatmap: 3 random prompts each with exactly 5 CoTs
+        cot_counts = Counter(f['prompt_idx'] for f in file_info)
+        prompts_with_5_cots = [p for p, c in cot_counts.items() if c == 5]
+        sampled_heat = set(np.random.choice(
+            prompts_with_5_cots, size=min(3, len(prompts_with_5_cots)), replace=False
+        ))
+        file_info_heat = [f for f in file_info if f['prompt_idx'] in sampled_heat]
+    else:
+        h = 0.05
+        sampled_set = set(np.random.choice(all_prompts, size=min(32, len(all_prompts)), replace=False))
+        file_info_heat = [f for f in file_info if f['prompt_idx'] in sampled_set]
+        file_info_line = file_info_heat
+
+    sorted_paths_heat = [f['path'] for f in file_info_heat]
+    sorted_paths_line = [f['path'] for f in file_info_line]
+
+    mean_mat, _ = build_matrices(sorted_paths_heat, args.n_bins)
+    _, std_mat = build_matrices(sorted_paths_line, args.n_bins)
+
+    # Cluster boundaries (based on heatmap data)
+    prompt_indices_ordered = [f['prompt_idx'] for f in file_info_heat]
     unique_prompts = []
     cluster_boundaries = []
     for i, pi in enumerate(prompt_indices_ordered):
         if i == 0 or pi != prompt_indices_ordered[i - 1]:
             unique_prompts.append(pi)
             cluster_boundaries.append(i)
-    cluster_boundaries.append(len(file_info))
+    cluster_boundaries.append(len(file_info_heat))
 
     n_rows = mean_mat.shape[0]
     bin_centres = np.linspace(0.0, 1.0, args.n_bins)
@@ -144,9 +157,9 @@ def plot_matrix(input_paths: list[str], args):
         model_short = 'GPT-OSS-20B'
     else:
         model_short = args.model_name.split('/')[-1]
-    title_margin_inches = 0.35
+    title_margin_inches = 0
     top = 1.0 - title_margin_inches / fig_height
-    fig.suptitle(model_short, fontsize=22, fontweight='bold', y=top + 0.01)
+    fig.suptitle(model_short, fontsize=22, fontweight='bold', y=top + 0.07)
     fig.subplots_adjust(top=top)
 
 
@@ -182,12 +195,12 @@ def plot_matrix(input_paths: list[str], args):
     # Y-axis: square brackets grouping rows by prompt
     ax_heat.set_yticks([])
     if args.no_colorbar:
-        ax_heat.set_ylabel('Prompt Index', fontsize=22, labelpad=55)
+        ax_heat.set_ylabel('Prompt Index', fontsize=22, labelpad=65)
 
     trans = mtransforms.blended_transform_factory(ax_heat.transAxes, ax_heat.transData)
     x_tip = -0.012
     x_base = -0.028
-    x_text = -0.038
+    x_text = -0.055
 
     gap = 0.15  # half-gap in data (row) units
 
@@ -217,9 +230,9 @@ def plot_matrix(input_paths: list[str], args):
         cbar = fig.colorbar(im, cax=cbar_ax)
         cbar.set_label('Mean StrongREJECT Score', fontsize=22)
         cbar.ax.tick_params(labelsize=22)
-        cbar.ax.annotate('comply', xy=(0.5, 1.02), xycoords='axes fraction',
+        cbar.ax.annotate('comply', xy=(0.5, 1.08), xycoords='axes fraction',
                          fontsize=18, fontstyle='italic', ha='center')
-        cbar.ax.annotate('refuse', xy=(0.5, -0.03), xycoords='axes fraction',
+        cbar.ax.annotate('refuse', xy=(0.5, -0.08), xycoords='axes fraction',
                          fontsize=18, fontstyle='italic', ha='center')
 
     # ── Row 0: Std across rollouts averaged across files ──
