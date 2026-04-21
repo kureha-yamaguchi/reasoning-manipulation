@@ -16,6 +16,7 @@ import os
 import re
 from collections import Counter
 
+import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 import numpy as np
@@ -220,9 +221,21 @@ def plot_matrix(input_paths: list[str], args):
             transform=trans, ha='right', va='center', fontsize=18,
         )
 
-    # Horizontal borders between prompt clusters
+    # White separators between prompt clusters
     for boundary in cluster_boundaries[1:-1]:
         ax_heat.axhline(y=boundary - 0.5, color='white', linewidth=5.0)
+
+    # Black border around each prompt cluster (no continuous outer spine)
+    for spine in ax_heat.spines.values():
+        spine.set_visible(False)
+    for g in range(len(unique_prompts)):
+        y0 = cluster_boundaries[g] - 0.5 + (gap if g > 0 else 0)
+        y1 = cluster_boundaries[g + 1] - 0.5 - (gap if g < len(unique_prompts) - 1 else 0)
+        rect = mpatches.Rectangle(
+            (-0.5, y0), args.n_bins, y1 - y0,
+            linewidth=1.5, edgecolor='black', facecolor='none'
+        )
+        ax_heat.add_patch(rect)
 
     # Colorbar
     if not args.no_colorbar:
