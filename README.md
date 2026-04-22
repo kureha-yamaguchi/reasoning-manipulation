@@ -363,7 +363,7 @@ uv run -m utils.heuristic.plot_quadrant_matrix \
   --repetitions {repetitions}
 ```
 
-## Prompt-based Attacks 
+<!-- ## Prompt-based Attacks 
 
 This GCG-style implementation is adapted from GraySwanAI's [nanoGCG](https://github.com/GraySwanAI/nanoGCG) (MIT license), with the adition of activation caution minimisation (via dot product with pre-computed cautious vector).
 
@@ -402,7 +402,7 @@ results = run(config)
 See [attack/gcg.py](attack/gcg.py#L47) for available `GCGConfig` options.
 
 <br>
-<br>
+<br> -->
 
 ---
 If you use this code in your work, please consider citing us with the following bibtex:
