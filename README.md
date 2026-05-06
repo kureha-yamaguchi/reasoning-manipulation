@@ -387,10 +387,8 @@ See [attack/gcg.py](attack/gcg.py#L47) for available `GCGConfig` options.
 <br>
 <br> -->
 
----
+**Version 1 Paper: https://arxiv.org/abs/2507.03167, accepted as a poster at the ICML 2025 Workshop on Reliable and Responsible Foundation Models.**
 
-**Version1 Paper: https://arxiv.org/abs/2507.03167, Accepted as a poster at the ICML 2025 Workshop on Reliable and Responsible Foundation Models.**
-```
 
 <!-- ## Related materials 
 **Exploitation of linear representation hypothesis**
