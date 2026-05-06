@@ -5,10 +5,6 @@
 > 
 > It is intended **only** for research purposes. 
 
-<div align="center">
-  <img src="figures/example.png" width="800"/>
-</div>
-
 
 ## Installation
 
@@ -129,10 +125,6 @@ uv run -m utils.cache_activations \
   --type {type}
 ```
 
-<div align="center">
-  <img src="figures/dataset_visualisation_transparent.png" width="780"/>
-</div>
-
 > [!NOTE]
 > Optionally, you can visualise the PCA plots for the refusal and non-refusal activations to help determine which layer is best at separating the transformer residual stream activations using `interventions/visualise_pca.ipynb`.
 
@@ -150,10 +142,6 @@ uv run -m interventions.create_ortho_model \
   --layer {try_layers} \
   --type {type}
 ```
-
-<div align="center">
-  <img src="figures/heatmap_annotated_transparent2.png" width="780"/>
-</div>
 
 ### Determine best layer for intervention
 
