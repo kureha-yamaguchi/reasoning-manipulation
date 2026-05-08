@@ -9,7 +9,7 @@
 ## Installation
 
 ```bash
-git clone git@github.com:ky295/reasoning-manipulation.git
+git clone {REPOSITORY_PATH}
 cd reasoning-manipulation
 ```
 
@@ -20,7 +20,7 @@ cd reasoning-manipulation
 With uv, dependencies are managed automatically and no specific install step is needed (other than uv itself, instructions [here](https://docs.astral.sh/uv/getting-started/installation/)). We recommended this for faster dependency resolution and better reproducibility. 
 - Run a python file with `uv run {FILENAME.py}`
 - Use a module with `uv run -m {MODULE_PATH}`
-- [TEMP] Need to do `uv pip install git+https://github.com/b-d-e/strong_reject` (if this doesn't work, just use compute_score_outputs_slow.py in place of compute_score_outputs.py)
+<!-- - [TEMP] Need to do `uv pip install git+https://github.com/b-d-e/strong_reject` (if this doesn't work, just use compute_score_outputs_slow.py in place of compute_score_outputs.py) -->
 
 <br>
 
@@ -386,8 +386,8 @@ See [attack/gcg.py](attack/gcg.py#L47) for available `GCGConfig` options.
 
 <br>
 <br> -->
-
-**Version 1 Paper: https://arxiv.org/abs/2507.03167, accepted as a poster at the ICML 2025 Workshop on Reliable and Responsible Foundation Models.**
+<!-- 
+**Version 1 Paper: https://arxiv.org/abs/2507.03167, accepted as a poster at the ICML 2025 Workshop on Reliable and Responsible Foundation Models.** -->
 
 
 <!-- ## Related materials 
