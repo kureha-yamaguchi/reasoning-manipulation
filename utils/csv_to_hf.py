@@ -1,7 +1,7 @@
 """
 Simple script to push a dataset to Hugging Face Hub.
 uv run -m utils.csv_to_hf \
-  --hf_username kureha295 \
+  --hf_username {username} \
   --model_name Qwen/Qwen3-8B \
   --dataset scored_train_harmful_prompts_cot5_out5.csv
 """
