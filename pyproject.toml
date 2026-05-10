@@ -1,12 +1,7 @@
 [project]
 name = "reasoning-manipulation"
 version = "0.1.0"
-description = "Adversarial Manipulation of Reasoning Models using Internal Representations"
-authors = [
-  {name = "Kureha Yamaguchi", email = "ky295@cantab.ac.uk"},
-  {name = "Benjamin Etheridge"},
-  {name = "Andy Arditi"},
-]
+description = "Where Do Reasoning Models Refuse?"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
