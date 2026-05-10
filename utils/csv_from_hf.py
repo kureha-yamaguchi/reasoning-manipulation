@@ -15,7 +15,7 @@ from pathlib import Path
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Pull a dataset from Hugging Face Hub and save as CSV")
-    parser.add_argument("--hf_username", type=str, default="kureha295",
+    parser.add_argument("--hf_username", type=str, default="username",
                        help="Huggingface username")
     parser.add_argument("--model_name", type=str,
                        help="Model name (used for repo name and local path)")
