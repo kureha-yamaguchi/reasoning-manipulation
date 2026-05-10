@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HF_USERNAME=kureha295
+HF_USERNAME=
 
 MODEL_NAMES=(
     deepseek-ai/DeepSeek-R1-Distill-Llama-8B
