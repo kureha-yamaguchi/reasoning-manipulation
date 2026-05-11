@@ -1,4 +1,4 @@
-# Adversarial Manipulation of Reasoning Models using Internal Representations
+# Where Do Reasoning Models Refuse?
 
 > [!CAUTION]
 > This repository contains datasets with offensive content and code to produce a jailbroken (unaligned) reasoning model.
