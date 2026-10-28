@@ -35,10 +35,17 @@ from collections import defaultdict
 import statistics 
 import pandas as pd
 import gc
+import hashlib
+import json
+import math
 import random
 import re
+import socket
+import subprocess
+from datetime import datetime
 
 import torch
+import vllm
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
@@ -56,7 +63,7 @@ def parse_args():
                         help="Number of output variations per prompt")
     parser.add_argument("--x_threshold", type=float, default=0.03,
                         help="Upper bound on x axis for selecting high-variance points")
-    parser.add_argument("--y_threshold", type=float, default=0.4,
+    parser.add_argument("--y_threshold", type=float, default=0.43,
                         help="Lower bound on y axis for selecting high-variance points")
     parser.add_argument("--n", type=int, default=32,
                         help="Number of rows to randomly select from high-variance set")
@@ -72,6 +79,10 @@ def parse_args():
                         help="GPU memory utilization ratio")
     parser.add_argument("--max_retries_multiplier", type=int, default=10,
                         help="Maximum total generations = repetitions * this multiplier (safety limit)")
+    parser.add_argument("--shard", type=str, default="0/1",
+                        help="'k/K': process every K-th sampled prompt starting at k (one process per GPU)")
+    parser.add_argument("--max_model_len", type=int, default=None,
+                        help="vLLM max context length (default: model's)")
     return parser.parse_args()
 
 
@@ -101,8 +112,9 @@ def load_scored_csv(csv_paths: Union[str, List[str]]) -> List[Dict[str, str]]:
         with open(csv_path, 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in tqdm(reader, total=total_rows, desc=f"Loading {os.path.basename(csv_path)}"):
-                # Skip rows with empty or invalid scores
-                if row.get('strongreject_score', '').strip():
+                # Skip rows with empty or invalid (e.g. 'nan') scores
+                score = row.get('strongreject_score', '').strip()
+                if score and math.isfinite(float(score)):
                     all_rows.append(row)
                 else:
                     skipped_count += 1
@@ -338,6 +350,83 @@ def generate_valid_outputs(
     
     return valid_outputs, total_generated
 
+def cot_output_path(quadrants_dir, idx, cot_number, repetitions):
+    return os.path.join(quadrants_dir, f"full_resample_prompt{idx}_cot{cot_number}_rep_{repetitions}.csv")
+
+
+def request_seed(base_seed, idx, cot_number, sentence_idx, resample_n, attempt):
+    """Deterministic per-request vLLM seed, so each rollout is reproducible in isolation."""
+    key = f"{base_seed}-{idx}-{cot_number}-{sentence_idx}-{resample_n}-{attempt}"
+    return int.from_bytes(hashlib.sha256(key.encode()).digest()[:4], "little")
+
+
+def save_rollouts_batched(llm, tokenizer, quadrant_points, idx, quadrants_dir, args):
+    """
+    Same rollouts as save_rollouts, but all (CoT, prefix depth, repetition) requests for a
+    prompt are submitted in one llm.generate call (retrying only invalid outputs), each with
+    its own seed. CoT files that already exist are skipped, and files are written atomically.
+    """
+    original_prompt = next(item['prompt'] for item in quadrant_points if item["prompt_idx"] == idx)
+    sentences_list = get_sentences(quadrant_points, idx)
+
+    chat = [{"role": "user", "content": original_prompt}]
+    formatted_prompt = tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
+    if args.model_name == "openai/gpt-oss-20b":
+        formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
+
+    # (cot_number, sentence_idx) -> combined thread, is_last_sentence
+    slots = {}
+    for cot_number, sentences in enumerate(sentences_list):
+        if os.path.exists(cot_output_path(quadrants_dir, idx, cot_number, args.repetitions)):
+            print(f"Skipping prompt {idx} cot {cot_number}: file exists")
+            continue
+        if args.model_name == "openai/gpt-oss-20b":
+            sentences = sentences + ["<|end|><|start|>assistant<|channel|>final<|message|>"]
+        for i in range(len(sentences) + 1):
+            slots[(cot_number, i)] = (formatted_prompt + "".join(sentences[:i]), i == len(sentences))
+    if not slots:
+        return
+
+    valid = defaultdict(list)  # (cot_number, sentence_idx) -> [(generated_text, output_text)]
+    for attempt in range(args.max_retries_multiplier):
+        requests = [(key, n) for key in slots for n in range(len(valid[key]), args.repetitions)]
+        if not requests:
+            break
+        print(f"Prompt {idx} attempt {attempt}: generating {len(requests)} rollouts")
+        params = [
+            SamplingParams(max_tokens=args.max_new_tokens, temperature=args.temperature,
+                           skip_special_tokens=False,
+                           seed=request_seed(args.random_seed, idx, key[0], key[1], n, attempt))
+            for key, n in requests
+        ]
+        outputs = llm.generate([slots[key][0] for key, _ in requests], params)
+        for (key, _), output in zip(requests, outputs):
+            generated_text = tokenizer.decode(output.outputs[0].token_ids, skip_special_tokens=False)
+            output_text = generated_text if slots[key][1] else extract_valid_output(generated_text, model_name=args.model_name)
+            if output_text is not None and len(valid[key]) < args.repetitions:
+                valid[key].append((generated_text, output_text))
+
+    for cot_number in sorted({c for c, _ in slots}):
+        results = []
+        for i in sorted(i for c, i in slots if c == cot_number):
+            outs = valid[(cot_number, i)]
+            if len(outs) < args.repetitions:
+                print(f"  WARNING: prompt {idx} cot {cot_number} S{i}: only {len(outs)}/{args.repetitions} valid")
+            for j, (gen_text, output_text) in enumerate(outs):
+                results.append({
+                    'prompt': original_prompt,
+                    'sentence_idx': i,
+                    'resample_n': j + 1,
+                    'combined_thread': slots[(cot_number, i)][0],
+                    'generated_text': gen_text,
+                    'output': output_text
+                })
+        path = cot_output_path(quadrants_dir, idx, cot_number, args.repetitions)
+        pd.DataFrame(results).to_csv(path + ".tmp", index=False)
+        os.replace(path + ".tmp", path)
+        print(f"Results saved to: {path} ({len(results)} rollouts)")
+
+
 def save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, quadrants_dir, args):
 
     original_prompt = next((item['prompt'] for item in quadrant_points if item["prompt_idx"] == idx), None)
@@ -439,18 +528,13 @@ def main():
     torch.cuda.empty_cache()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-    
-    sampling_params = SamplingParams(
-        max_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        skip_special_tokens=False
-    )
 
     print("Initializing vLLM...")
     llm = LLM(
         model=args.model_name,
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
+        max_model_len=args.max_model_len,
         trust_remote_code=True
     )
     print("Model loaded successfully!")
@@ -483,25 +567,27 @@ def main():
     os.makedirs(quadrants_dir, exist_ok=True)
 
     indices_path = os.path.join(quadrants_dir, 'sampled_prompt_indices.txt')
-    with open(indices_path, 'w') as f:
+    with open(indices_path + f'.{os.getpid()}', 'w') as f:
         f.write('\n'.join(str(i) for i in sampled_indices))
+    os.replace(indices_path + f'.{os.getpid()}', indices_path)
     print(f"Saved {len(sampled_indices)} sampled prompt indices to: {indices_path}")
 
-    # repeat for every prompt in sampled quadrant
-    for idx in sampled_indices:
+    # Provenance for this run (one file per launch/shard)
+    shard_k, shard_n = map(int, args.shard.split('/'))
+    git = lambda *a: subprocess.run(['git', *a], capture_output=True, text=True).stdout.strip()
+    meta = {'args': vars(args), 'git_sha': git('rev-parse', 'HEAD'), 'git_dirty': bool(git('status', '--porcelain', '-uno')),
+            'vllm': vllm.__version__, 'host': socket.gethostname(), 'started': datetime.now().isoformat(),
+            'n_eligible': len(all_indices), 'sampled_indices': sampled_indices,
+            'shard_indices': sampled_indices[shard_k::shard_n]}
+    meta_dir = os.path.join(quadrants_dir, 'run_metadata')
+    os.makedirs(meta_dir, exist_ok=True)
+    with open(os.path.join(meta_dir, f"{datetime.now():%Y%m%d-%H%M%S}_shard{shard_k}of{shard_n}.json"), 'w') as f:
+        json.dump(meta, f, indent=2)
 
-        # do not repeat for idx that have already been resampled
-        existing = [
-            f for f in os.listdir(quadrants_dir)
-            if re.match(rf"full_resample_prompt{idx}_cot\d+_rep_{args.repetitions}\.csv", f)
-        ]
-        if existing:
-            print(f"Skipping prompt {idx}: found existing file(s) {existing}")
-            continue
-
+    # repeat for every prompt in this shard of the sampled quadrant (existing CoT files are skipped)
+    for idx in sampled_indices[shard_k::shard_n]:
         print(f"resampling for prompt_index: {idx}")
-
-        save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, quadrants_dir, args)
+        save_rollouts_batched(llm, tokenizer, quadrant_points, idx, quadrants_dir, args)
 
 
 if __name__ == "__main__":
