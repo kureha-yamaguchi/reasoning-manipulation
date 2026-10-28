@@ -8,10 +8,15 @@ and square brackets on the y-axis labelling each cluster with its prompt index.
 
 uv run -m utils.heuristic.plot_quadrant_matrix --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --no_colorbar
 uv run -m utils.heuristic.plot_quadrant_matrix --model_name openai/gpt-oss-20b
+
+Paper Fig 3 heatmaps (prompts pinned; line-plot subsample fixed by --seed):
+uv run -m utils.heuristic.plot_quadrant_matrix --model_name deepseek-ai/DeepSeek-R1-Distill-Llama-8B --no_colorbar --random_sample --heatmap_prompts 806,963,1073
+uv run -m utils.heuristic.plot_quadrant_matrix --model_name openai/gpt-oss-20b --random_sample --heatmap_prompts 571,611,2057
 '''
 
 import argparse
 import glob
+import json
 import os
 import re
 from collections import Counter
@@ -40,6 +45,11 @@ def parse_args():
                         help="Omit the colorbar from the figure")
     parser.add_argument("--random_sample", action="store_true",
                         help="Trim heatmap to ~3 random examples per model")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="Seed for prompt subsampling (line plot and heatmap)")
+    parser.add_argument("--heatmap_prompts", type=str, default=None,
+                        help="Comma-separated prompt indices for the heatmap, overriding "
+                             "random selection (e.g. paper Fig 3: 806,963,1073 / 571,611,2057)")
     return parser.parse_args()
 
 
@@ -106,26 +116,36 @@ def plot_matrix(input_paths: list[str], args):
 
 
     all_prompts = list(dict.fromkeys(f['prompt_idx'] for f in file_info))
+    rng = np.random.default_rng(args.seed)
 
     if args.random_sample:
         h = 0.3
 
         # Line plot: N=32 random prompts
-        sampled_line = set(np.random.choice(all_prompts, size=min(32, len(all_prompts)), replace=False))
+        sampled_line = set(rng.choice(all_prompts, size=min(32, len(all_prompts)), replace=False).tolist())
         file_info_line = [f for f in file_info if f['prompt_idx'] in sampled_line]
 
-        # Heatmap: 3 random prompts each with exactly 5 CoTs
-        cot_counts = Counter(f['prompt_idx'] for f in file_info)
-        prompts_with_5_cots = [p for p, c in cot_counts.items() if c == 5]
-        sampled_heat = set(np.random.choice(
-            prompts_with_5_cots, size=min(3, len(prompts_with_5_cots)), replace=False
-        ))
+        # Heatmap: explicit prompts, or 3 random prompts each with exactly 5 CoTs
+        if args.heatmap_prompts:
+            sampled_heat = {int(p) for p in args.heatmap_prompts.split(',')}
+            missing = sampled_heat - set(all_prompts)
+            if missing:
+                raise ValueError(f"Heatmap prompts not found in results: {sorted(missing)}")
+        else:
+            cot_counts = Counter(f['prompt_idx'] for f in file_info)
+            prompts_with_5_cots = [p for p, c in cot_counts.items() if c == 5]
+            sampled_heat = set(rng.choice(
+                prompts_with_5_cots, size=min(3, len(prompts_with_5_cots)), replace=False
+            ).tolist())
         file_info_heat = [f for f in file_info if f['prompt_idx'] in sampled_heat]
     else:
         h = 0.05
-        sampled_set = set(np.random.choice(all_prompts, size=min(32, len(all_prompts)), replace=False))
+        sampled_set = set(rng.choice(all_prompts, size=min(32, len(all_prompts)), replace=False).tolist())
         file_info_heat = [f for f in file_info if f['prompt_idx'] in sampled_set]
         file_info_line = file_info_heat
+        sampled_line = sampled_heat = sampled_set
+    args.sampled_line = sorted(sampled_line)
+    args.sampled_heat = sorted(sampled_heat)
 
     sorted_paths_heat = [f['path'] for f in file_info_heat]
     sorted_paths_line = [f['path'] for f in file_info_line]
@@ -281,6 +301,10 @@ def plot_matrix(input_paths: list[str], args):
             f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}.pdf'
         )
     plt.savefig(output_path, bbox_inches='tight')
+    # Record which prompts were drawn so the figure can be reproduced
+    with open(os.path.splitext(output_path)[0] + '_prompts.json', 'w') as f:
+        json.dump({'seed': args.seed, 'line_prompts': args.sampled_line,
+                   'heatmap_prompts': args.sampled_heat}, f, indent=2)
     plt.close()
     print(f"Heatmap saved to: {output_path}")
 
