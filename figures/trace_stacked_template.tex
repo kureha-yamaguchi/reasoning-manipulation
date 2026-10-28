@@ -1,0 +1,62 @@
+% trace_stacked_template.tex
+% Stacked comparison of base vs toxified model traces (single-column layout)
+%
+% Required packages (add to your preamble):
+%   \usepackage{tcolorbox}
+%   \usepackage{xcolor}
+%   \tcbuselibrary{skins, breakable}
+%
+% Usage: Copy the \begin{figure}...\end{figure} block per example.
+%        Replace placeholder text in ALLCAPS.
+
+\begin{figure}[ht!]
+\begin{tcolorbox}[
+  enhanced jigsaw,
+  breakable,
+  pad at break*=1mm,
+  colback=white,
+  colframe=black!70,
+  boxrule=0.5pt,
+  left=5pt, right=5pt, top=5pt, bottom=5pt,
+  title={\small\textbf{MODEL NAME HERE}},
+  fonttitle=\sffamily,
+  coltitle=black,
+  colbacktitle=gray!10,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=gray!10, colframe=black!30, boxrule=0.3pt},
+]
+
+  % ── Prompt ──
+  \small\textbf{Prompt:}\enspace PROMPT TEXT HERE
+
+  \vspace{6pt}
+  \noindent\rule{\linewidth}{0.3pt}
+  \vspace{4pt}
+
+  % ── Baseline ──
+  \small\textbf{\textcolor{blue!70!black}{Baseline}}\\[3pt]
+  \colorbox{blue!5}{\parbox{\dimexpr\linewidth-2\fboxsep}{%
+    \small\texttt{<think>}
+    BASE COT EXCERPT HERE
+    \texttt{</think>}%
+  }}\\[4pt]
+  \small BASE RESPONSE EXCERPT HERE
+
+  \vspace{6pt}
+  \noindent\rule{\linewidth}{0.1pt}
+  \vspace{6pt}
+
+  % ── Toxified ──
+  \small\textbf{\textcolor{red!70!black}{Toxified}}\\[3pt]
+  \colorbox{red!5}{\parbox{\dimexpr\linewidth-2\fboxsep}{%
+    \small\texttt{<think>}
+    ORTHO COT EXCERPT HERE
+    \texttt{</think>}%
+  }}\\[4pt]
+  \small ORTHO RESPONSE EXCERPT HERE
+  \texttt{\textcolor{red!70!black}{\ldots}}
+
+\end{tcolorbox}
+\caption{CAPTION HERE}
+\label{fig:trace-stacked}
+\end{figure}

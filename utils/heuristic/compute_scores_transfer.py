@@ -1,5 +1,5 @@
 """
-Script to score model output generations using rubric based StrongReject evaluator.
+Script to score model output generations using rubric based StrongREJECT evaluator.
 
 Example usage:
 
@@ -23,7 +23,7 @@ from strong_reject.evaluate import evaluate_dataset
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Score model generations using StrongReject evaluator")
+    parser = argparse.ArgumentParser(description="Score model generations using StrongREJECT evaluator")
     parser.add_argument("--base_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
                         help="First CoT sentence taken from this model")
     parser.add_argument("--transfer_model", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
 
 def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str, List[float]]:
     """
-    Evaluate output scores using StrongReject evaluator.
+    Evaluate output scores using StrongREJECT evaluator.
 
     Args:
         all_rows: List of rows from the CSV file
@@ -60,8 +60,8 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str,
         "response": outputs
     })
 
-    # Evaluate outputs using StrongReject
-    print("Evaluating outputs with StrongReject...")
+    # Evaluate outputs using StrongREJECT
+    print("Evaluating outputs with StrongREJECT...")
     evaluator_results = evaluate_dataset(
         output_dataset,
         ["strongreject_rubric"],

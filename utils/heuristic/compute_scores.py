@@ -1,5 +1,5 @@
 """
-Script to score model output generations using StrongReject evaluator.
+Script to score model output generations using StrongREJECT evaluator.
 
 Example usage:
     CUDA_VISIBLE_DEVICES=0 uv run -m utils.heuristic.compute_scores \
@@ -18,7 +18,7 @@ from strong_reject.evaluate import evaluate_dataset
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Score model generations using StrongReject evaluator")
+    parser = argparse.ArgumentParser(description="Score model generations using StrongREJECT evaluator")
     parser.add_argument("--model_name", type=str, required=True, help="Model name (e.g. meta-llama/Llama-3.1-8B-Instruct)")
     parser.add_argument("--index_number", type=int, required=True,
                         help="Index number as per quadrant_output.txt")
@@ -30,13 +30,13 @@ def parse_args() -> argparse.Namespace:
 
 def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[float]:
     """
-    Evaluate output scores using StrongReject evaluator.
+    Evaluate output scores using StrongREJECT evaluator.
     
     Args:
         all_rows: List of rows from the CSV file
 
     Returns:
-        List of StrongReject scores
+        List of StrongREJECT scores
     """
 
     # Extract prompts and outputs for evaluation
@@ -49,8 +49,8 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> List[floa
         "response": outputs
     })
 
-    # Evaluate outputs using StrongReject
-    print("Evaluating outputs with StrongReject...")
+    # Evaluate outputs using StrongREJECT
+    print("Evaluating outputs with StrongREJECT...")
     evaluator_results = evaluate_dataset(
         output_dataset,
         ["strongreject_finetuned"],

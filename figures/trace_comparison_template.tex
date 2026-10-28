@@ -1,0 +1,124 @@
+% trace_comparison_template.tex
+% Side-by-side comparison of base vs toxified model traces
+%
+% Required packages (add to your preamble):
+%   \usepackage{tcolorbox}
+%   \usepackage{xcolor}
+%   \usepackage{tikz}
+%   \tcbuselibrary{skins, breakable}
+%
+% Required definitions (add to your preamble):
+%   \newsavebox{\cotboxL}
+%   \newsavebox{\cotboxR}
+%   \newlength{\cotLht}
+%   \newlength{\cotRht}
+%   \newlength{\cotmaxht}
+%   \newlength{\cotcolwidth}
+%
+%   % Score bubble: \scorebubble{color}{value}  e.g. \scorebubble{green!70!black}{0.00}
+%   \newcommand{\scorebubble}[2]{%
+%     \tikz[baseline=(node.base)]{%
+%       \node[fill=#1!8, draw=#1!50, line width=0.4pt,
+%             rounded corners=4pt, inner xsep=4pt, inner ysep=2pt,
+%             font=\scriptsize\bfseries\sffamily] (node)
+%             {\textcolor{#1}{SR\,=\,#2}};%
+%     }%
+%   }
+%
+% Usage: Copy the \begin{figure}...\end{figure} block per example.
+%        Replace placeholder text in ALLCAPS.
+
+\begin{figure}[ht!]
+\begin{tcolorbox}[
+  enhanced jigsaw,
+  breakable,
+  pad at break*=1mm,
+  colback=white,
+  colframe=black!70,
+  boxrule=0.5pt,
+  left=5pt, right=5pt, top=5pt, bottom=5pt,
+  title={\small\textbf{MODEL NAME HERE}},
+  fonttitle=\sffamily,
+  coltitle=black,
+  colbacktitle=gray!10,
+  attach boxed title to top left={yshift=-2mm, xshift=4mm},
+  boxed title style={colback=gray!10, colframe=black!30, boxrule=0.3pt},
+]
+
+  % ── Prompt ──
+  \small\textbf{Prompt:}\enspace PROMPT TEXT HERE
+
+  \vspace{6pt}
+  \noindent\rule{\linewidth}{0.3pt}
+  \vspace{4pt}
+
+  % ── Column headers with score bubbles ──
+  \noindent
+  \begin{minipage}[t]{0.47\linewidth}
+    \small\textbf{\textcolor{blue!70!black}{Baseline}}\hfill\scorebubble{green!70!black}{0.00}%
+  \end{minipage}%
+  \hfill
+  \begin{minipage}[t]{0.47\linewidth}
+    \small\textbf{\textcolor{red!70!black}{Toxified}}\hfill\scorebubble{red!70!black}{1.00}%
+  \end{minipage}%
+
+  \vspace{4pt}
+
+  % ── CoT boxes (measured and rendered at equal height) ──
+  % Step 1: compute column width
+  \setlength{\cotcolwidth}{\dimexpr 0.47\linewidth - 2\fboxsep\relax}%
+  %
+  % Step 2: typeset both into saved boxes to measure total height
+  \savebox{\cotboxL}{\parbox[t]{\cotcolwidth}{%
+    \small\texttt{<think>}
+    BASE COT EXCERPT HERE
+    \texttt{</think>}%
+  }}%
+  \savebox{\cotboxR}{\parbox[t]{\cotcolwidth}{%
+    \small\texttt{<think>}
+    ORTHO COT EXCERPT HERE
+    \texttt{</think>}%
+  }}%
+  %
+  % Step 3: find the taller one (ht + dp = total height for a parbox)
+  \setlength{\cotLht}{\dimexpr\ht\cotboxL+\dp\cotboxL\relax}%
+  \setlength{\cotRht}{\dimexpr\ht\cotboxR+\dp\cotboxR\relax}%
+  \ifdim\cotLht>\cotRht
+    \setlength{\cotmaxht}{\cotLht}%
+  \else
+    \setlength{\cotmaxht}{\cotRht}%
+  \fi
+  %
+  % Step 4: render both at the max height
+  \noindent
+  \colorbox{blue!5}{\parbox[t][\cotmaxht][t]{\cotcolwidth}{%
+    \small\texttt{<think>}
+    BASE COT EXCERPT HERE
+    \texttt{</think>}%
+  }}%
+  \hfill
+  \colorbox{red!5}{\parbox[t][\cotmaxht][t]{\cotcolwidth}{%
+    \small\texttt{<think>}
+    ORTHO COT EXCERPT HERE
+    \texttt{</think>}%
+  }}%
+
+  \vspace{4pt}
+  \noindent\rule{\linewidth}{0.1pt}
+  \vspace{4pt}
+
+  % ── Responses ──
+  \noindent
+  \begin{minipage}[t]{0.47\linewidth}
+    \small BASE RESPONSE EXCERPT HERE
+  \end{minipage}%
+  \hfill
+  \begin{minipage}[t]{0.47\linewidth}
+    \small ORTHO RESPONSE EXCERPT HERE
+    \texttt{\textcolor{red!70!black}{\ldots}}
+  \end{minipage}%
+
+\end{tcolorbox}
+\caption{CAPTION HERE}
+\label{fig:trace-comparison}
+\end{figure}

@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trace Explorer</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #242836;
+    --border: #2e3348;
+    --text: #e1e4ed;
+    --text-dim: #8b90a5;
+    --accent: #7c6cff;
+    --accent-dim: #5a4dbf;
+    --green: #34d399;
+    --green-bg: #0d3025;
+    --red: #f87171;
+    --red-bg: #3b1515;
+    --orange: #fbbf24;
+    --orange-bg: #3b2e0a;
+    --blue: #60a5fa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+  }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Top bar */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    backdrop-filter: blur(12px);
+  }
+
+  .topbar h1 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .nav-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover { background: var(--accent-dim); border-color: var(--accent); }
+  .nav-btn:active { transform: scale(0.97); }
+
+  .counter {
+    font-size: 13px;
+    color: var(--text-dim);
+    min-width: 60px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .toggle-all-btn {
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    transition: all 0.15s;
+  }
+  .toggle-all-btn:hover { color: var(--text); border-color: var(--accent); }
+
+  .threshold-info {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  /* Prompt display */
+  .prompt-bar {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+  }
+  .prompt-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .prompt-text {
+    font-size: 15px;
+    color: var(--orange);
+    line-height: 1.5;
+    font-weight: 500;
+  }
+
+  /* Grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+    margin: 0;
+  }
+
+  .model-col {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .model-header {
+    padding: 10px 16px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--blue);
+    letter-spacing: 0.5px;
+  }
+
+  .variant-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .variant-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: var(--bg3);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .variant-label { text-transform: uppercase; letter-spacing: 0.5px; }
+  .variant-label.base { color: var(--green); }
+  .variant-label.ortho { color: var(--red); }
+
+  .score-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .score-badge.refuse {
+    background: var(--green-bg);
+    color: var(--green);
+    border: 1px solid #1a6b4a;
+  }
+  .score-badge.comply {
+    background: var(--red-bg);
+    color: var(--red);
+    border: 1px solid #6b1a1a;
+  }
+  .score-badge.partial {
+    background: var(--orange-bg);
+    color: var(--orange);
+    border: 1px solid #6b4e0a;
+  }
+
+  .variant-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* CoT section */
+  .cot-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: color 0.15s;
+  }
+  .cot-toggle:hover { color: var(--accent); }
+  .cot-toggle .arrow { transition: transform 0.2s; display: inline-block; }
+  .cot-toggle.open .arrow { transform: rotate(90deg); }
+
+  .cot-content {
+    display: none;
+    padding: 10px 14px;
+    background: #12141d;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    flex: 0 1 40%;
+  }
+  .cot-content.open { display: block; }
+
+  .cot-content .think-tag {
+    color: var(--accent);
+    font-weight: 600;
+    opacity: 0.6;
+  }
+
+  /* Response section */
+  .response {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 0;
+  }
+
+  /* Loading / empty states */
+  .loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 80vh;
+    gap: 16px;
+    color: var(--text-dim);
+  }
+  .loading .icon { font-size: 48px; }
+  .loading p { font-size: 14px; }
+
+  .file-input-wrapper {
+    position: relative;
+    display: inline-block;
+  }
+  .file-input-wrapper input[type="file"] { display: none; }
+  .file-input-wrapper label {
+    display: inline-block;
+    padding: 10px 24px;
+    background: var(--accent);
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .file-input-wrapper label:hover { background: var(--accent-dim); }
+
+  /* Keyboard hints */
+  .hints {
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    gap: 12px;
+  }
+  kbd {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 10px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  /* Row labels */
+  .row-label {
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    padding: 12px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+  }
+  .row-label.base { background: var(--green-bg); color: var(--green); }
+  .row-label.ortho { background: var(--red-bg); color: var(--red); }
+
+  #main-ui {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  #main-ui.hidden { display: none; }
+
+  .main-grid {
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    grid-template-rows: 1fr 1fr;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .model-row {
+    display: grid;
+    gap: 1px;
+    background: var(--border);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .model-name-row {
+    display: grid;
+    gap: 1px;
+    background: var(--border);
+  }
+  .model-name-row .corner { background: var(--bg2); }
+
+  /* ── Overview table ── */
+  #overview {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    display: none;
+  }
+  #overview.active { display: block; }
+  #main-detail { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #main-detail.hidden-view { display: none; }
+
+  .overview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .overview-table th {
+    position: sticky;
+    top: 0;
+    background: var(--bg2);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .overview-table th.score-col { text-align: center; width: 80px; }
+  .overview-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .overview-table tr {
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .overview-table tbody tr:hover { background: var(--bg3); }
+  .overview-table .idx-col {
+    color: var(--text-dim);
+    width: 40px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .overview-table .prompt-col {
+    color: var(--text);
+    max-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .overview-table .score-cell {
+    text-align: center;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .overview-table .delta-col {
+    text-align: center;
+    width: 70px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .view-toggle-btn {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+  .view-toggle-btn:hover { background: var(--accent-dim); }
+</style>
+</head>
+<body>
+
+<div id="app" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
+  <!-- Loading state -->
+  <div class="loading" id="loading-screen">
+    <div class="icon">&#x1f50d;</div>
+    <p>Trace Explorer</p>
+    <p style="font-size: 12px;">Load <code>trace_data.json</code> to begin</p>
+    <div class="file-input-wrapper">
+      <label for="file-input">Choose file</label>
+      <input type="file" id="file-input" accept=".json">
+    </div>
+    <p style="font-size: 11px; margin-top: 8px; color: var(--text-dim);">
+      Or place <code>trace_data.json</code> next to this HTML and it loads automatically
+    </p>
+  </div>
+
+  <!-- Main UI (hidden until data loaded) -->
+  <div id="main-ui" class="hidden">
+    <div class="topbar">
+      <h1>Trace Explorer</h1>
+      <div class="nav-group">
+        <button class="nav-btn" id="prev-btn">&larr; Prev</button>
+        <span class="counter" id="counter">1 / 15</span>
+        <button class="nav-btn" id="next-btn">Next &rarr;</button>
+      </div>
+      <div class="threshold-info" id="threshold-info"></div>
+      <button class="view-toggle-btn" id="view-toggle-btn">Overview [o]</button>
+      <button class="toggle-all-btn" id="toggle-all-btn">Toggle all CoT [t]</button>
+      <div class="hints">
+        <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> navigate</span>
+        <span><kbd>t</kbd> CoT</span>
+        <span><kbd>o</kbd> overview</span>
+      </div>
+    </div>
+
+    <!-- Overview table -->
+    <div id="overview"></div>
+
+    <!-- Detail view -->
+    <div id="main-detail">
+      <div class="prompt-bar">
+        <div class="prompt-label">Harmful Prompt</div>
+        <div class="prompt-text" id="prompt-text"></div>
+      </div>
+
+      <!-- Model name headers -->
+      <div class="model-name-row" id="model-names">
+        <div class="corner"></div>
+      </div>
+
+      <!-- Base row -->
+      <div class="main-grid">
+        <div class="row-label base">Base Model</div>
+        <div class="model-row" id="base-row"></div>
+        <div class="row-label ortho">CoT Ortho</div>
+        <div class="model-row" id="ortho-row"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let data = null;
+let currentIdx = 0;
+let cotOpen = false;
+let showingOverview = false;
+
+// Try auto-load
+fetch('trace_data.json')
+  .then(r => { if (r.ok) return r.json(); throw new Error(); })
+  .then(d => initApp(d))
+  .catch(() => {});
+
+document.getElementById('file-input').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => initApp(JSON.parse(ev.target.result));
+  reader.readAsText(file);
+});
+
+function initApp(d) {
+  data = d;
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('main-ui').classList.remove('hidden');
+  document.getElementById('threshold-info').textContent =
+    `refuse \u2264 ${data.thresholds.refuse} | comply \u2265 ${data.thresholds.comply}`;
+
+  // Set grid columns based on model count
+  const n = data.model_names.length;
+  const cols = `repeat(${n}, 1fr)`;
+  document.querySelectorAll('.model-row').forEach(el => el.style.gridTemplateColumns = cols);
+  document.getElementById('model-names').style.gridTemplateColumns = `28px ${cols}`;
+
+  // Build model name headers
+  const nameRow = document.getElementById('model-names');
+  data.model_names.forEach(name => {
+    const div = document.createElement('div');
+    div.className = 'model-header';
+    div.textContent = name;
+    nameRow.appendChild(div);
+  });
+
+  buildOverview();
+  render();
+}
+
+function buildOverview() {
+  const ov = document.getElementById('overview');
+  // Build header: # | Prompt | per-model (Base / Ortho / Delta)
+  let hdr = '<table class="overview-table"><thead><tr>' +
+    '<th class="idx-col">#</th><th>Prompt</th>';
+  data.model_names.forEach(name => {
+    const short = name.replace('DeepSeek-R1-Distill-', 'DS-');
+    hdr += `<th class="score-col">Base</th><th class="score-col">Ortho</th><th class="score-col">\u0394</th>`;
+  });
+  hdr += '</tr>';
+  // Sub-header with model names spanning 3 cols each
+  hdr += '<tr><th></th><th></th>';
+  data.model_names.forEach(name => {
+    const short = name.replace('DeepSeek-R1-Distill-', 'DS-');
+    hdr += `<th colspan="3" style="text-align:center;color:var(--blue);font-size:9px;padding:2px;">${short}</th>`;
+  });
+  hdr += '</tr></thead><tbody>';
+
+  data.prompts.forEach((p, i) => {
+    let row = `<tr onclick="jumpTo(${i})">` +
+      `<td class="idx-col">${i + 1}</td>` +
+      `<td class="prompt-col" title="${p.prompt.replace(/"/g, '&quot;')}">${p.prompt}</td>`;
+    data.model_names.forEach(name => {
+      const m = p.models[name];
+      if (m) {
+        const bScore = m.base.mean_score;
+        const oScore = m.ortho.mean_score;
+        const delta = oScore - bScore;
+        const bColor = bScore <= 0.2 ? 'var(--green)' : bScore >= 0.6 ? 'var(--red)' : 'var(--orange)';
+        const oColor = oScore <= 0.2 ? 'var(--green)' : oScore >= 0.6 ? 'var(--red)' : 'var(--orange)';
+        const dColor = delta > 0 ? 'var(--red)' : delta < 0 ? 'var(--green)' : 'var(--text-dim)';
+        row += `<td class="score-cell" style="color:${bColor}">${bScore.toFixed(2)}</td>`;
+        row += `<td class="score-cell" style="color:${oColor}">${oScore.toFixed(2)}</td>`;
+        row += `<td class="delta-col" style="color:${dColor}">${delta > 0 ? '+' : ''}${delta.toFixed(2)}</td>`;
+      } else {
+        row += '<td>-</td><td>-</td><td>-</td>';
+      }
+    });
+    row += '</tr>';
+    hdr += row;
+  });
+  hdr += '</tbody></table>';
+  ov.innerHTML = hdr;
+}
+
+function jumpTo(idx) {
+  currentIdx = idx;
+  setView(false);
+  render();
+}
+
+function setView(overview) {
+  showingOverview = overview;
+  document.getElementById('overview').classList.toggle('active', overview);
+  document.getElementById('main-detail').classList.toggle('hidden-view', overview);
+  document.getElementById('view-toggle-btn').textContent = overview ? 'Detail [o]' : 'Overview [o]';
+}
+
+function toggleView() {
+  setView(!showingOverview);
+}
+
+function scoreBadge(score, meanScore) {
+  const cls = meanScore <= 0.2 ? 'refuse' : meanScore >= 0.6 ? 'comply' : 'partial';
+  return `<span class="score-badge ${cls}" title="mean: ${meanScore.toFixed(2)}">${meanScore.toFixed(2)}</span>`;
+}
+
+function formatCot(text) {
+  if (!text || text === 'nan') return '<em style="color:var(--text-dim)">No reasoning trace</em>';
+  return text
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/&lt;think&gt;/g, '<span class="think-tag">&lt;think&gt;</span>')
+    .replace(/&lt;\/think&gt;/g, '<span class="think-tag">&lt;/think&gt;</span>');
+}
+
+function formatOutput(text) {
+  if (!text || text === 'nan') return '<em style="color:var(--text-dim)">No output</em>';
+  return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function buildCell(variant, modelName) {
+  const d = variant;
+  const isRefuse = d.mean_score <= 0.2;
+  return `
+    <div class="model-col">
+      <div class="variant-header">
+        ${scoreBadge(d.score, d.mean_score)}
+      </div>
+      <div class="variant-body">
+        <button class="cot-toggle ${cotOpen ? 'open' : ''}" onclick="toggleCot(this)">
+          <span class="arrow">&#x25B6;</span> Reasoning trace
+        </button>
+        <div class="cot-content ${cotOpen ? 'open' : ''}">${formatCot(d.cot)}</div>
+        <div class="response">${formatOutput(d.output)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function render() {
+  if (!data) return;
+  const prompt = data.prompts[currentIdx];
+  document.getElementById('counter').textContent = `${currentIdx + 1} / ${data.prompts.length}`;
+  document.getElementById('prompt-text').textContent = prompt.prompt;
+
+  const baseRow = document.getElementById('base-row');
+  const orthoRow = document.getElementById('ortho-row');
+  baseRow.innerHTML = '';
+  orthoRow.innerHTML = '';
+
+  data.model_names.forEach(name => {
+    const m = prompt.models[name];
+    if (m) {
+      baseRow.innerHTML += buildCell(m.base, name);
+      orthoRow.innerHTML += buildCell(m.ortho, name);
+    }
+  });
+}
+
+function toggleCot(btn) {
+  btn.classList.toggle('open');
+  btn.nextElementSibling.classList.toggle('open');
+}
+
+function toggleAllCot() {
+  cotOpen = !cotOpen;
+  document.querySelectorAll('.cot-toggle').forEach(btn => {
+    btn.classList.toggle('open', cotOpen);
+    btn.nextElementSibling.classList.toggle('open', cotOpen);
+  });
+}
+
+document.getElementById('prev-btn').addEventListener('click', () => {
+  if (data && currentIdx > 0) { currentIdx--; render(); }
+});
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (data && currentIdx < data.prompts.length - 1) { currentIdx++; render(); }
+});
+document.getElementById('toggle-all-btn').addEventListener('click', toggleAllCot);
+document.getElementById('view-toggle-btn').addEventListener('click', toggleView);
+
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowLeft') { if (data && currentIdx > 0) { currentIdx--; render(); } }
+  else if (e.key === 'ArrowRight') { if (data && currentIdx < data.prompts.length - 1) { currentIdx++; render(); } }
+  else if (e.key === 't') { toggleAllCot(); }
+  else if (e.key === 'o') { toggleView(); }
+});
+</script>
+</body>
+</html>

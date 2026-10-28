@@ -8,30 +8,49 @@ and benchmark.
 
 import argparse
 import json
-import sys
+import subprocess
+import zipfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Model configs: (label, results_subdir) grouped by family
-MODEL_FAMILIES = {
-    "Qwen3-8B": [
-        ("base", "Qwen/Qwen3-8B"),
-        ("ortho", "Qwen/Qwen3-8B/ortho_model_cot_layer_17"),
-    ],
-    "gpt-oss-20b": [
-        ("base", "openai/gpt-oss-20b"),
-        ("ortho", "openai/gpt-oss-20b/ortho_model_cot_layer_19"),
-    ],
-}
+# Model names to evaluate — ortho layer is read from .best_layer_cot files
+MODEL_NAMES = [
+    "Qwen/Qwen3-8B",
+    "openai/gpt-oss-20b",
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+]
 
-BENCHMARKS = ["aime2025", "gpqa_diamond", "math"]
+
+def build_model_families() -> dict:
+    """Build MODEL_FAMILIES dynamically from .best_layer_cot files."""
+    families = {}
+    for model_name in MODEL_NAMES:
+        family_label = model_name.split("/")[-1]
+        best_layer_file = PROJECT_ROOT / "results" / model_name / ".best_layer_cot"
+        if not best_layer_file.exists():
+            print(f"WARNING: Missing .best_layer_cot for {model_name}, skipping ortho")
+            families[family_label] = [("base", model_name)]
+            continue
+        best_layer = best_layer_file.read_text().strip()
+        families[family_label] = [
+            ("base", model_name),
+            ("ortho", f"{model_name}/ortho_model_cot_layer_{best_layer}"),
+        ]
+    return families
+
+# BENCHMARKS = ["aime2025", "gpqa_diamond", "math"]
+
+
+BENCHMARKS = ["aime2025", "gpqa_diamond", "bbeh_mini"]
 
 # Map benchmark names to task identifiers that appear in Inspect logs
 TASK_IDENTIFIERS = {
     "aime2025": "aime2025",
     "gpqa_diamond": "gpqa_diamond",
-    "math": "mathematics",
+    # "math": "mathematics",
+    "bbeh_mini": "bbeh_mini",
 }
 
 
@@ -48,9 +67,14 @@ def find_log_files(eval_results_dir: Path) -> list[Path]:
 def extract_score_from_log(log_path: Path) -> dict | None:
     """Extract task name and score from an Inspect log file."""
     try:
-        with open(log_path) as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
+        if zipfile.is_zipfile(log_path):
+            with zipfile.ZipFile(log_path) as zf:
+                # Inspect .eval zips store metadata in header.json
+                data = json.loads(zf.read("header.json"))
+        else:
+            with open(log_path) as f:
+                data = json.load(f)
+    except (json.JSONDecodeError, OSError, KeyError, IndexError, UnicodeDecodeError):
         return None
 
     # Inspect logs have a 'results' key with 'scores'
@@ -97,14 +121,14 @@ def match_benchmark(task_name: str, benchmark: str) -> bool:
     return identifier.lower() in task_name.lower()
 
 
-def collect_results() -> dict:
+def collect_results(model_families: dict) -> dict:
     """Collect all results into a structured dict.
 
     Returns: {family: {variant: {benchmark: score}}}
     """
     all_results = {}
 
-    for family, variants in MODEL_FAMILIES.items():
+    for family, variants in model_families.items():
         all_results[family] = {}
         for variant_name, label in variants:
             eval_dir = PROJECT_ROOT / "results" / label / "eval_results"
@@ -125,18 +149,18 @@ def collect_results() -> dict:
     return all_results
 
 
-def print_table(results: dict):
+def print_table(results: dict, model_families: dict):
     """Print a formatted comparison table."""
-    header = f"{'Model':<20} {'Variant':<10}"
+    header = f"{'Model':<40} {'Variant':<10}"
     for bench in BENCHMARKS:
         header += f" {bench:>15}"
     print(header)
     print("-" * len(header))
 
-    for family in MODEL_FAMILIES:
+    for family in model_families:
         for variant in ["base", "ortho"]:
             scores = results.get(family, {}).get(variant, {})
-            row = f"{family:<20} {variant:<10}"
+            row = f"{family:<40} {variant:<10}"
             for bench in BENCHMARKS:
                 val = scores.get(bench)
                 if val is not None:
@@ -148,7 +172,7 @@ def print_table(results: dict):
         # Print delta row
         base_scores = results.get(family, {}).get("base", {})
         ortho_scores = results.get(family, {}).get("ortho", {})
-        delta_row = f"{'':<20} {'delta':<10}"
+        delta_row = f"{'':<40} {'delta':<10}"
         for bench in BENCHMARKS:
             b = base_scores.get(bench)
             o = ortho_scores.get(bench)
@@ -161,11 +185,11 @@ def print_table(results: dict):
         print()
 
 
-def save_csv(results: dict, output_path: Path):
+def save_csv(results: dict, output_path: Path, model_families: dict):
     """Save results as CSV."""
     with open(output_path, "w") as f:
         f.write("model_family,variant," + ",".join(BENCHMARKS) + "\n")
-        for family in MODEL_FAMILIES:
+        for family in model_families:
             for variant in ["base", "ortho"]:
                 scores = results.get(family, {}).get(variant, {})
                 values = []
@@ -186,16 +210,22 @@ def main():
     )
     args = parser.parse_args()
 
-    results = collect_results()
+    model_families = build_model_families()
+    results = collect_results(model_families)
 
     print("\n" + "=" * 70)
     print("Off-Task Eval Results: Base vs Orthogonalized")
     print("=" * 70 + "\n")
 
-    print_table(results)
+    print_table(results, model_families)
 
     if args.csv:
-        save_csv(results, Path(args.csv))
+        save_csv(results, Path(args.csv), model_families)
+
+    # Generate plot
+    plot_script = PROJECT_ROOT / "evals" / "plot_eval_results.py"
+    print("\nGenerating eval comparison plot...")
+    subprocess.run(["uv", "run", "python", str(plot_script)], check=True)
 
 
 if __name__ == "__main__":

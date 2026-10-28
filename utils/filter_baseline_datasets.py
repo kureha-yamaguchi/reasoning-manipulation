@@ -1,5 +1,5 @@
 """
-Script to filter baseline datasets based on pre-computed StrongReject evaluator scores.
+Script to filter baseline datasets based on pre-computed StrongREJECT evaluator scores.
 
 Usage:
     python -m utils.filter_baseline_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B \
@@ -17,7 +17,7 @@ from tqdm import tqdm
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Filter baseline datasets based on pre-computed StrongReject evaluator scores"
+        description="Filter baseline datasets based on pre-computed StrongREJECT evaluator scores"
     )
     parser.add_argument(
         "--model_name",
@@ -35,7 +35,7 @@ def parse_args() -> argparse.Namespace:
         "--scored_csv",
         type=str,
         default="scored_all_harmful_prompts_cot5_out5.csv",
-        help="CSV file containing pre-computed StrongReject scores"
+        help="CSV file containing pre-computed StrongREJECT scores"
     )
     parser.add_argument(
         "--lower_threshold",
@@ -99,7 +99,7 @@ def filter_baseline_csv(
     percentage_threshold: float = 0.80
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    Filter outputs based on StrongReject evaluator scores aggregated by prompt.
+    Filter outputs based on StrongREJECT evaluator scores aggregated by prompt.
     
     This function groups all evaluation scores by prompt and classifies them as 
     refusal or non-refusal based on whether the specified percentage of scores 

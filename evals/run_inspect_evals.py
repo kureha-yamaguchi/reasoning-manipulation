@@ -6,11 +6,13 @@ benchmarks, and stores logs under results/{model_label}/eval_results/.
 """
 
 import argparse
+import json
 import os
 import signal
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -18,7 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BENCHMARK_TASKS = {
     "aime2025": "inspect_evals/aime2025",
     "gpqa_diamond": "inspect_evals/gpqa_diamond",
-    "math": "inspect_evals/mathematics",
+    "bbeh_mini": "inspect_evals/bbeh_mini",
+    # "math": "inspect_evals/math",
+    # "frontiermath": "inspect_evals/frontiermath",
 }
 
 # Extra CLI flags for benchmarks that need them
@@ -158,6 +162,51 @@ def wait_for_server(port: int, timeout: int = 6000, interval: int = 10) -> bool:
     return False
 
 
+def check_benchmark_status(log_dir: Path, benchmark: str) -> str:
+    """Check if a benchmark has already been fully evaluated.
+
+    Scans .eval files (ZIP archives) in log_dir for the given benchmark.
+    Returns:
+        "complete"  – a successful, fully-scored run exists → skip
+        "partial"   – a run exists but is incomplete or failed → re-run
+        "none"      – no matching eval found → run from scratch
+    """
+    if not log_dir.exists():
+        return "none"
+
+    # Benchmark name as it appears in eval file names (e.g. gpqa_diamond -> gpqa-diamond)
+    bench_file_pattern = benchmark.replace("_", "-")
+
+    for eval_file in sorted(log_dir.glob("*.eval"), reverse=True):
+        # Quick filename check before opening the ZIP
+        if bench_file_pattern not in eval_file.name and benchmark not in eval_file.name:
+            continue
+
+        try:
+            with zipfile.ZipFile(eval_file, "r") as zf:
+                with zf.open("header.json") as f:
+                    header = json.load(f)
+        except (zipfile.BadZipFile, KeyError, json.JSONDecodeError):
+            # Corrupted or incomplete file – treat as partial
+            continue
+
+        status = header.get("status", "")
+        results = header.get("results", {})
+        total = results.get("total_samples", 0)
+        completed = results.get("completed_samples", 0)
+
+        if status == "success" and total > 0 and completed == total:
+            print(f"  ✓ {benchmark}: already complete in {eval_file.name} "
+                  f"({completed}/{total} samples) — skipping")
+            return "complete"
+        else:
+            print(f"  ⟳ {benchmark}: partial/failed run in {eval_file.name} "
+                  f"(status={status}, {completed}/{total} samples) — will re-run")
+            return "partial"
+
+    return "none"
+
+
 def run_inspect_eval(
     benchmark: str,
     task_name: str,
@@ -218,6 +267,27 @@ def main():
     print(f"Benchmarks:  {args.benchmarks}")
     print(f"Port:        {args.port}")
 
+    log_dir = PROJECT_ROOT / "results" / args.model_label / "eval_results"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Check which benchmarks actually need to run ─────────────────
+    benchmarks_to_run = []
+    print("\nChecking existing eval results...")
+    for benchmark in args.benchmarks:
+        status = check_benchmark_status(log_dir, benchmark)
+        if status == "complete":
+            pass  # already printed skip message
+        else:
+            if status == "none":
+                print(f"  — {benchmark}: no previous run found — will run")
+            benchmarks_to_run.append(benchmark)
+
+    if not benchmarks_to_run:
+        print("\nAll benchmarks already complete — nothing to do.")
+        return
+
+    print(f"\nBenchmarks to run: {benchmarks_to_run}")
+
     # Kill any leftover vLLM server on the port
     kill_process_on_port(args.port)
 
@@ -225,8 +295,6 @@ def main():
     vllm_cmd = build_vllm_cmd(args)
     print(f"\nStarting vLLM server: {' '.join(vllm_cmd)}\n", flush=True)
 
-    log_dir = PROJECT_ROOT / "results" / args.model_label / "eval_results"
-    log_dir.mkdir(parents=True, exist_ok=True)
     vllm_log_path = log_dir / "vllm_server.log"
     vllm_log = open(vllm_log_path, "w")
     print(f"vLLM server logs: {vllm_log_path}", flush=True)
@@ -259,7 +327,7 @@ def main():
         print("vLLM server is ready!\n", flush=True)
 
         results = {}
-        for benchmark in args.benchmarks:
+        for benchmark in benchmarks_to_run:
             task_name = BENCHMARK_TASKS[benchmark]
             success = run_inspect_eval(
                 benchmark=benchmark,
@@ -270,6 +338,11 @@ def main():
                 max_tokens=args.max_tokens,
             )
             results[benchmark] = "PASS" if success else "FAIL"
+
+        # Include skipped benchmarks in summary
+        for benchmark in args.benchmarks:
+            if benchmark not in results:
+                results[benchmark] = "SKIPPED (already complete)"
 
         print(f"\n{'='*60}")
         print("Eval Summary:")

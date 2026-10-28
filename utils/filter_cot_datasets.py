@@ -1,5 +1,5 @@
 """
-Script to filter Chain-of-Thought datasets based on pre-computed StrongReject evaluator scores.
+Script to filter Chain-of-Thought datasets based on pre-computed StrongREJECT evaluator scores.
 
 Usage:
     python -m utils.filter_cot_datasets --model_name deepseek-ai/DeepSeek-R1-Distill-Qwen-7B --scored_csv scored_train_harmful_prompts_cot5_out5.csv
@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Filter CoT datasets based on pre-computed StrongReject evaluator scores"
+        description="Filter CoT datasets based on pre-computed StrongREJECT evaluator scores"
     )
     parser.add_argument(
         "--model_name",
@@ -34,7 +34,7 @@ def parse_args() -> argparse.Namespace:
         "--scored_csv",
         type=str,
         default="scored_train_harmful_prompts_cot5_out5.csv",
-        help="CSV file containing pre-computed StrongReject scores"
+        help="CSV file containing pre-computed StrongREJECT scores"
     )
     parser.add_argument(
         "--lower_threshold",
@@ -91,7 +91,7 @@ def filter_cot_csv(
     upper_threshold: float
 ) -> Tuple[List[Dict[str, str]], List[Dict[str, str]]]:
     """
-    Filter Chain-of-Thought responses based on StrongReject evaluator scores.
+    Filter Chain-of-Thought responses based on StrongREJECT evaluator scores.
     
     This function groups outputs by (prompt, cot_rep_n) to find all outputs 
     generated from the same CoT, regardless of how many output_repetitions 

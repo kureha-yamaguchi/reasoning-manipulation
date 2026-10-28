@@ -1,7 +1,7 @@
 """
-Script to compute mean and standard deviation of StrongReject scores across multiple layers for a subset of the holdout test dataset.
+Script to compute mean and standard deviation of StrongREJECT scores across multiple layers for a subset of the holdout test dataset.
 
-This script reads scored CSV files for different layers and computes statistics on the StrongReject scores for each layer.
+This script reads scored CSV files for different layers and computes statistics on the StrongREJECT scores for each layer.
 
 Input Files:
     Reads scored CSV files from:
@@ -10,7 +10,7 @@ Input Files:
     Where {layer} comes from --layer argument (comma-separated list like "16,17,18,19")
 
 Output:
-    Prints mean and standard deviation of StrongReject scores for each layer.
+    Prints mean and standard deviation of StrongREJECT scores for each layer.
     Saves summary statistics to JSON file in results/{model_name}/attack_results/.
 
 Usage:
@@ -29,7 +29,7 @@ import statistics
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Compute StrongReject score statistics across multiple layers"
+        description="Compute StrongREJECT score statistics across multiple layers"
     )
     parser.add_argument(
         "--model_name",
@@ -72,13 +72,13 @@ def parse_args() -> argparse.Namespace:
 
 def load_scores_from_csv(csv_path: str) -> List[float]:
     """
-    Load StrongReject scores from a CSV file.
+    Load StrongREJECT scores from a CSV file.
     
     Args:
         csv_path: Path to the scored CSV file
     
     Returns:
-        List of StrongReject scores as floats
+        List of StrongREJECT scores as floats
     """
     scores = []
     
@@ -147,7 +147,7 @@ def main() -> None:
         sys.exit(1)
     
     print(f"{'='*60}")
-    print(f"Computing StrongReject Score Statistics")
+    print(f"Computing StrongREJECT Score Statistics")
     print(f"{'='*60}")
     print(f"Model: {args.model_name}")
     print(f"Type: {args.type}")
