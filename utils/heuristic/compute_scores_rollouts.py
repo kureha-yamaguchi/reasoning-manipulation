@@ -28,6 +28,12 @@ def parse_args() -> argparse.Namespace:
                         help="Number of output variations per prompt")
     parser.add_argument("--quadrant", action="store_true",
                         help="Scoring quadrant rollouts?")
+    parser.add_argument("--shard", type=str, default="0/1",
+                        help="'k/K': score every K-th input file starting at k, so K clients can "
+                             "share one judge server without scoring the same file")
+    parser.add_argument("--threads", type=int, default=0,
+                        help="If >0, call the rubric judge from this many threads across all files "
+                             "instead of evaluate_dataset's per-file process pool")
     return parser.parse_args()
 
 
@@ -80,8 +86,72 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str,
 
     return score_columns
 
+SCORE_FIELD_MAP = {
+    "score": "strongreject_score",
+    "refusal": "strongreject_refusal",
+    "convincingness": "strongreject_convincingness",
+    "specificity": "strongreject_specificity",
+}
+
+
+def write_scored(output_path, fieldnames, rows, results):
+    """Atomically write rows plus their rubric results (dicts from strongreject_rubric)."""
+    new_fieldnames = list(fieldnames) + [c for c in SCORE_FIELD_MAP.values() if c not in fieldnames]
+    with open(output_path + '.tmp', 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=new_fieldnames)
+        writer.writeheader()
+        for row, result in zip(rows, results):
+            scored_row = row.copy()
+            for key, csv_col in SCORE_FIELD_MAP.items():
+                scored_row[csv_col] = result.get(key, float('nan'))
+            writer.writerow(scored_row)
+    os.replace(output_path + '.tmp', output_path)
+
+
+def save_scored_threaded(input_paths, args):
+    """
+    Same judge calls as compute_scores (strongreject_rubric on each (prompt, output)), but
+    issued from one thread pool across all files of this shard. evaluate_dataset instead
+    spawns cpu_count processes per file, which is CPU-bound on many small files.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from strong_reject.evaluate import strongreject_rubric
+    from strong_reject.vllm_server import ensure_vllm_server
+
+    ensure_vllm_server()  # initialise the module-level server handle before threads share it
+
+    def judge(row):
+        try:
+            return strongreject_rubric(row["prompt"], row["output"])
+        except Exception as e:  # keep going; NaN rows are retried by utils.repair_scores
+            print(f"Judge call failed: {e!r}")
+            return {"score": float('nan')}
+
+    shard_k, shard_n = map(int, args.shard.split('/'))
+    jobs = []
+    for input_path in input_paths[shard_k::shard_n]:
+        output_path = os.path.join(os.path.dirname(input_path), f'scored_{os.path.basename(input_path)}')
+        if os.path.exists(output_path):
+            continue
+        with open(input_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            jobs.append((output_path, reader.fieldnames, list(reader)))
+    print(f"Scoring {sum(len(r) for _, _, r in jobs)} rows in {len(jobs)} files with {args.threads} threads")
+
+    with ThreadPoolExecutor(max_workers=args.threads) as pool:
+        futures = [[pool.submit(judge, row) for row in rows] for _, _, rows in jobs]
+        for (output_path, fieldnames, rows), file_futures in zip(jobs, futures):
+            results = [fut.result() for fut in file_futures]
+            write_scored(output_path, fieldnames, rows, results)
+            n_nan = sum(not isinstance(r.get("score"), float) or r["score"] != r["score"] for r in results)
+            print(f"Saved scored results to: {output_path} ({len(rows)} rows, {n_nan} NaN)", flush=True)
+
+
 def save_scored(input_paths, args):
-    for input_path in input_paths:
+    if args.threads > 0:
+        return save_scored_threaded(input_paths, args)
+    shard_k, shard_n = map(int, args.shard.split('/'))
+    for input_path in input_paths[shard_k::shard_n]:
         output_path = os.path.join(
             os.path.dirname(input_path),
             f'scored_{os.path.basename(input_path)}'
@@ -120,8 +190,9 @@ def save_scored(input_paths, args):
             if key in score_columns and csv_col not in new_fieldnames:
                 new_fieldnames.append(csv_col)
 
-        # Write CSV with scores
-        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+        # Write CSV with scores (atomically, so an interrupted run never leaves a partial
+        # scored file that would be skipped on resume)
+        with open(output_path + '.tmp', 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=new_fieldnames)
             writer.writeheader()
 
@@ -131,6 +202,7 @@ def save_scored(input_paths, args):
                     if key in score_columns:
                         scored_row[csv_col] = score_columns[key][i]
                 writer.writerow(scored_row)
+        os.replace(output_path + '.tmp', output_path)
 
         print(f"Saved scored results to: {output_path}")
 
