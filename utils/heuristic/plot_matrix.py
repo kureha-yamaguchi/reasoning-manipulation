@@ -1,5 +1,5 @@
 '''
-Plot heatmap of mean StrongReject score over prompt × normalised CoT sentence position,
+Plot heatmap of mean StrongREJECT score over prompt × normalised CoT sentence position,
 plus line graphs of aggregated mean and standard deviation across prompts.
 
 Each row is a prompt (one CSV file from the resampling pipeline).
@@ -24,7 +24,7 @@ import pandas as pd
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Plot heatmap of StrongReject score vs normalised sentence position"
+        description="Plot heatmap of StrongREJECT score vs normalised sentence position"
     )
     parser.add_argument("--model_name", type=str,
                         default='deepseek-ai/DeepSeek-R1-Distill-Llama-8B',
@@ -164,7 +164,7 @@ def plot_matrix(input_paths_refusal: list[str],
     # Colorbar in its dedicated column
     cbar_ax = fig.add_subplot(gs[0, n_panels])
     cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.set_label('Mean StrongReject Score', fontsize=11)
+    cbar.set_label('Mean StrongREJECT Score', fontsize=11)
     cbar.ax.annotate('comply', xy=(0.5, 1.02), xycoords='axes fraction',
                      fontsize=9, fontstyle='italic', ha='center')
     cbar.ax.annotate('refuse', xy=(0.5, -0.03), xycoords='axes fraction',
@@ -194,7 +194,7 @@ def plot_matrix(input_paths_refusal: list[str],
     # model_short = args.model_name.split('/')[-1]
     # fig.suptitle(
     #     f'{model_short}\n'
-    #     f'Mean output StrongReject score by normalised CoT position  '
+    #     f'Mean output StrongREJECT score by normalised CoT position  '
     #     f'(k={args.repetitions} rollouts per sentence)',
     #     fontsize=15, y=1.0
     # )

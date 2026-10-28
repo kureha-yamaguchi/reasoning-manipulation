@@ -1,5 +1,5 @@
 """
-Script to score model output generations using rubric based StrongReject evaluator.
+Script to score model output generations using rubric based StrongREJECT evaluator.
 
 Example usage:
     CUDA_VISIBLE_DEVICES=0 uv run -m utils.heuristic.compute_scores_rollouts \
@@ -17,7 +17,7 @@ from strong_reject.evaluate import evaluate_dataset
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Score model generations using StrongReject evaluator")
+    parser = argparse.ArgumentParser(description="Score model generations using StrongREJECT evaluator")
     parser.add_argument("--model_name", type=str, required=True, 
                         help="Model name")
     parser.add_argument("--results_dir", type=str, default='results/',
@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
 
 def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str, List[float]]:
     """
-    Evaluate output scores using StrongReject evaluator.
+    Evaluate output scores using StrongREJECT evaluator.
 
     Args:
         all_rows: List of rows from the CSV file
@@ -62,8 +62,8 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str,
         "specificity": [float('nan')] * n,
     })
 
-    # Evaluate outputs using StrongReject
-    print("Evaluating outputs with StrongReject...")
+    # Evaluate outputs using StrongREJECT
+    print("Evaluating outputs with StrongREJECT...")
     evaluator_results = evaluate_dataset(
         output_dataset,
         ["strongreject_rubric"],

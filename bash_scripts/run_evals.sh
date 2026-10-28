@@ -24,27 +24,152 @@ echo "========================================"
 echo ""
 
 # # ── Install dependencies ──────────────────────────────────────────────
-# echo "=== Installing inspect-ai and inspect-evals ==="
-# uv pip install inspect-ai "inspect-evals[aime2025,gpqa,mathematics]"
-# echo ""
+echo "=== Installing inspect-ai and inspect-evals ==="
+uv pip install inspect-ai "inspect-evals[aime2025,gpqa,mathematics, frontiermath, bbeh]"
+echo ""
 
 # ── Common settings ───────────────────────────────────────────────────
 PORT=8001
-BENCHMARKS="aime2025 gpqa_diamond math"
+declare -a ALL_BENCHMARKS=("aime2025" "gpqa_diamond" "bbeh_mini")
 TEMPERATURE=0.6
 MAX_TOKENS=32768
 TP_SIZE=4
 
 # ── Model configurations ─────────────────────────────────────────────
 # Each entry: MODEL_PATH|MODEL_LABEL
-declare -a MODELS=( # ideally make this auto pick best ortho scores?
-    # "Qwen/Qwen3-8B|Qwen/Qwen3-8B"
-    # "${PROJECT_ROOT}/results/Qwen/Qwen3-8B/ortho_model_cot_layer_17|Qwen/Qwen3-8B/ortho_model_cot_layer_17"
-    # "openai/gpt-oss-20b|openai/gpt-oss-20b"
-    # "${PROJECT_ROOT}/results/openai/gpt-oss-20b/ortho_model_cot_layer_19|openai/gpt-oss-20b/ortho_model_cot_layer_19"
-    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B|deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
-    # "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B|deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
+# Auto-picks best ortho CoT layer from .best_layer_cot files
+declare -a MODEL_NAMES=(
+    "Qwen/Qwen3-8B"
+    "openai/gpt-oss-20b"
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
 )
+
+declare -a ALL_MODELS=()
+
+# basline models options
+for model_name in "${MODEL_NAMES[@]}"; do
+    ALL_MODELS+=("${model_name}|${model_name}")
+done
+
+
+# ortho models options
+for model_name in "${MODEL_NAMES[@]}"; do
+    best_layer_file="${PROJECT_ROOT}/results/${model_name}/.best_layer_cot"
+    if [[ ! -f "$best_layer_file" ]]; then
+        echo "ERROR: Missing .best_layer_cot for ${model_name}" >&2
+        exit 1
+    fi
+    best_layer=$(cat "$best_layer_file")
+    ALL_MODELS+=("${PROJECT_ROOT}/results/${model_name}/ortho_model_cot_layer_${best_layer}|${model_name}/ortho_model_cot_layer_${best_layer}")
+done
+
+# ── Interactive model selection ──────────────────────────────────────
+echo "Available models (all selected by default):"
+declare -a SELECTED=()
+for i in "${!ALL_MODELS[@]}"; do
+    SELECTED+=("1")
+    IFS='|' read -r _ label <<< "${ALL_MODELS[$i]}"
+    echo "  [$((i+1))] [x] $label"
+done
+
+echo ""
+echo "Enter numbers to toggle off/on, or press Enter to continue:"
+while true; do
+    read -rp "> " input
+    [[ -z "$input" ]] && break
+    for num in $input; do
+        idx=$((num - 1))
+        if (( idx >= 0 && idx < ${#ALL_MODELS[@]} )); then
+            if [[ "${SELECTED[$idx]}" == "1" ]]; then
+                SELECTED[$idx]="0"
+            else
+                SELECTED[$idx]="1"
+            fi
+        else
+            echo "  Invalid number: $num"
+        fi
+    done
+    # Re-display current selection
+    echo ""
+    for i in "${!ALL_MODELS[@]}"; do
+        IFS='|' read -r _ label <<< "${ALL_MODELS[$i]}"
+        if [[ "${SELECTED[$i]}" == "1" ]]; then
+            echo "  [$((i+1))] [x] $label"
+        else
+            echo "  [$((i+1))] [ ] $label"
+        fi
+    done
+    echo ""
+    echo "Enter numbers to toggle, or press Enter to continue:"
+done
+
+declare -a MODELS=()
+for i in "${!ALL_MODELS[@]}"; do
+    if [[ "${SELECTED[$i]}" == "1" ]]; then
+        MODELS+=("${ALL_MODELS[$i]}")
+    fi
+done
+
+if [[ ${#MODELS[@]} -eq 0 ]]; then
+    echo "No models selected. Exiting."
+    exit 0
+fi
+
+echo ""
+
+# ── Interactive benchmark selection ──────────────────────────────────
+echo "Available benchmarks (all selected by default):"
+declare -a BENCH_SELECTED=()
+for i in "${!ALL_BENCHMARKS[@]}"; do
+    BENCH_SELECTED+=("1")
+    echo "  [$((i+1))] [x] ${ALL_BENCHMARKS[$i]}"
+done
+
+echo ""
+echo "Enter numbers to toggle off/on, or press Enter to continue:"
+while true; do
+    read -rp "> " input
+    [[ -z "$input" ]] && break
+    for num in $input; do
+        idx=$((num - 1))
+        if (( idx >= 0 && idx < ${#ALL_BENCHMARKS[@]} )); then
+            if [[ "${BENCH_SELECTED[$idx]}" == "1" ]]; then
+                BENCH_SELECTED[$idx]="0"
+            else
+                BENCH_SELECTED[$idx]="1"
+            fi
+        else
+            echo "  Invalid number: $num"
+        fi
+    done
+    echo ""
+    for i in "${!ALL_BENCHMARKS[@]}"; do
+        if [[ "${BENCH_SELECTED[$i]}" == "1" ]]; then
+            echo "  [$((i+1))] [x] ${ALL_BENCHMARKS[$i]}"
+        else
+            echo "  [$((i+1))] [ ] ${ALL_BENCHMARKS[$i]}"
+        fi
+    done
+    echo ""
+    echo "Enter numbers to toggle, or press Enter to continue:"
+done
+
+BENCHMARKS=""
+for i in "${!ALL_BENCHMARKS[@]}"; do
+    if [[ "${BENCH_SELECTED[$i]}" == "1" ]]; then
+        BENCHMARKS="${BENCHMARKS} ${ALL_BENCHMARKS[$i]}"
+    fi
+done
+BENCHMARKS="${BENCHMARKS# }"  # trim leading space
+
+if [[ -z "$BENCHMARKS" ]]; then
+    echo "No benchmarks selected. Exiting."
+    exit 0
+fi
+
+echo ""
+echo "Running ${#MODELS[@]} model(s) x $(echo $BENCHMARKS | wc -w) benchmark(s)."
 
 # ── Run evals for each model ─────────────────────────────────────────
 for entry in "${MODELS[@]}"; do

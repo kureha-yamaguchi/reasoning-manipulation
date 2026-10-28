@@ -10,21 +10,35 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Model configs: family -> [(variant_label, results_subdir)]
-MODEL_FAMILIES = {
-    "Qwen3-8B": [
-        ("Base", "Qwen/Qwen3-8B"),
-        ("Ortho (layer 17)", "Qwen/Qwen3-8B/ortho_model_cot_layer_17"),
-    ],
-    "GPT-oss-20B": [
-        ("Base", "openai/gpt-oss-20b"),
-        ("Ortho (layer 19)", "openai/gpt-oss-20b/ortho_model_cot_layer_19"),
-    ],
-}
+# Model names — ortho layer is read dynamically from .best_layer_cot files
+MODEL_NAMES = [
+    "Qwen/Qwen3-8B",
+    "openai/gpt-oss-20b",
+    "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+]
 
-BENCHMARKS = ["aime2025", "gpqa_diamond"]
-BENCHMARK_LABELS = {"aime2025": "AIME 2025", "gpqa_diamond": "GPQA Diamond"}
-TASK_IDENTIFIERS = {"aime2025": "aime2025", "gpqa_diamond": "gpqa_diamond"}
+
+def build_model_families() -> dict:
+    """Build MODEL_FAMILIES dynamically from .best_layer_cot files."""
+    families = {}
+    for model_name in MODEL_NAMES:
+        family_label = model_name.split("/")[-1]
+        best_layer_file = PROJECT_ROOT / "results" / model_name / ".best_layer_cot"
+        if not best_layer_file.exists():
+            print(f"WARNING: Missing .best_layer_cot for {model_name}, skipping ortho")
+            families[family_label] = [("Base", model_name)]
+            continue
+        best_layer = best_layer_file.read_text().strip()
+        families[family_label] = [
+            ("Base", model_name),
+            (f"Ortho (layer {best_layer})", f"{model_name}/ortho_model_cot_layer_{best_layer}"),
+        ]
+    return families
+
+BENCHMARKS = ["aime2025", "gpqa_diamond", "bbeh_mini"]
+BENCHMARK_LABELS = {"aime2025": "AIME 2025", "gpqa_diamond": "GPQA Diamond", "bbeh_mini": "BBEH Mini"}
+TASK_IDENTIFIERS = {"aime2025": "aime2025", "gpqa_diamond": "gpqa_diamond", "bbeh_mini": "bbeh_mini"}
 
 
 def extract_scores(eval_dir: Path) -> dict[str, dict]:
@@ -72,19 +86,21 @@ def extract_scores(eval_dir: Path) -> dict[str, dict]:
 
 
 def main():
+    model_families = build_model_families()
+
     # Collect all data
     data = {}  # {family: {variant_label: {benchmark: {accuracy, stderr}}}}
-    for family, variants in MODEL_FAMILIES.items():
+    for family, variants in model_families.items():
         data[family] = {}
         for variant_label, subdir in variants:
             eval_dir = PROJECT_ROOT / "results" / subdir / "eval_results"
             data[family][variant_label] = extract_scores(eval_dir)
 
     # Print table
-    print(f"\n{'Model':<20} {'Variant':<20} {'Benchmark':<18} {'Accuracy':>10} {'Stderr':>10}")
-    print("-" * 80)
-    for family in MODEL_FAMILIES:
-        for variant_label, _ in MODEL_FAMILIES[family]:
+    print(f"\n{'Model':<40} {'Variant':<20} {'Benchmark':<18} {'Accuracy':>10} {'Stderr':>10}")
+    print("-" * 100)
+    for family in model_families:
+        for variant_label, _ in model_families[family]:
             scores = data[family].get(variant_label, {})
             for bench in BENCHMARKS:
                 s = scores.get(bench, {})
@@ -92,21 +108,30 @@ def main():
                 se = s.get("stderr")
                 acc_str = f"{acc:.4f}" if acc is not None else "N/A"
                 se_str = f"{se:.4f}" if se is not None else "N/A"
-                print(f"{family:<20} {variant_label:<20} {BENCHMARK_LABELS[bench]:<18} {acc_str:>10} {se_str:>10}")
+                print(f"{family:<40} {variant_label:<20} {BENCHMARK_LABELS[bench]:<18} {acc_str:>10} {se_str:>10}")
         print()
 
     # --- Plot: one subplot per model family ---
-    fig, axes = plt.subplots(1, len(MODEL_FAMILIES), figsize=(5 * len(MODEL_FAMILIES), 5),
+    n_families = len(model_families)
+    n_cols = min(n_families, 2)
+    n_rows = (n_families + n_cols - 1) // n_cols
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows),
                               sharey=False)
-    if len(MODEL_FAMILIES) == 1:
+    if n_families == 1:
         axes = [axes]
+    else:
+        axes = axes.flatten()
+    # Hide unused subplots
+    for i in range(n_families, len(axes)):
+        axes[i].set_visible(False)
 
     colors = {"Base": "#4C72B0", "default": "#DD8452"}
     bar_width = 0.3
+    group_spacing = 0.75
 
-    for ax, (family, variants) in zip(axes, MODEL_FAMILIES.items()):
+    for ax, (family, variants) in zip(axes, model_families.items()):
         variant_labels = [v[0] for v in variants]
-        x = np.arange(len(BENCHMARKS))
+        x = np.arange(len(BENCHMARKS)) * group_spacing
 
         for i, vlabel in enumerate(variant_labels):
             scores = data[family].get(vlabel, {})

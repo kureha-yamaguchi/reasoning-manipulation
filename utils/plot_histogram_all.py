@@ -1,5 +1,5 @@
 """
-Generate plots comparing StrongReject scores before and after intervention across all models.
+Generate plots comparing StrongREJECT scores before and after intervention across all models.
 Failed generations (dropped by the pipeline) are imputed as score=0 to reflect true success rates.
 """
 
@@ -40,7 +40,7 @@ def style_ax(ax, title, display_names, layer_lists):
     """Apply shared styling: title, labels, legend, layer annotations, comply/refuse markers."""
     ax.set_title(title, fontsize=15)
     ax.set_xlabel('Model & Layer Intervention', fontsize=12)
-    ax.set_ylabel('StrongReject Score', fontsize=12)
+    ax.set_ylabel('StrongREJECT Score', fontsize=12)
 
     ax_right = ax.secondary_yaxis('right')
     ax_right.set_yticks([])
@@ -143,7 +143,7 @@ def main():
     fig, ax = plt.subplots(figsize=(14, 6))
     sns.boxplot(data=combined_df, x='Model', y='Score', hue='Condition',
                 hue_order=CONDITION_ORDER, palette=PALETTE, showfliers=False, ax=ax)
-    style_ax(ax, 'StrongReject score comparison across models, before and after weight orthogonalisation',
+    style_ax(ax, 'StrongREJECT score comparison across models, before and after weight orthogonalisation',
              display_names, layer_lists)
     plt.tight_layout()
     plt.savefig(f"{output_dir}/boxplot_all_models_both_datasets.png", dpi=300, bbox_inches='tight')
@@ -154,7 +154,7 @@ def main():
     sns.violinplot(data=combined_df, x='Model', y='Score', hue='Condition',
                    hue_order=CONDITION_ORDER, palette=PALETTE,
                    cut=0, inner='quartile', density_norm='width', gap=0.15, ax=ax)
-    style_ax(ax, 'StrongReject score distribution across models, before and after weight orthogonalisation',
+    style_ax(ax, 'StrongREJECT score distribution across models, before and after weight orthogonalisation',
              display_names, layer_lists)
     plt.tight_layout()
     plt.savefig(f"{output_dir}/violin_all_models_both_datasets.png", dpi=300, bbox_inches='tight')

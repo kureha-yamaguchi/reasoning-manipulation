@@ -1,5 +1,5 @@
 """
-Script to score model output generations using StrongReject evaluator and save results. Scores stored in file called `scored_{input_csv}`.
+Script to score model output generations using StrongREJECT evaluator and save results. Scores stored in file called `scored_{input_csv}`.
 
 ====================
 Clean model paradigm
@@ -55,7 +55,7 @@ from strong_reject.evaluate import evaluate_dataset
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Score model generations using StrongReject evaluator"
+        description="Score model generations using StrongREJECT evaluator"
     )
     parser.add_argument(
         "--results_dir",
@@ -155,7 +155,7 @@ def save_scored_csv(
     output_path: str
 ) -> None:
     """
-    Save original CSV data with added StrongReject scores and subscores.
+    Save original CSV data with added StrongREJECT scores and subscores.
 
     Args:
         original_rows: Original CSV rows as dictionaries
@@ -199,7 +199,7 @@ def save_scored_csv(
 
 def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str, List[float]]:
     """
-    Evaluate output scores using StrongReject evaluator.
+    Evaluate output scores using StrongREJECT evaluator.
 
     Args:
         all_rows: List of rows from the CSV file
@@ -220,8 +220,8 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str,
         "response": outputs
     })
 
-    # Evaluate outputs using StrongReject
-    print("Evaluating outputs with StrongReject...")
+    # Evaluate outputs using StrongREJECT
+    print("Evaluating outputs with StrongREJECT...")
     evaluator_results = evaluate_dataset(
         output_dataset,
         ["strongreject_rubric"],

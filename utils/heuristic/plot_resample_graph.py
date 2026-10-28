@@ -53,9 +53,9 @@ def main():
                      mean_scores.values + std_scores.values, 
                      alpha=0.3, label='±1 Std Dev')
     plt.xlabel('CoT Sentence Index', fontsize=12)
-    plt.ylabel('Mean Output StrongReject Score After Resampling', fontsize=12)
+    plt.ylabel('Mean Output StrongREJECT Score After Resampling', fontsize=12)
     plt.ylim(0.0, 1.0)
-    plt.title(f'StrongReject Score & Similarity by Sentence Index\n'
+    plt.title(f'StrongREJECT Score & Similarity by Sentence Index\n'
             f'Prompt: {prompt}\n'
             f'CoT rollout: {args.cot_number}\nNumber of resampling repetitions: {args.repetitions}', fontsize=11)
     plt.grid(True, alpha=0.3)
