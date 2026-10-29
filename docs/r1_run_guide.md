@@ -9,7 +9,7 @@ everything and can be re-run at any point. Finished work is skipped.
 - **One node** with at least ~800 GB of GPU memory, e.g. 8×H200, 8×B200 or 8×MI300X. R1's FP8
   weights are ~690 GB, plus KV cache. The script does not support multi-node runs.
 - 8×H100 (80 GB) is **not** enough for full precision. On such a node, use the default 4-bit AWQ
-  model (`MODEL` unset), which is what our own cluster runs.
+  model (`MODEL` unset), which is what our own cluster runs. By preference though, if compute allows then provide full precision results.
 - Disk: ~700 GB for the R1 weights, plus ~26 GB for the judge (`openai/gpt-oss-20b`).
 - It has only been tested on H100s with vLLM 0.10.1, which `uv.lock` pins. Blackwell or AMD GPUs may
   need a newer vLLM. If so, say which version you used.
