@@ -60,8 +60,14 @@ def parse_args():
     )
     parser.add_argument("--model_name", type=str, default="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", 
                         help="Model to use for generation")
-    parser.add_argument("--input_csv", type=str, required=True,
-                        help="CSV file to evaluate on")
+    parser.add_argument("--input_csv", type=str, nargs='+', required=True,
+                        help="CSV file(s) to evaluate on; several share one model load (clean model only)")
+    parser.add_argument("--input_dir", type=str, default="dataset",
+                        help="Directory containing --input_csv (output name uses its basename)")
+    parser.add_argument("--tokenizer_name", type=str, default=None,
+                        help="Tokenizer/chat template if not the model's own (e.g. official R1 template for an AWQ quant)")
+    parser.add_argument("--max_model_len", type=int, default=None,
+                        help="vLLM max_model_len (default: model config)")
     parser.add_argument("--type", type=str, default=None,
                         help="Ortho model from direction extracted from CoT tokens (cot) or 3 tokens at the end of prompt (baseline) or whole prompt (prompt)")
     parser.add_argument("--layer", type=str, default=None, 
@@ -441,11 +447,8 @@ def main():
     gc.collect()
     torch.cuda.empty_cache()
 
-     # Handle CSV file selection
-    input_csv = os.path.join('dataset', args.input_csv)
-
-    # Read prompts
-    prompts = read_csv(input_csv)
+    if args.type is not None and len(args.input_csv) > 1:
+        raise ValueError("Ortho model generation takes a single --input_csv")
     
     # Set up sampling parameters
     sampling_params = SamplingParams(
@@ -455,6 +458,11 @@ def main():
 
     # Ortho model paradigm
     if args.type is not None and args.layer is not None:
+        # Handle CSV file selection
+        args.input_csv = args.input_csv[0]
+        input_csv = os.path.join(args.input_dir, args.input_csv)
+        prompts = read_csv(input_csv)
+
         # Process each layer (if there are multiple layers)
         for layer in args.layer.split(','):
             layer = layer.strip()  # Remove any whitespace
@@ -537,7 +545,7 @@ def main():
             )
             print("Using base model tokenizer for Magistral-Small-2506")
         else:
-            tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name or args.model_name, trust_remote_code=True)
         
         print("Initializing vLLM...")
         
@@ -560,16 +568,24 @@ def main():
                 model=args.model_name,
                 tensor_parallel_size=args.tensor_parallel_size,
                 gpu_memory_utilization=args.gpu_memory_utilization,
+                max_model_len=args.max_model_len,
+                tokenizer=args.tokenizer_name,
                 trust_remote_code=True,
             )
             
         print("Model loaded successfully!")
 
-        # Construct output CSV name
-        input_csv_name = os.path.splitext(args.input_csv)[0]
-        output_csv = os.path.join('results', args.model_name, 'dataset', f'{input_csv_name}_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
-        
-        generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
+        for csv_name in args.input_csv:
+            # Construct output CSV name
+            input_csv = os.path.join(args.input_dir, csv_name)
+            input_csv_name = os.path.splitext(csv_name)[0]
+            output_csv = os.path.join('results', args.model_name, 'dataset', f'{input_csv_name}_cot{args.cot_repetitions}_out{args.output_repetitions}.csv')
+            if os.path.exists(output_csv):
+                print(f"Skipping {csv_name}: {output_csv} exists")
+                continue
+            os.makedirs(os.path.dirname(output_csv), exist_ok=True)
+            prompts = read_csv(input_csv)
+            generate_and_save(llm, tokenizer, input_csv, output_csv, prompts, sampling_params, args)
 
         del llm, tokenizer
         gc.collect()

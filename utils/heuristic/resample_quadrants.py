@@ -84,6 +84,8 @@ def parse_args():
     parser.add_argument("--system_date", type=str, default=None,
                         help="Pin the 'Current date: YYYY-MM-DD' that gpt-oss's chat template inserts "
                              "(otherwise today's date, so prompts change with the run day)")
+    parser.add_argument("--tokenizer_name", type=str, default=None,
+                        help="Tokenizer/chat template if not the model's own (e.g. official R1 template for an AWQ quant)")
     parser.add_argument("--max_model_len", type=int, default=None,
                         help="vLLM max context length (default: model's)")
     return parser.parse_args()
@@ -533,7 +535,7 @@ def main():
     gc.collect()
     torch.cuda.empty_cache()
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name or args.model_name, trust_remote_code=True)
 
     print("Initializing vLLM...")
     llm = LLM(
@@ -541,6 +543,7 @@ def main():
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
         max_model_len=args.max_model_len,
+        tokenizer=args.tokenizer_name,
         trust_remote_code=True
     )
     print("Model loaded successfully!")

@@ -9,8 +9,8 @@ set -euo pipefail
 GPUS=$1; shift
 IFS=, read -ra GPU_LIST <<< "$GPUS"
 BASE_PORT=${VLLM_PORT:-8000}
-export HF_HUB_CACHE="${FAST_HF_HUB_CACHE:-/scratch/hf/hub}"
-export HF_HUB_OFFLINE=1
+# Fast local copy of the judge weights if given (loaded offline); otherwise the default HF cache
+if [ -n "${FAST_HF_HUB_CACHE:-}" ]; then export HF_HUB_CACHE=$FAST_HF_HUB_CACHE HF_HUB_OFFLINE=1; fi
 
 LOG_DIR="logs/score_quadrants"
 mkdir -p "$LOG_DIR"
