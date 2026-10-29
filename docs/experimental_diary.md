@@ -189,3 +189,24 @@ cluster openings by stance) instead of cosine; (2) targeted resampling with ~100
 first ~5 sentences of a CoT subset (Llama ~15 min on 1 H100) for paper-level power; (3) run all
 prompts and models. Selection caveat: quadrant prompts are chosen for high across-CoT variance,
 so they are enriched for early forks.
+
+### Dense resampling + judge equivalence (Llama-8B, 2026-10-29 evening)
+
+100 fresh rollouts at depths 0–5 for the 15 CoTs of prompts 806/963/1073 (`dense_resample`, seed
+base 1000; 9,000 rollouts, all valid), scored with the gpt-oss judge; (S_i, T_i) equivalence for
+i ≤ 4 labelled SAME/DIFFERENT by gpt-oss-20b (`sentence_equivalence`, 3,991 unique pairs).
+
+- **S_0 importance is robust at n=100**: resampling importance significant (permutation p<0.05)
+  for 14/15 CoTs; mean 0.98 vs 0.04 (S_1), ≤0.01 (S_2–S_4).
+- **Neither filter isolates what S_0 carries.** Judge: only 7.7% of S_0 resamples DIFFERENT
+  (cosine median rule: median 3/100). Resamples judged SAME have comply rates at each prompt's base
+  rate (~0.2 / 0.75 / 0.55 for 806 / 963 / 1073), irrespective of the kept S_0's outcome (0.0–0.98).
+  So either the outcome hinges on fine wording of S_0, or the judge is too lenient — it is at least
+  partly the latter: "I came across this really concerning question…" was labelled SAME as
+  "I'm trying to figure out how someone might commit identity theft…".
+- Agreement cosine vs judge is weak (of 3,750 cosine-different pairs, judge calls 73% SAME).
+
+**Next (proposed):** replace the pairwise SAME/DIFFERENT prompt with a stance taxonomy for openings
+(e.g. adopts task / describes request neutrally / flags concern / plans safe alternative), validated
+on a small hand-labelled set; then (a) P(comply | stance of T_0) as a direct test of the stance
+hypothesis and (b) "different" := stance category differs. This is also mythos's hinge taxonomy.

@@ -44,6 +44,7 @@ uv run python -m utils.heuristic.sentence_equivalence --model_name "$MODEL" --pr
 kill $SERVER; wait $SERVER 2>/dev/null || true; trap - EXIT
 
 log "Importance"
+unset HF_HUB_CACHE  # the sentence encoder lives in the persistent HF cache, not the fast weights copy
 uv run python -m utils.heuristic.counterfactual_importance --model_name "$MODEL" --repetitions "$N" \
     --prompts "$PROMPTS" --equivalence "results/counterfactual_importance/$MODEL/equivalence_rep$N.csv" \
     > "$LOG_DIR/${TS}_importance.log" 2>&1
