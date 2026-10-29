@@ -58,3 +58,61 @@ Llama *reaches* its final outcome much earlier, but is not more irrevocably comm
 has a persistent residual std (~0.05–0.1) late in the CoT, while GPT-OSS declines gradually
 to ~0 (curves cross at ~0.4; `utils/heuristic/plot_std_overlay.py`). The paper's "decided in
 the first few sentences" claim holds for first entry, not last exit; report both.
+
+### Results — Qwen-7B added (2026-10-29, ~00:30; scores before NaN repair, see below)
+
+**Data.** Qwen-7B: all 34 eligible prompts, 162 CoT files, 81,459 scored rollouts (26 new
+prompts generated 20:53–22:50 on 3 H100s). Llama: all 33 eligible (added 335). GPT-OSS:
+unchanged 38 prompts. NaN rate (judge context overflow at 8192 tokens, or parse failure):
+Llama 2.18%, Qwen 1.25%, GPT-OSS 0.70%; NaNs drop out of per-depth means as in the paper.
+Rollout CSVs are gitignored (`results/*/*/dataset*`), stored on /data only.
+
+Scoring throughput fix: `strong_reject.evaluate_dataset` spawns cpu_count processes per file
+→ CPU-bound at ~5 rows/s. Threaded calls to the same `strongreject_rubric` + one gpt-oss
+server per GPU → ~21 rows/s. vLLM 0.10.1 `--data-parallel-size` crashes on gpt-oss MoE.
+Judge test–retest on 60 rows: 98% binarised agreement, mean |diff| 0.038.
+
+**Commitment (δ=0.2; mean over prompts, 95% cluster bootstrap)** — `results/commitment/`:
+
+| | Llama-8B (33) | Qwen-7B (34) | GPT-OSS-20B (38) |
+|---|---|---|---|
+| first entry, normalised | 0.050 [0.038, 0.064] | 0.070 [0.054, 0.089] | 0.142 [0.117, 0.170] |
+| first entry, sentences | 1.9 [1.2, 2.6] | 3.2 [2.2, 4.4] | 2.8 [2.3, 3.3] |
+| last exit, normalised | 0.215 [0.161, 0.274] | 0.322 [0.250, 0.395] | 0.242 [0.209, 0.278] |
+| CoT length (sentences, median [IQR]) | 37 [23, 56] | 48 [24, 67] | 20 [13, 31] |
+
+Differences (bootstrap CI of difference; * = excludes 0; 18 comparisons, uncorrected):
+- Normalised first entry: GPT-OSS later than both distills at every δ (+0.07 to +0.12 *);
+  Qwen − Llama +0.02 [−0.00, +0.04].
+- Absolute first entry (sentences): Qwen − Llama +1.4 [+0.1, +2.7] *; GPT-OSS − Llama
+  +0.9 [+0.0, +1.7] * (marginal); GPT-OSS − Qwen −0.5 [−1.7, +0.7].
+- Last exit: Qwen − Llama +0.11 [+0.02, +0.20] *; GPT-OSS − Qwen −0.08 [−0.16, −0.00] *;
+  GPT-OSS − Llama n.s.
+
+**Interpretation.**
+1. *CoT-length confound.* GPT-OSS CoTs are ~half as long, so normalised position
+   inflates its decision point. In absolute sentences all three models reach their final
+   outcome within ~2–3 sentences; the paper's "Llama early vs GPT-OSS gradual" contrast is
+   largely a units effect. Fig 3 should be accompanied by the absolute-sentence view
+   (`figures/std_overlay_rep10_sentences25.pdf`).
+2. *The robust distill-vs-GPT-OSS difference is residual late uncertainty*, shared by both
+   R1 distills: across-rollout std plateaus at ~0.1 (Llama) / ~0.15 (Qwen) for the rest of
+   the CoT, while GPT-OSS falls to ~0.05 by ~8 sentences. I.e. distilled models settle
+   early but stay "re-openable"; GPT-OSS settles a few sentences later but then locks in.
+   This is the more defensible "distillation signature" — it replicates across both
+   same-teacher students; early first entry does not (Qwen ≈ GPT-OSS in sentences).
+3. Scale (7–8B vs 20B), architecture and training paradigm remain confounded; GPT-OSS
+   is judged by itself.
+
+**Caveats.** k=10 → a single flipped rollout moves m_i by 0.1 (δ=0.1 is at the noise
+floor). Absolute-sentence curves suffer survivorship beyond ~20 sentences for GPT-OSS.
+GPT-OSS's 38 prompts are not a uniform sample of its 94 eligible prompts (mixed history).
+δ=0.2 was fixed before looking at Qwen data; δ ∈ {0.1, 0.3} reported for sensitivity.
+
+**Next steps (proposed).**
+- Thought-Anchors-style counterfactual importance from the *existing* rollouts: the first
+  sentence of `generated_text` at depth i is a resample of S_i, so semantic filtering
+  needs no new generation.
+- Normalise by tokens as well as sentences; check sentence-length differences.
+- Second judge on a stratified subset (GPT-OSS self-judging).
+- Extend GPT-OSS to all 94 eligible prompts (~56 prompts, ~4–5 GPU-hours) for a clean sample.
