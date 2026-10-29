@@ -81,6 +81,9 @@ def parse_args():
                         help="Maximum total generations = repetitions * this multiplier (safety limit)")
     parser.add_argument("--shard", type=str, default="0/1",
                         help="'k/K': process every K-th sampled prompt starting at k (one process per GPU)")
+    parser.add_argument("--system_date", type=str, default=None,
+                        help="Pin the 'Current date: YYYY-MM-DD' that gpt-oss's chat template inserts "
+                             "(otherwise today's date, so prompts change with the run day)")
     parser.add_argument("--max_model_len", type=int, default=None,
                         help="vLLM max context length (default: model's)")
     return parser.parse_args()
@@ -371,6 +374,9 @@ def save_rollouts_batched(llm, tokenizer, quadrant_points, idx, quadrants_dir, a
 
     chat = [{"role": "user", "content": original_prompt}]
     formatted_prompt = tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
+    if args.system_date:
+        formatted_prompt = re.sub(r'Current date: \d{4}-\d{2}-\d{2}', f'Current date: {args.system_date}',
+                                  formatted_prompt)
     if args.model_name == "openai/gpt-oss-20b":
         formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
 
