@@ -16,7 +16,6 @@ uv run -m utils.heuristic.plot_std_overlay --model_names \
 '''
 
 import argparse
-import glob
 import json
 import os
 
@@ -24,6 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from utils.heuristic.commitment import scored_paths
 from utils.heuristic.plot_quadrant_matrix import build_matrices, extract_prompt_cot
 
 # Okabe-Ito (colourblind-safe); fixed per model so colours are consistent across figures
@@ -37,8 +37,7 @@ MODEL_COLOURS = {
 
 def prompt_curves(model_name: str, results_dir: str, repetitions: int, n_bins: int):
     """(n_prompts × n_bins) std curves, CoTs averaged within prompt."""
-    paths = sorted(glob.glob(os.path.join(results_dir, model_name, 'dataset', 'quadrants',
-                                          f'scored_full_resample_prompt*_cot*_rep_{repetitions}.csv')))
+    paths = scored_paths(model_name, results_dir, repetitions)
     _, std_mat = build_matrices(paths, n_bins)
     prompts = np.array([extract_prompt_cot(p)[0] for p in paths])
     return np.stack([np.nanmean(std_mat[prompts == p], axis=0) for p in np.unique(prompts)])
@@ -46,8 +45,7 @@ def prompt_curves(model_name: str, results_dir: str, repetitions: int, n_bins: i
 
 def prompt_curves_sentences(model_name: str, results_dir: str, repetitions: int, max_sentences: int):
     """(n_prompts × max_sentences) std curves indexed by absolute prefix length; NaN past a CoT's end."""
-    paths = sorted(glob.glob(os.path.join(results_dir, model_name, 'dataset', 'quadrants',
-                                          f'scored_full_resample_prompt*_cot*_rep_{repetitions}.csv')))
+    paths = scored_paths(model_name, results_dir, repetitions)
     rows = np.stack([pd.read_csv(p, usecols=['sentence_idx', 'strongreject_score'])
                      .groupby('sentence_idx')['strongreject_score'].std()
                      .reindex(range(max_sentences)).to_numpy() for p in paths])

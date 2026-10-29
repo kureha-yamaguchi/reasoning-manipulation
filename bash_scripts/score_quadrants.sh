@@ -59,8 +59,10 @@ import glob, subprocess, pandas as pd
 tracked = set(subprocess.run(['git', 'ls-files', 'results/$MODEL_NAME'], capture_output=True, text=True).stdout.split())
 for f in sorted(glob.glob('results/$MODEL_NAME/dataset/quadrants/scored_full_resample_prompt*_rep_10.csv')):
     if f not in tracked and pd.read_csv(f, usecols=['strongreject_score']).strongreject_score.isna().any(): print(f)")
-    for f in $NAN_FILES; do
-        uv run python -m utils.repair_scores --scored_csv "$f" | grep -E "Found|Repaired|Failed" || true
-    done
+    if [ -n "$NAN_FILES" ]; then
+        set -- $NAN_FILES
+        uv run python -m utils.repair_scores --scored_csv "$1" --extra_csvs "${@:2}" --threads 128 \
+            | grep -E "^Repairing|^Repaired|^Failed" || true
+    fi
 done
 echo "Done at $(date)"

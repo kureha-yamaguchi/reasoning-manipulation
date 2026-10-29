@@ -51,12 +51,37 @@ def first_entry_position(means: np.ndarray, delta: float) -> float:
 ESTIMANDS = {'last_exit': commitment_position, 'first_entry': first_entry_position}
 
 
-def load_trajectories(model_name: str, results_dir: str = 'results/', repetitions: int = 10) -> pd.DataFrame:
-    """One row per (prompt_idx, cot_idx) with the per-depth mean score array."""
+def eligible_prompts(model_name: str, results_dir: str = 'results/') -> set[int] | None:
+    """Prompt indices sampled by the latest resample_quadrants run (its run_metadata), or None.
+
+    With --n >= number of eligible prompts this is the full eligible quadrant set, which
+    excludes legacy rollouts that do not meet the current selection protocol.
+    """
+    metas = sorted(glob.glob(os.path.join(results_dir, model_name, 'dataset', 'quadrants',
+                                          'run_metadata', '*.json')))
+    if not metas:
+        return None
+    with open(metas[-1]) as f:
+        return set(json.load(f)['sampled_indices'])
+
+
+def scored_paths(model_name: str, results_dir: str = 'results/', repetitions: int = 10,
+                 restrict: bool = True) -> list[str]:
+    """Scored rollout files, optionally restricted to eligible_prompts()."""
     pattern = os.path.join(results_dir, model_name, 'dataset', 'quadrants',
                            f'scored_full_resample_prompt*_cot*_rep_{repetitions}.csv')
+    paths = sorted(glob.glob(pattern))
+    keep = eligible_prompts(model_name, results_dir) if restrict else None
+    if keep is None:
+        return paths
+    return [p for p in paths if int(re.search(r'prompt(\d+)_', os.path.basename(p)).group(1)) in keep]
+
+
+def load_trajectories(model_name: str, results_dir: str = 'results/', repetitions: int = 10,
+                      restrict: bool = True) -> pd.DataFrame:
+    """One row per (prompt_idx, cot_idx) with the per-depth mean score array."""
     rows = []
-    for path in sorted(glob.glob(pattern)):
+    for path in scored_paths(model_name, results_dir, repetitions, restrict):
         p, c = map(int, re.search(r'prompt(\d+)_cot(\d+)', os.path.basename(path)).groups())
         df = pd.read_csv(path, usecols=['sentence_idx', 'strongreject_score'])
         means = df.groupby('sentence_idx')['strongreject_score'].mean().sort_index()
@@ -85,12 +110,14 @@ def main():
     parser.add_argument('--deltas', type=float, nargs='+', default=[0.1, 0.2, 0.3])
     parser.add_argument('--n_boot', type=int, default=10_000)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--all_files', action='store_true',
+                        help='Use every scored file, not only prompts in the latest run_metadata sample')
     parser.add_argument('--out', default='results/commitment/commitment_summary.json')
     args = parser.parse_args()
 
     summary = {'args': vars(args), 'models': {}}
     for model in args.model_names:
-        traj = load_trajectories(model, args.results_dir)
+        traj = load_trajectories(model, args.results_dir, restrict=not args.all_files)
         entry = {'n_prompts': int(traj['prompt_idx'].nunique()), 'n_cots': len(traj)}
         for estimand in ESTIMANDS:
             entry[estimand] = {}

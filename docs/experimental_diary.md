@@ -107,6 +107,10 @@ Differences (bootstrap CI of difference; * = excludes 0; 18 comparisons, uncorre
 3. Scale (7–8B vs 20B), architecture and training paradigm remain confounded; GPT-OSS
    is judged by itself.
 
+**Tokens vs sentences.** Quadrant CoTs, median tokens (sentences; tokens/sentence):
+Llama 607 (37; 15.4), Qwen 768 (48; 16.0), GPT-OSS 233 (19; 12.6). So the length
+confound holds in tokens; first entry ≈ 29 / 52 / 35 tokens (sentences × tokens/sentence).
+
 **Caveats.** k=10 → a single flipped rollout moves m_i by 0.1 (δ=0.1 is at the noise
 floor). Absolute-sentence curves suffer survivorship beyond ~20 sentences for GPT-OSS.
 GPT-OSS's 38 prompts are not a uniform sample of its 94 eligible prompts (mixed history).
@@ -119,3 +123,33 @@ GPT-OSS's 38 prompts are not a uniform sample of its 94 eligible prompts (mixed 
 - Normalise by tokens as well as sentences; check sentence-length differences.
 - Second judge on a stratified subset (GPT-OSS self-judging).
 - Extend GPT-OSS to all 94 eligible prompts (~56 prompts, ~4–5 GPU-hours) for a clean sample.
+
+### GPT-OSS extended to all 94 eligible prompts (2026-10-29, 00:39–03:38)
+
+57 new prompts (3 H100s, ~70 min generation + ~100 min scoring with 2 judges). The gpt-oss
+chat template inserts today's date into the system prompt; existing rollouts mixed four
+dates (2026-03-23/24, 04-18/19). New runs pin `--system_date 2026-04-18` (modal existing
+date); with it the batched generator reproduces existing prompts exactly. Legacy prompt 464
+(eligible only at y=0.4, not 0.43) is excluded: analyses now restrict each model to the
+prompts in its latest `run_metadata` sample = full eligible set (33 / 34 / 94).
+NaN repair: 539/565 recovered.
+
+**Final (δ=0.2; 95% cluster bootstrap over prompts)** — supersedes GPT-OSS(38) above:
+
+| | Llama-8B (33) | Qwen-7B (34) | GPT-OSS-20B (94) |
+|---|---|---|---|
+| first entry, normalised | 0.050 [0.038, 0.064] | 0.071 [0.054, 0.089] | 0.142 [0.128, 0.157] |
+| first entry, sentences | 1.86 [1.24, 2.62] | 3.23 [2.22, 4.40] | 2.72 [2.48, 2.97] |
+| last exit, normalised | 0.215 [0.161, 0.274] | 0.322 [0.249, 0.398] | 0.235 [0.217, 0.254] |
+
+Differences: normalised first entry GPT-OSS − Llama +0.092 [+0.072, +0.112]*, GPT-OSS − Qwen
++0.072 [+0.048, +0.094]*, Qwen − Llama +0.021 [−0.001, +0.043]. Sentences: Qwen − Llama
++1.37 [+0.12, +2.68]*, GPT-OSS − Llama +0.86 [+0.05, +1.55]*, GPT-OSS − Qwen −0.51
+[−1.68, +0.52]. Last exit: Qwen − Llama +0.107*, GPT-OSS − Qwen −0.087*, GPT-OSS − Llama
++0.020 n.s.
+
+GPT-OSS estimates with 94 prompts match the 38-prompt subset (first entry 0.142 vs 0.142,
+last exit 0.235 vs 0.242) with ~half the CI width: the old subset was not biased.
+The absolute-sentence overlay (`figures/std_overlay_rep10_sentences25.pdf`) is the clearest
+statement of the result: GPT-OSS resolves over ~5 sentences then locks in (std ≈ 0.05);
+both R1 distills drop faster at S1 but plateau at std ≈ 0.10 (Llama) / 0.15–0.17 (Qwen).
