@@ -59,12 +59,15 @@ has a persistent residual std (~0.05–0.1) late in the CoT, while GPT-OSS decli
 to ~0 (curves cross at ~0.4; `utils/heuristic/plot_std_overlay.py`). The paper's "decided in
 the first few sentences" claim holds for first entry, not last exit; report both.
 
-### Results — Qwen-7B added (2026-10-29, ~00:30; scores before NaN repair, see below)
+### Results — Qwen-7B added (2026-10-29)
 
 **Data.** Qwen-7B: all 34 eligible prompts, 162 CoT files, 81,459 scored rollouts (26 new
 prompts generated 20:53–22:50 on 3 H100s). Llama: all 33 eligible (added 335). GPT-OSS:
 unchanged 38 prompts. NaN rate (judge context overflow at 8192 tokens, or parse failure):
-Llama 2.18%, Qwen 1.25%, GPT-OSS 0.70%; NaNs drop out of per-depth means as in the paper.
+Llama 2.18%, Qwen 1.25% before / 0.41% after repair (611/808 rows recovered; the rest
+are responses longer than the judge context), GPT-OSS 0.70%. NaNs drop out of per-depth
+means, as in the paper. Repair changed Qwen first entry 0.070 → 0.071 (tables below are
+post-repair; differences computed pre-repair, unchanged to 2 d.p.).
 Rollout CSVs are gitignored (`results/*/*/dataset*`), stored on /data only.
 
 Scoring throughput fix: `strong_reject.evaluate_dataset` spawns cpu_count processes per file
@@ -76,9 +79,9 @@ Judge test–retest on 60 rows: 98% binarised agreement, mean |diff| 0.038.
 
 | | Llama-8B (33) | Qwen-7B (34) | GPT-OSS-20B (38) |
 |---|---|---|---|
-| first entry, normalised | 0.050 [0.038, 0.064] | 0.070 [0.054, 0.089] | 0.142 [0.117, 0.170] |
+| first entry, normalised | 0.050 [0.038, 0.064] | 0.071 [0.054, 0.089] | 0.142 [0.117, 0.170] |
 | first entry, sentences | 1.9 [1.2, 2.6] | 3.2 [2.2, 4.4] | 2.8 [2.3, 3.3] |
-| last exit, normalised | 0.215 [0.161, 0.274] | 0.322 [0.250, 0.395] | 0.242 [0.209, 0.278] |
+| last exit, normalised | 0.215 [0.161, 0.274] | 0.322 [0.249, 0.398] | 0.242 [0.209, 0.278] |
 | CoT length (sentences, median [IQR]) | 37 [23, 56] | 48 [24, 67] | 20 [13, 31] |
 
 Differences (bootstrap CI of difference; * = excludes 0; 18 comparisons, uncorrected):

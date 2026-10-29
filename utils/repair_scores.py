@@ -47,6 +47,19 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="Maximum number of retry attempts per row (default: 10)"
     )
+    parser.add_argument(
+        "--extra_csvs",
+        type=str,
+        nargs="*",
+        default=[],
+        help="Further scored CSVs to repair in the same run (with --threads)"
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=0,
+        help="If >0, repair NaN rows of all given files concurrently with this many threads"
+    )
     return parser.parse_args()
 
 
@@ -111,8 +124,37 @@ def save_csv(rows: List[Dict[str, str]], fieldnames: List[str], csv_path: str) -
         writer.writerows(rows)
 
 
+def repair_threaded(csv_paths: List[str], max_retries: int, threads: int) -> None:
+    """Same per-row retries as the serial path, run concurrently across all files; atomic writes."""
+    from concurrent.futures import ThreadPoolExecutor
+    from strong_reject.vllm_server import ensure_vllm_server
+
+    ensure_vllm_server()  # initialise the shared server handle before threads use it
+    files = {p: load_scored_csv(p) for p in csv_paths}
+    tasks = [(p, i) for p, (rows, _) in files.items() for i in find_nan_rows(rows)]
+    print(f"Repairing {len(tasks)} NaN rows across {len(files)} files with {threads} threads")
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        results = list(pool.map(lambda t: repair_row(files[t[0]][0][t[1]], max_retries), tasks))
+    for (p, i), result in zip(tasks, results):
+        rows, fieldnames = files[p]
+        if result is not None:
+            for key, csv_col in SCORE_COLUMNS.items():
+                if key in result and csv_col in fieldnames:
+                    rows[i][csv_col] = result[key]
+    for p, (rows, fieldnames) in files.items():
+        save_csv(rows, fieldnames, p + ".tmp")
+        os.replace(p + ".tmp", p)
+    repaired = sum(r is not None for r in results)
+    print(f"Repaired: {repaired}/{len(tasks)}")
+    print(f"Failed:   {len(tasks) - repaired}/{len(tasks)}")
+
+
 def main() -> None:
     args = parse_args()
+
+    if args.threads > 0:
+        repair_threaded([args.scored_csv] + args.extra_csvs, args.max_retries, args.threads)
+        return
 
     if not os.path.exists(args.scored_csv):
         print(f"Error: File not found: {args.scored_csv}")
