@@ -59,10 +59,12 @@ def eligible_prompts(model_name: str, results_dir: str = 'results/') -> set[int]
     """
     metas = sorted(glob.glob(os.path.join(results_dir, model_name, 'dataset', 'quadrants',
                                           'run_metadata', '*.json')))
-    if not metas:
-        return None
-    with open(metas[-1]) as f:
-        return set(json.load(f)['sampled_indices'])
+    for path in reversed(metas):  # skip metadata from other scripts
+        with open(path) as f:
+            meta = json.load(f)
+        if 'sampled_indices' in meta:
+            return set(meta['sampled_indices'])
+    return None
 
 
 def scored_paths(model_name: str, results_dir: str = 'results/', repetitions: int = 10,

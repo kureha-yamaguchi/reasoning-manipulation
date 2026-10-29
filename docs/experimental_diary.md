@@ -153,3 +153,39 @@ last exit 0.235 vs 0.242) with ~half the CI width: the old subset was not biased
 The absolute-sentence overlay (`figures/std_overlay_rep10_sentences25.pdf`) is the clearest
 statement of the result: GPT-OSS resolves over ~5 sentences then locks in (std ≈ 0.05);
 both R1 distills drop faster at S1 but plateau at std ≈ 0.10 (Llama) / 0.15–0.17 (Qwen).
+
+## 2026-10-29 — R1 (teacher) arm queued; Thought-Anchors counterfactual importance demo
+
+**DeepSeek-R1 arm.** Full R1 cannot run on a 3/4×H100 node; 4-bit AWQ (`QuixiAI/DeepSeek-R1-AWQ`
+@21fb456e, 365 GB) fits one 8×H100 node (htc-g059/060). Pipeline `bash_scripts/r1_quadrants.sbatch`
+(Slurm job 9207461): candidate pool → cot5_out5 baseline → gpt-oss judge → quadrant rollouts, each
+phase resumable. Decisions: (i) candidate pool = union of prompts quadrant-eligible for any of the
+3 models (159 prompts; only 2 shared between models — eligible sets are nearly disjoint), then
+R1's own thresholds select from it, rather than a full 2,446-prompt baseline; (ii) the AWQ repo
+ships R1's original template (no `<think>\n`); we use the official R1 tokenizer @56d4cbbb (same
+vocab, template forces `<think>\n` as the distills' do). Caveat: 4-bit quant ≠ FP8 teacher.
+Smoke-tested end to end with Qwen-7B on 1 GPU (sparse worktree, loosened thresholds).
+
+**Counterfactual importance (Bogdan et al. 2025, §3.2) from existing rollouts** —
+`utils/heuristic/counterfactual_importance.py`. The first sentence generated at depth i is a
+resample T_i of S_i, so no new generation is needed. Definitions as the paper (KL[p(A'|T_i≉S_i) ||
+p(A|S_i kept)]; dissimilar = cosine < median over all pairs, all-MiniLM-L6-v2). Adaptations:
+k=10 not 100; A binarised at score 0.5; Laplace α=1; per-sentence permutation test (2,000 shuffles).
+
+Demo, Llama-8B, paper heatmap prompts 806/963/1073 (15 CoTs, 508 sentences, 4,873 pairs):
+- Similarity quartiles 0.27/0.47/0.71 (paper's median: 0.8), so threshold = 0.466.
+- **Resampling importance is concentrated at S_0**: mean 0.50 (median 0.49) vs ≤0.04 for S_1
+  and <0.01 from S_3 on; S_0 = 71% of total RI. Consistent with Fig 3's first-sentence drop, now
+  attributed to a specific sentence.
+- **The embedding filter fails exactly where it matters**: 13/15 S_0 have no "dissimilar"
+  resample. Openings restate the prompt, so MiniLM rates them similar, yet they differ in stance
+  ("I need to create a fake news story…" → comply; "the user is asking me to…" / "how to respond
+  to this request" → refuse). Topic-level similarity misses stance.
+- Counterfactual importance beyond S_0 is noise at this n (2–5 dissimilar resamples); 2/508
+  sentences pass p<0.05 (both S_0), vs ~20 expected by chance — the test is conservative/underpowered.
+
+**Next (proposed):** (1) stance-aware equivalence for T_i vs S_i (LLM judge with local gpt-oss, or
+cluster openings by stance) instead of cosine; (2) targeted resampling with ~100 rollouts at the
+first ~5 sentences of a CoT subset (Llama ~15 min on 1 H100) for paper-level power; (3) run all
+prompts and models. Selection caveat: quadrant prompts are chosen for high across-CoT variance,
+so they are enriched for early forks.
