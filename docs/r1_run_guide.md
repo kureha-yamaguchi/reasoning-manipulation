@@ -30,19 +30,19 @@ cache, which `HF_HOME` controls, on first use.
 
 This runs the full pipeline end to end on a small model with a few prompts, with loosened
 thresholds so that every phase does real work. Run it in a **separate clone**: it writes under
-`results/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/`, which would otherwise mix with any real results
-you have there.
+`results/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B/`, kept apart from any real results you have. Use this
+model: the repo tracks paper rollouts for the 7B/8B models, and those would make Phase 4 skip its work.
 
 ```bash
 git clone git@github.com:kureha-yamaguchi/reasoning-manipulation.git r1-smoke && cd r1-smoke
 git checkout counterfactual-importance && uv sync
-CUDA_VISIBLE_DEVICES=0 MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-7B TP=1 CAND_LIMIT=3 N_PROMPTS=1 \
+CUDA_VISIBLE_DEVICES=0 MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B TP=1 CAND_LIMIT=3 N_PROMPTS=1 \
   X_THR=1 Y_THR=-1 RESAMPLE_ARGS="--max_new_tokens 2048" bash bash_scripts/r1_quadrants.sbatch
 ```
 
 The run passes if it prints `Phase 1` through `Phase 5` and then `Done`, and if
-`results/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/dataset/quadrants/` contains `scored_full_resample_*`
-files. Delete the clone afterwards.
+`results/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B/dataset/quadrants/` contains `scored_full_resample_*`
+files (one per CoT of the selected prompt). Delete the clone afterwards.
 
 ## 2. The real run
 

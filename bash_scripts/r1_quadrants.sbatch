@@ -72,6 +72,9 @@ if [ -n "$FAST_HF_HUB_CACHE" ]; then
         # Marker is written only after a complete copy, so an interrupted rsync is resumed
         if [ ! -f "$HF_HUB_CACHE/$dir/.staged" ]; then
             log "Staging $repo to $HF_HUB_CACHE"
+            if [ ! -d "${HF_HOME:-$HOME/.cache/huggingface}/hub/$dir/snapshots" ]; then
+                HF_HUB_CACHE=${HF_HOME:-$HOME/.cache/huggingface}/hub HF_HUB_OFFLINE=0 uv run hf download "$repo" > /dev/null
+            fi
             rsync -a "${HF_HOME:-$HOME/.cache/huggingface}/hub/$dir" "$HF_HUB_CACHE/"
             touch "$HF_HUB_CACHE/$dir/.staged"
         fi
