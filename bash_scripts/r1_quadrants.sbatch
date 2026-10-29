@@ -42,6 +42,7 @@ JUDGE_PORT=${JUDGE_PORT:-8100}
 N_PROMPTS=${N_PROMPTS:-1000}  # >= n eligible, i.e. roll out all of them
 X_THR=${X_THR:-0.03}
 Y_THR=${Y_THR:-0.43}
+REF_RESULTS_SET=${REF_RESULTS:-}
 REF_RESULTS=${REF_RESULTS:-results/}
 RESAMPLE_ARGS=${RESAMPLE_ARGS:-}
 # The AWQ quant ships R1's original chat template, which does not open <think>; use the official
@@ -85,14 +86,22 @@ HUB=${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}
     echo "resample_args: $RESAMPLE_ARGS"; echo "tokenizer: ${TOKENIZER:-model default}"; echo "hf_hub_cache: $HUB"
     for repo in "$MODEL" "$JUDGE"; do echo "snapshot $repo: $(ls "$HUB/models--${repo//\//--}/snapshots" 2>/dev/null || echo 'not yet downloaded')"; done
     uv run python -c "import vllm, torch; print('vllm', vllm.__version__, 'torch', torch.__version__)"
+    uv run python -c "from transformers import AutoTokenizer; t = AutoTokenizer.from_pretrained('${TOKENIZER:-$MODEL}', trust_remote_code=True); print('chat_template_renders:', repr(t.apply_chat_template([{'role': 'user', 'content': 'hi'}], add_generation_prompt=True, tokenize=False)))"
     nvidia-smi --query-gpu=index,name,memory.used,memory.total --format=csv
 } > "$LOG_DIR/metadata.txt" 2>&1
 log "Metadata: $LOG_DIR/metadata.txt"
 
-# 1. Candidate pool (tracked copy unless a smoke test asks for a limited pool)
-if [ ! -f "$CAND/candidates.json" ] && [ -z "${CAND_LIMIT:-}" ] && [ -f dataset/candidates_r1/candidates.json ]; then
-    log "Phase 1: candidate pool from dataset/candidates_r1"
+# 1. Candidate pool: the tracked copy (first CAND_LIMIT prompts per CSV for smoke tests), or
+# recomputed from reference-model results if REF_RESULTS is set
+if [ ! -f "$CAND/candidates.json" ] && [ -z "${REF_RESULTS_SET:-}" ] && [ -f dataset/candidates_r1/candidates.json ]; then
+    log "Phase 1: candidate pool from dataset/candidates_r1${CAND_LIMIT:+ (first $CAND_LIMIT per CSV)}"
     mkdir -p "$CAND" && cp dataset/candidates_r1/* "$CAND/"
+    if [ -n "${CAND_LIMIT:-}" ]; then
+        uv run python -c "
+import pandas as pd, sys
+for c in sys.argv[2:]: pd.read_csv(f'$CAND/{c}').head(int(sys.argv[1])).to_csv(f'$CAND/{c}', index=False)" \
+            "$CAND_LIMIT" "${CSVS[@]}"
+    fi
 elif [ ! -f "$CAND/candidates.json" ]; then
     log "Phase 1: candidate pool"
     uv run python -m utils.heuristic.candidate_prompts --out_dir "$CAND" --results_dir "$REF_RESULTS" \
