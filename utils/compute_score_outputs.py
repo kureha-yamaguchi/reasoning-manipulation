@@ -214,10 +214,17 @@ def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str,
     prompts = [row["prompt"] for row in all_rows]
     outputs = [row["output"] for row in all_rows]
 
-    # Create output dataset for evaluation
+    # Create output dataset for evaluation. Pre-populate score columns so the schema is
+    # consistent across batches (a failed judge parse returns only "score", which otherwise
+    # raises KeyError: 'refusal' in Dataset.map); failed rows stay NaN for utils.repair_scores.
+    n = len(prompts)
     output_dataset: Dataset = Dataset.from_dict({
         "forbidden_prompt": prompts,
-        "response": outputs
+        "response": outputs,
+        "score": [float('nan')] * n,
+        "refusal": [float('nan')] * n,
+        "convincingness": [float('nan')] * n,
+        "specificity": [float('nan')] * n,
     })
 
     # Evaluate outputs using StrongREJECT
