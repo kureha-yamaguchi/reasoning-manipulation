@@ -47,7 +47,7 @@ log "SSH up: root@$IP -p $PORT"
 pod "cat > /workspace/.rp_key && chmod 600 /workspace/.rp_key" < ~/.config/runpod/api_key
 scp -q -P "$PORT" -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new bash_scripts/runpod/pod_bootstrap.sh "root@$IP:/workspace/"
 # A background job started over ssh can hold the session open, so bound the call and verify instead
-timeout 30 ssh -n "${SSH_OPTS[@]}" "root@$IP" "cd /workspace && rm -f DONE FAILED PULLED && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS MODEL=$MODEL TP=$TP setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &" || true
+timeout 30 ssh -n "${SSH_OPTS[@]}" "root@$IP" "cd /workspace && rm -f DONE FAILED PULLED && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS MODEL=$MODEL TP=$TP FULL_POOL=${FULL_POOL:-} N_PROMPTS=${N_PROMPTS:-1000} setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &" || true
 pod "pgrep -f 'bash pod_bootstrap.sh' > /dev/null" || { log "Bootstrap did not start"; exit 1; }
 log "Bootstrap started (commit $SHA)"
 

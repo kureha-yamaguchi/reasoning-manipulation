@@ -105,6 +105,13 @@ def parse_args() -> argparse.Namespace:
         help="Batch size into strongreject evaluator"
     )
     parser.add_argument(
+        "--threads",
+        type=int,
+        default=0,
+        help="If >0, call the rubric judge from this many threads (same judge calls as "
+             "evaluate_dataset, without its per-file process pool)"
+    )
+    parser.add_argument(
         "--harmless",
         action="store_true",
         help="For harmless nonrefusal, harmful refusal dataset configuration"
@@ -195,6 +202,29 @@ def save_scored_csv(
             writer.writerow(scored_row)
 
     print(f"Successfully saved {len(original_rows)} rows with scores to {output_path}")
+
+
+def compute_scores_threaded(all_rows: List[Dict[str, str]], threads: int) -> Dict[str, List[float]]:
+    """strongreject_rubric on each (prompt, output) from a thread pool; failed calls give NaN,
+    which utils.repair_scores retries."""
+    from concurrent.futures import ThreadPoolExecutor
+    from strong_reject.evaluate import strongreject_rubric
+    from strong_reject.vllm_server import ensure_vllm_server
+
+    ensure_vllm_server()  # initialise the module-level server handle before threads share it
+
+    def judge(row):
+        try:
+            return strongreject_rubric(row["prompt"], row["output"])
+        except Exception as e:
+            print(f"Judge call failed: {e!r}")
+            return {}
+
+    with ThreadPoolExecutor(max_workers=threads) as pool:
+        results = list(pool.map(judge, all_rows))
+    keys = ("score", "refusal", "convincingness", "specificity")
+    print(f"Scored {len(results)} rows, {sum('score' not in r for r in results)} failed")
+    return {k: [r.get(k, float('nan')) for r in results] for k in keys}
 
 
 def compute_scores(all_rows: List[Dict[str, str]], batch_size: int) -> Dict[str, List[float]]:
@@ -293,7 +323,8 @@ def main() -> None:
             all_rows, fieldnames = load_data_efficiently(csv_path)
             
             # Compute scores
-            scores = compute_scores(all_rows, args.batch_size)
+            scores = (compute_scores_threaded(all_rows, args.threads) if args.threads
+                      else compute_scores(all_rows, args.batch_size))
 
             # Save original data with scores
             save_scored_csv(all_rows, scores, fieldnames, output_csv_path)
@@ -324,7 +355,8 @@ def main() -> None:
         all_rows, fieldnames = load_data_efficiently(csv_path)
         
         # Compute scores
-        scores = compute_scores(all_rows, args.batch_size)
+        scores = (compute_scores_threaded(all_rows, args.threads) if args.threads
+                  else compute_scores(all_rows, args.batch_size))
 
         # Save original data with scores
         save_scored_csv(all_rows, scores, fieldnames, output_csv_path)

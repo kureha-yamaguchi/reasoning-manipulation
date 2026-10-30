@@ -86,7 +86,7 @@ HUB=${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}
     echo "host: $(hostname)"; echo "job: ${SLURM_JOB_ID:-local}"; echo "started: $(date -Is)"
     echo "git_sha: $(git rev-parse HEAD)"; echo "git_dirty: $(git status --porcelain -uno | wc -l) files"
     echo "model: $MODEL tp: $TP judge: $JUDGE thresholds: x<$X_THR y>$Y_THR n_prompts: $N_PROMPTS"
-    echo "resample_args: $RESAMPLE_ARGS"; echo "tokenizer: ${TOKENIZER:-model default}"; echo "hf_hub_cache: $HUB"
+    echo "full_pool: ${FULL_POOL:-no}"; echo "resample_args: $RESAMPLE_ARGS"; echo "tokenizer: ${TOKENIZER:-model default}"; echo "hf_hub_cache: $HUB"
     for repo in "$MODEL" "$JUDGE"; do echo "snapshot $repo: $(ls "$HUB/models--${repo//\//--}/snapshots" 2>/dev/null || echo 'not yet downloaded')"; done
     uv run python -c "import vllm, torch; print('vllm', vllm.__version__, 'torch', torch.__version__)"
     uv run python -c "from transformers import AutoTokenizer; t = AutoTokenizer.from_pretrained('${TOKENIZER:-$MODEL}', trust_remote_code=True); print('chat_template_renders:', repr(t.apply_chat_template([{'role': 'user', 'content': 'hi'}], add_generation_prompt=True, tokenize=False)))"
@@ -94,9 +94,15 @@ HUB=${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}
 } > "$LOG_DIR/metadata.txt" 2>&1
 log "Metadata: $LOG_DIR/metadata.txt"
 
-# 1. Candidate pool: the tracked copy (first CAND_LIMIT prompts per CSV for smoke tests), or
-# recomputed from reference-model results if REF_RESULTS is set
-if [ ! -f "$CAND/candidates.json" ] && [ -z "${REF_RESULTS_SET:-}" ] && [ -f dataset/candidates_r1/candidates.json ]; then
+# 1. Candidate pool: FULL_POOL=1 -> all 2,446 prompts (the protocol used for the other models);
+# otherwise the tracked 159-prompt copy (first CAND_LIMIT per CSV for smoke tests), or recomputed
+# from reference-model results if REF_RESULTS is set
+if [ ! -f "$CAND/candidates.json" ] && [ -n "${FULL_POOL:-}" ]; then
+    log "Phase 1: full prompt pool (all base CSVs)"
+    mkdir -p "$CAND"
+    cp dataset/train_harmful_prompts.csv dataset/base/orbench_extra_prompts.csv dataset/test_harmful_prompts.csv "$CAND/"
+    echo '{"pool": "full", "sources": ["dataset/train_harmful_prompts.csv", "dataset/base/orbench_extra_prompts.csv", "dataset/test_harmful_prompts.csv"]}' > "$CAND/candidates.json"
+elif [ ! -f "$CAND/candidates.json" ] && [ -z "${REF_RESULTS_SET:-}" ] && [ -f dataset/candidates_r1/candidates.json ]; then
     log "Phase 1: candidate pool from dataset/candidates_r1${CAND_LIMIT:+ (first $CAND_LIMIT per CSV)}"
     mkdir -p "$CAND" && cp dataset/candidates_r1/* "$CAND/"
     if [ -n "${CAND_LIMIT:-}" ]; then
@@ -138,7 +144,7 @@ if [ ${#TODO[@]} -gt 0 ]; then
     export STRONGREJECT_VLLM_URL=http://localhost:$JUDGE_PORT/v1
     for c in "${TODO[@]}"; do
         uv run python -m utils.compute_score_outputs --model_name "$MODEL" --input_dir dataset \
-            --input_csv "${c%.csv}_cot5_out5.csv" >> "$LOG_DIR/3_score.log" 2>&1
+            --input_csv "${c%.csv}_cot5_out5.csv" --threads "${SCORE_THREADS:-128}" >> "$LOG_DIR/3_score.log" 2>&1
         uv run python -m utils.repair_scores --scored_csv "$RES/scored_${c%.csv}_cot5_out5.csv" \
             --threads 64 >> "$LOG_DIR/3_score.log" 2>&1
     done
