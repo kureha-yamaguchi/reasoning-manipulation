@@ -26,7 +26,8 @@ mkdir -p results/runpod "$LOGS" "results/$MODEL"
 log() { echo "[$(date '+%F %T')] $*"; }
 
 SHA=$(git rev-parse HEAD)
-git fetch -q origin && git branch -r --contains "$SHA" | grep -q . || { log "HEAD $SHA is not pushed"; exit 1; }
+git fetch -q origin || log "git fetch failed; checking the last-fetched remote state"
+git branch -r --contains "$SHA" | grep -q . || { log "HEAD $SHA is not pushed"; exit 1; }
 
 if [ -n "${POD_STATE:-}" ]; then  # adopt an existing pod (e.g. after fixing a failed run); cap counts from its creation
     cp "$POD_STATE" "$STATE"
