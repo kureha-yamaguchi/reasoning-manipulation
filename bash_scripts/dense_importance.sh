@@ -7,7 +7,7 @@
 set -euo pipefail
 
 GPU=$1; MODEL=$2; PROMPTS=$3; N=${4:-100}
-PORT=${VLLM_PORT:-8000}
+PORT=${JUDGE_PORT:-8000}  # not VLLM_PORT: vLLM reads that itself
 export HF_HUB_CACHE="${FAST_HF_HUB_CACHE:-/mnt/weka/scratch/$USER/hf/hub}" HF_HUB_OFFLINE=1
 LOG_DIR=logs/dense_importance; mkdir -p "$LOG_DIR"
 TS=$(date +%Y%m%d_%H%M%S)

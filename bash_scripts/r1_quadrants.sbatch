@@ -166,5 +166,5 @@ uv run python -m utils.heuristic.resample_quadrants --model_name "$MODEL" --n "$
 # 5. Score rollouts (already-scored files are skipped): one judge server per visible GPU
 log "Phase 5: scoring rollouts"
 GPU_IDS=${CUDA_VISIBLE_DEVICES:-$(nvidia-smi --query-gpu=index --format=csv,noheader | paste -sd,)}
-VLLM_PORT=$JUDGE_PORT bash bash_scripts/score_quadrants.sh "$GPU_IDS" "$MODEL" > "$LOG_DIR/5_score_rollouts.log" 2>&1
+JUDGE_BASE_PORT=$JUDGE_PORT bash bash_scripts/score_quadrants.sh "$GPU_IDS" "$MODEL" > "$LOG_DIR/5_score_rollouts.log" 2>&1
 log "Done"
