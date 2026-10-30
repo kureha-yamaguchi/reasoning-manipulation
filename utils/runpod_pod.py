@@ -99,8 +99,9 @@ def main():
                     return
                 except RuntimeError as e:  # stock vanished between query and deploy
                     print(f'{time.strftime("%F %T")} deploy failed: {e}', flush=True)
-            else:
-                print(f'{time.strftime("%F %T")} no {args.count}x {args.gpu} in stock', flush=True)
+            else:  # also log single-GPU stock, to see how fragmented capacity is
+                singles = {g: (price(g, 1) or {}).get('stockStatus') for g in args.gpu.split(',')}
+                print(f'{time.strftime("%F %T")} no {args.count}x {args.gpu} in stock; 1x stock {singles}', flush=True)
             if time.time() > deadline:
                 raise SystemExit(f'No {args.count}x {args.gpu} within {args.max_wait_h} h')
             time.sleep(args.poll_s)

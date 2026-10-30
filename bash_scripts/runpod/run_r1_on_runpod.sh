@@ -11,6 +11,7 @@
 set -euo pipefail
 CAP_USD=${CAP_USD:-450}
 MAX_WAIT_H=${MAX_WAIT_H:-24}
+POLL_S=${POLL_S:-60}  # on-demand capacity is first come, first served; free 8-GPU machines go fast
 GPU=${GPU:-NVIDIA H200,NVIDIA H200 NVL}  # Hopper only: the pinned env (torch cu126) lacks Blackwell kernels
 TS=$(date +%Y%m%d_%H%M%S)
 STATE=results/runpod/${TS}_r1_pod.json
@@ -21,7 +22,7 @@ log() { echo "[$(date '+%F %T')] $*"; }
 SHA=$(git rev-parse HEAD)
 git fetch -q origin && git branch -r --contains "$SHA" | grep -q . || { log "HEAD $SHA is not pushed"; exit 1; }
 
-uv run python -m utils.runpod_pod launch --gpu "$GPU" --count 8 --state "$STATE" --max_wait_h "$MAX_WAIT_H"
+uv run python -m utils.runpod_pod launch --gpu "$GPU" --count 8 --state "$STATE" --max_wait_h "$MAX_WAIT_H" --poll_s "$POLL_S"
 COST=$(python3 -c "import json; print(json.load(open('$STATE'))['cost_per_hr'])")
 CAP_SECONDS=$(python3 -c "print(int($CAP_USD / $COST * 3600))")
 log "Pod $(python3 -c "import json; print(json.load(open('$STATE'))['pod_id'])") at \$$COST/h; cap \$$CAP_USD = $((CAP_SECONDS / 3600)) h"
