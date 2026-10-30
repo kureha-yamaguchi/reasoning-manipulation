@@ -222,3 +222,23 @@ R1), deploys, runs `pod_bootstrap.sh` at a pushed commit (uv sync, HF download, 
 and stops the pod when done. An on-pod watchdog stops the pod at the cap regardless of the
 controller. The API key lives in ~/.config/runpod/api_key (600), never in the repo.
 Untested before launch: vLLM 0.10.1 + FP8 R1 on H200 with the runpod/pytorch image's driver.
+
+### R1 (4-bit AWQ) on RunPod 4×H200: pool-159 pilot → full protocol (2026-10-30)
+
+- Pod qedecnajie02z7 (4×H200, $21.16/h). vLLM 0.10.1 cannot load AWQ into DeepSeek's
+  `fused_qkv_a_proj` (`MergedReplicatedLinear.weight_loader` slices dim 0; AWQ packs the output dim
+  on dim 1). Fixed by `bash_scripts/runpod/patch_vllm_awq_fused_qkv.py` (applied on the pod for the
+  AWQ model only; slicing verified locally). Post-fix sanity: 484/495 CoTs close `</think>`,
+  coherent text.
+- **Pilot on the 159-prompt pool: only 4 prompts R1-eligible** (vs 33/34/94 from the full 2,446 for
+  the others). The pool is a poor proxy: eligible sets barely overlap across models. Pilot outputs
+  archived to `results/QuixiAI/DeepSeek-R1-AWQ/dataset_pool159_20261030/` (prompt indices there are
+  pool-relative and do not match the full-pool indices).
+- Judge NaN after repair in the pilot baseline: train 311/2,420 (13%), orbench 17/690, test 30/765,
+  far above the distills (0.4–2%); likely R1 answers exceeding the judge's 8,192-token context.
+  NaN rows are dropped before selection, as for the other models. To check: whether NaN rows are
+  the long (compliant) ones, which would bias selection.
+- **Decision: run the distills' protocol** (FULL_POOL=1: baseline on all 2,446 prompts, same
+  thresholds), but roll out a seeded random sample of **15** R1-eligible prompts (the paper's
+  original runs also sampled; cost: R1-AWQ generates ~1k output tok/s on 4×H200, ~30–45 min per
+  prompt). Budget cap $450 total (on-pod watchdog). Baseline scoring now threaded (128 threads).
