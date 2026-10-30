@@ -64,6 +64,9 @@ def parse_args():
                         help="CSV file(s) to evaluate on; several share one model load (clean model only)")
     parser.add_argument("--input_dir", type=str, default="dataset",
                         help="Directory containing --input_csv (output name uses its basename)")
+    parser.add_argument("--disable_prefix_caching", action="store_true",
+                        help="Turn off vLLM prefix caching (needed for DeepSeek-R1-AWQ on vLLM 0.10.1, where "
+                             "reused cache blocks can yield NaN logits -> <｜begin▁of▁sentence｜> spam)")
     parser.add_argument("--tokenizer_name", type=str, default=None,
                         help="Tokenizer/chat template if not the model's own (e.g. official R1 template for an AWQ quant)")
     parser.add_argument("--max_model_len", type=int, default=None,
@@ -570,6 +573,7 @@ def main():
                 gpu_memory_utilization=args.gpu_memory_utilization,
                 max_model_len=args.max_model_len,
                 tokenizer=args.tokenizer_name,
+                enable_prefix_caching=not args.disable_prefix_caching,
                 trust_remote_code=True,
             )
             

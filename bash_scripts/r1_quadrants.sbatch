@@ -49,6 +49,10 @@ RESAMPLE_ARGS=${RESAMPLE_ARGS:-}
 # R1 tokenizer (same vocab; template forces "<think>\n", as do the distills') at a pinned revision
 R1_TOKENIZER=${HF_HOME:-$HOME/.cache/huggingface}/hub/models--deepseek-ai--DeepSeek-R1/snapshots/56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad
 if [ "$MODEL" = QuixiAI/DeepSeek-R1-AWQ ]; then TOKENIZER=${TOKENIZER:-$R1_TOKENIZER}; else TOKENIZER=${TOKENIZER:-}; fi
+# vLLM 0.10.1 + this AWQ quant: reused prefix-cache blocks can yield NaN logits (answers become
+# <｜begin▁of▁sentence｜> spam; 21% vs 0% of affected inputs with caching on/off), so disable it
+VLLM_ARGS=""
+if [ "$MODEL" = QuixiAI/DeepSeek-R1-AWQ ]; then VLLM_ARGS="--disable_prefix_caching"; fi
 CSVS=(train_harmful_prompts.csv orbench_extra_prompts.csv test_harmful_prompts.csv)
 
 # Weights: on our cluster, staged from the persistent HF cache to shared Weka scratch (fast) and
@@ -86,7 +90,7 @@ HUB=${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface}/hub}
     echo "host: $(hostname)"; echo "job: ${SLURM_JOB_ID:-local}"; echo "started: $(date -Is)"
     echo "git_sha: $(git rev-parse HEAD)"; echo "git_dirty: $(git status --porcelain -uno | wc -l) files"
     echo "model: $MODEL tp: $TP judge: $JUDGE thresholds: x<$X_THR y>$Y_THR n_prompts: $N_PROMPTS"
-    echo "full_pool: ${FULL_POOL:-no}"; echo "resample_args: $RESAMPLE_ARGS"; echo "tokenizer: ${TOKENIZER:-model default}"; echo "hf_hub_cache: $HUB"
+    echo "full_pool: ${FULL_POOL:-no}"; echo "vllm_args: ${VLLM_ARGS:-none}"; echo "resample_args: $RESAMPLE_ARGS"; echo "tokenizer: ${TOKENIZER:-model default}"; echo "hf_hub_cache: $HUB"
     for repo in "$MODEL" "$JUDGE"; do echo "snapshot $repo: $(ls "$HUB/models--${repo//\//--}/snapshots" 2>/dev/null || echo 'not yet downloaded')"; done
     uv run python -c "import vllm, torch; print('vllm', vllm.__version__, 'torch', torch.__version__)"
     uv run python -c "from transformers import AutoTokenizer; t = AutoTokenizer.from_pretrained('${TOKENIZER:-$MODEL}', trust_remote_code=True); print('chat_template_renders:', repr(t.apply_chat_template([{'role': 'user', 'content': 'hi'}], add_generation_prompt=True, tokenize=False)))"
@@ -126,7 +130,7 @@ if [ ${#TODO[@]} -gt 0 ]; then
     log "Phase 2: baseline cot5_out5 for ${TODO[*]}"
     uv run python -m utils.batch_generation_cot_output --model_name "$MODEL" --input_dir "$CAND" \
         --input_csv "${TODO[@]}" --tensor_parallel_size "$TP" --max_model_len 8192 --batch_size "${BASELINE_BATCH:-5000}" \
-        ${TOKENIZER:+--tokenizer_name "$TOKENIZER"} \
+        ${TOKENIZER:+--tokenizer_name "$TOKENIZER"} $VLLM_ARGS \
         > "$LOG_DIR/2_baseline.log" 2>&1
 fi
 
@@ -157,7 +161,7 @@ fi
 log "Phase 4: quadrant rollouts"
 uv run python -m utils.heuristic.resample_quadrants --model_name "$MODEL" --n "$N_PROMPTS" --repetitions 10 \
     --x_threshold "$X_THR" --y_threshold "$Y_THR" --tensor_parallel_size "$TP" --max_model_len 32768 \
-    ${TOKENIZER:+--tokenizer_name "$TOKENIZER"} $RESAMPLE_ARGS > "$LOG_DIR/4_rollouts.log" 2>&1
+    ${TOKENIZER:+--tokenizer_name "$TOKENIZER"} $VLLM_ARGS $RESAMPLE_ARGS > "$LOG_DIR/4_rollouts.log" 2>&1
 
 # 5. Score rollouts (already-scored files are skipped): one judge server per visible GPU
 log "Phase 5: scoring rollouts"
