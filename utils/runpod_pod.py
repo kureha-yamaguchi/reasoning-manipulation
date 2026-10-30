@@ -85,8 +85,15 @@ def main():
         with open(os.path.expanduser('~/.ssh/id_ed25519.pub')) as f:
             public_key = f.read().strip()
         deadline = time.time() + args.max_wait_h * 3600
+        polls = 0
         while True:
-            gpu, lp = next(((g, p) for g in args.gpu.split(',') if (p := price(g, args.count))), (None, None))
+            polls += 1
+            try:
+                gpu, lp = next(((g, p) for g in args.gpu.split(',') if (p := price(g, args.count))), (None, None))
+            except (RuntimeError, OSError) as e:  # transient API/network errors must not end a long wait
+                print(f'{time.strftime("%F %T")} poll failed: {e}', flush=True)
+                time.sleep(max(args.poll_s, 30))
+                continue
             if lp:
                 print(f'{time.strftime("%F %T")} {args.count}x {gpu} in stock ({lp}); deploying', flush=True)
                 try:
@@ -99,8 +106,11 @@ def main():
                     return
                 except RuntimeError as e:  # stock vanished between query and deploy
                     print(f'{time.strftime("%F %T")} deploy failed: {e}', flush=True)
-            else:  # also log single-GPU stock, to see how fragmented capacity is
-                singles = {g: (price(g, 1) or {}).get('stockStatus') for g in args.gpu.split(',')}
+            elif polls % max(1, 60 // args.poll_s) == 1:  # log ~once a minute, with 1x stock (fragmentation)
+                try:
+                    singles = {g: (price(g, 1) or {}).get('stockStatus') for g in args.gpu.split(',')}
+                except (RuntimeError, OSError):
+                    singles = 'unavailable'
                 print(f'{time.strftime("%F %T")} no {args.count}x {args.gpu} in stock; 1x stock {singles}', flush=True)
             if time.time() > deadline:
                 raise SystemExit(f'No {args.count}x {args.gpu} within {args.max_wait_h} h')

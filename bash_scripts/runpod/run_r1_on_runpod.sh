@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Run the full-precision DeepSeek-R1 quadrant pipeline on a RunPod 8xH200 (or H200 NVL) pod, from here.
-#   1. wait (up to MAX_WAIT_H) for 8xH200 / 8xH200 NVL secure-cloud stock, any region, then deploy (utils.runpod_pod)
+# Run the full-precision DeepSeek-R1 quadrant pipeline on a RunPod 8xH200/H200 NVL/B200/B300 pod, from here.
+#   1. wait (up to MAX_WAIT_H) for 8x H200/H200 NVL/B200/B300 secure-cloud stock, any region, then deploy (utils.runpod_pod)
 #   2. start bash_scripts/runpod/pod_bootstrap.sh on the pod at this repo's HEAD (must be pushed)
 #   3. every 15 min, rsync results/logs back to results/deepseek-ai/DeepSeek-R1 and logs/runpod/
 #   4. on DONE: final rsync + verify the tarball, then stop the pod (volume kept until terminated
@@ -11,8 +11,9 @@
 set -euo pipefail
 CAP_USD=${CAP_USD:-450}
 MAX_WAIT_H=${MAX_WAIT_H:-24}
-POLL_S=${POLL_S:-60}  # on-demand capacity is first come, first served; free 8-GPU machines go fast
-GPU=${GPU:-NVIDIA H200,NVIDIA H200 NVL}  # Hopper only: the pinned env (torch cu126) lacks Blackwell kernels
+POLL_S=${POLL_S:-10}  # on-demand capacity is first come, first served; free 8-GPU machines go fast
+# First in stock wins; on Blackwell (B200/B300) pod_bootstrap.sh swaps in torch cu128
+GPU=${GPU:-NVIDIA H200,NVIDIA H200 NVL,NVIDIA B200,NVIDIA B300 SXM6 AC}
 TS=$(date +%Y%m%d_%H%M%S)
 STATE=results/runpod/${TS}_r1_pod.json
 LOGS=logs/runpod/$TS

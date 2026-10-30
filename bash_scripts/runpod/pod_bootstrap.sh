@@ -37,6 +37,16 @@ if [ ! -d repo ]; then git clone -q https://github.com/kureha-yamaguchi/reasonin
 cd repo && git fetch -q origin && git checkout -q "$GIT_SHA"
 log "Repo at $(git rev-parse HEAD)"
 uv sync -q
+# Blackwell (compute capability >= 10, e.g. B200/B300): the locked torch 2.7.1 is the cu126 build,
+# which has no sm_100 kernels. Swap in the same versions built for CUDA 12.8 (vLLM 0.10.1's own
+# wheel already targets cu128/Blackwell) and stop `uv run` re-syncing back to the lock.
+if [ "$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | cut -d. -f1)" -ge 10 ]; then
+    log "Blackwell GPU: installing torch 2.7.1+cu128"
+    uv pip install -q --reinstall --index-url https://download.pytorch.org/whl/cu128 \
+        torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1
+    export UV_NO_SYNC=1
+fi
+log "torch $(uv run python -c 'import torch; print(torch.__version__, torch.cuda.get_device_capability())')"
 
 log "Downloading weights"
 uv run hf download deepseek-ai/DeepSeek-R1 --max-workers 32 > /workspace/download.log 2>&1
