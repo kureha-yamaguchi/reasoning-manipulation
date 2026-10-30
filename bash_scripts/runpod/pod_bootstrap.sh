@@ -50,6 +50,9 @@ if [ "$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | cut
     export UV_NO_SYNC=1
 fi
 log "torch $(uv run python -c 'import torch; print(torch.__version__, torch.cuda.get_device_capability())')"
+if [ "$MODEL" = QuixiAI/DeepSeek-R1-AWQ ]; then  # vLLM 0.10.1 cannot load AWQ into DeepSeek's fused_qkv_a_proj
+    log "$(uv run python bash_scripts/runpod/patch_vllm_awq_fused_qkv.py)"
+fi
 
 log "Downloading weights"
 uv run hf download "$MODEL" --max-workers 32 > /workspace/download.log 2>&1

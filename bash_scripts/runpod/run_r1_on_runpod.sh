@@ -28,9 +28,14 @@ log() { echo "[$(date '+%F %T')] $*"; }
 SHA=$(git rev-parse HEAD)
 git fetch -q origin && git branch -r --contains "$SHA" | grep -q . || { log "HEAD $SHA is not pushed"; exit 1; }
 
-uv run python -m utils.runpod_pod launch --gpu "$GPU" --count "$COUNT" --volume_gb "$VOLUME_GB" --state "$STATE" --max_wait_h "$MAX_WAIT_H" --poll_s "$POLL_S"
+if [ -n "${POD_STATE:-}" ]; then  # adopt an existing pod (e.g. after fixing a failed run); cap counts from its creation
+    cp "$POD_STATE" "$STATE"
+else
+    uv run python -m utils.runpod_pod launch --gpu "$GPU" --count "$COUNT" --volume_gb "$VOLUME_GB" --state "$STATE" --max_wait_h "$MAX_WAIT_H" --poll_s "$POLL_S"
+fi
 COST=$(python3 -c "import json; print(json.load(open('$STATE'))['cost_per_hr'])")
-CAP_SECONDS=$(python3 -c "print(int($CAP_USD / $COST * 3600))")
+CAP_SECONDS=$(python3 -c "import json, time; s = json.load(open('$STATE')); print(int($CAP_USD / $COST * 3600 - (time.time() - s['created'])))")
+[ "$CAP_SECONDS" -gt 600 ] || { log "Less than 10 min of budget left"; exit 1; }
 log "Pod $(python3 -c "import json; print(json.load(open('$STATE'))['pod_id'])") at \$$COST/h; cap \$$CAP_USD = $((CAP_SECONDS / 3600)) h"
 
 read -r IP PORT < <(uv run python -m utils.runpod_pod ssh --state "$STATE")
@@ -41,7 +46,9 @@ log "SSH up: root@$IP -p $PORT"
 
 pod "cat > /workspace/.rp_key && chmod 600 /workspace/.rp_key" < ~/.config/runpod/api_key
 scp -q -P "$PORT" -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new bash_scripts/runpod/pod_bootstrap.sh "root@$IP:/workspace/"
-pod "cd /workspace && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS MODEL=$MODEL TP=$TP setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &"
+# A background job started over ssh can hold the session open, so bound the call and verify instead
+timeout 30 ssh -n "${SSH_OPTS[@]}" "root@$IP" "cd /workspace && rm -f DONE FAILED PULLED && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS MODEL=$MODEL TP=$TP setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &" || true
+pod "pgrep -f 'bash pod_bootstrap.sh' > /dev/null" || { log "Bootstrap did not start"; exit 1; }
 log "Bootstrap started (commit $SHA)"
 
 pull() {
