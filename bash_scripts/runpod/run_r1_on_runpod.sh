@@ -25,7 +25,7 @@ LOGS=logs/runpod/$TS
 mkdir -p results/runpod "$LOGS" "results/$MODEL"
 log() { echo "[$(date '+%F %T')] $*"; }
 
-SHA=$(git rev-parse HEAD)
+SHA=${GIT_SHA:-$(git rev-parse HEAD)}  # commit the pod checks out (must be on origin)
 git fetch -q origin || log "git fetch failed; checking the last-fetched remote state"
 git branch -r --contains "$SHA" | grep -q . || { log "HEAD $SHA is not pushed"; exit 1; }
 
