@@ -10,6 +10,7 @@ uv run python -m utils.runpod_pod launch --gpu "NVIDIA H200,NVIDIA H200 NVL" --c
 uv run python -m utils.runpod_pod ssh    --state S        # prints "ip port" once SSH is reachable
 uv run python -m utils.runpod_pod status --state S
 uv run python -m utils.runpod_pod stop   --state S        # keeps the volume
+uv run python -m utils.runpod_pod terminate --state S     # deletes the pod and its volume (irreversible)
 '''
 
 import argparse
@@ -69,7 +70,7 @@ def pod(pod_id: str) -> dict | None:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('cmd', choices=['price', 'watch', 'launch', 'ssh', 'status', 'stop'])
+    parser.add_argument('cmd', choices=['price', 'watch', 'launch', 'ssh', 'status', 'stop', 'terminate'])
     parser.add_argument('--gpu', default='NVIDIA H200', help='Comma list for launch: first type in stock wins')
     parser.add_argument('--count', type=int, default=8)
     parser.add_argument('--state', default=None)
@@ -132,6 +133,8 @@ def main():
     elif args.cmd == 'stop':
         print(json.dumps(gql('mutation($id: String!) { podStop(input: {podId: $id}) { id desiredStatus } }',
                              {'id': state['pod_id']})))
+    elif args.cmd == 'terminate':
+        print(json.dumps(gql('mutation($id: String!) { podTerminate(input: {podId: $id}) }', {'id': state['pod_id']})))
     elif args.cmd == 'ssh':
         for _ in range(120):  # up to 20 min for image pull and sshd
             info = pod(state['pod_id'])
