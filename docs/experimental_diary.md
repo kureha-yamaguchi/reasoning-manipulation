@@ -210,3 +210,15 @@ i ≤ 4 labelled SAME/DIFFERENT by gpt-oss-20b (`sentence_equivalence`, 3,991 un
 (e.g. adopts task / describes request neutrally / flags concern / plans safe alternative), validated
 on a small hand-labelled set; then (a) P(comply | stance of T_0) as a direct test of the stance
 hypothesis and (b) "different" := stance category differs. This is also mythos's hinge taxonomy.
+
+## 2026-10-30 — R1 arm moved to RunPod (full precision)
+
+ARC job 9207461 (AWQ, engs account) started 03:03 and was held after 7 s: "Held due to
+insufficient credit". Instead: full-precision `deepseek-ai/DeepSeek-R1` on a RunPod 8×H200 pod
+(Kureha's account, approved budget cap $450). `bash_scripts/runpod/run_r1_on_runpod.sh` waits up
+to 24 h for 8×H200 secure-cloud stock (none at 11:17; 8×H100 was available but cannot hold FP8
+R1), deploys, runs `pod_bootstrap.sh` at a pushed commit (uv sync, HF download, same
+`r1_quadrants.sbatch` pipeline), syncs results to `results/deepseek-ai/DeepSeek-R1/` every 15 min,
+and stops the pod when done. An on-pod watchdog stops the pod at the cap regardless of the
+controller. The API key lives in ~/.config/runpod/api_key (600), never in the repo.
+Untested before launch: vLLM 0.10.1 + FP8 R1 on H200 with the runpod/pytorch image's driver.
