@@ -5,6 +5,7 @@ The API key is read from $RUNPOD_API_KEY or ~/.config/runpod/api_key and never w
 Pod metadata (id, price, ssh endpoint) goes to --state, a JSON file.
 
 uv run python -m utils.runpod_pod price  --gpu "NVIDIA H200" --count 8
+uv run python -m utils.runpod_pod watch  --gpu "NVIDIA H200,NVIDIA B200" --count 8 --poll_s 60   # log only
 uv run python -m utils.runpod_pod launch --gpu "NVIDIA H200,NVIDIA H200 NVL" --count 8 --state S --max_wait_h 24
 uv run python -m utils.runpod_pod ssh    --state S        # prints "ip port" once SSH is reachable
 uv run python -m utils.runpod_pod status --state S
@@ -68,7 +69,7 @@ def pod(pod_id: str) -> dict | None:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('cmd', choices=['price', 'launch', 'ssh', 'status', 'stop'])
+    parser.add_argument('cmd', choices=['price', 'watch', 'launch', 'ssh', 'status', 'stop'])
     parser.add_argument('--gpu', default='NVIDIA H200', help='Comma list for launch: first type in stock wins')
     parser.add_argument('--count', type=int, default=8)
     parser.add_argument('--state', default=None)
@@ -81,6 +82,14 @@ def main():
     if args.cmd == 'price':
         print(json.dumps(price(args.gpu, args.count)))
         return
+    if args.cmd == 'watch':  # log stock only; never deploys
+        while True:
+            try:
+                stock = {g: (price(g, args.count) or {}).get('stockStatus') for g in args.gpu.split(',')}
+            except (RuntimeError, OSError) as e:
+                stock = f'poll failed: {e}'
+            print(f'{time.strftime("%F %T")} {args.count}x stock {stock}', flush=True)
+            time.sleep(args.poll_s)
     if args.cmd == 'launch':
         with open(os.path.expanduser('~/.ssh/id_ed25519.pub')) as f:
             public_key = f.read().strip()

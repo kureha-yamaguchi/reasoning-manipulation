@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # Runs ON the RunPod pod (started by run_r1_on_runpod.sh): installs the repo at a pinned commit,
-# downloads full-precision DeepSeek-R1 + the gpt-oss-20b judge to the pod volume, runs the
-# quadrant pipeline, and tars the results.
+# downloads MODEL (default full-precision DeepSeek-R1; or the 4-bit AWQ quant) + the gpt-oss-20b
+# judge to the pod volume, runs the quadrant pipeline with TP-way tensor parallelism, and tars
+# the results.
 #
 # Cost safety, independent of the controlling machine:
 #   - watchdog: stops the pod (volume kept) after CAP_SECONDS from boot
 #   - on DONE, waits up to 2 h for /workspace/PULLED (results copied off) then stops the pod;
 #     on FAILED, waits 30 min then stops. The controller normally stops it sooner via the API.
-# Env: GIT_SHA (required), CAP_SECONDS (required); RunPod key in /workspace/.rp_key (mode 600).
+# Env: GIT_SHA, CAP_SECONDS (required); MODEL, TP (optional); RunPod key in /workspace/.rp_key.
 set -euo pipefail
 cd /workspace
 : "${GIT_SHA:?}" "${CAP_SECONDS:?}"
+MODEL=${MODEL:-deepseek-ai/DeepSeek-R1}
+TP=${TP:-8}
 export HF_HOME=/workspace/hf UV_CACHE_DIR=/workspace/uv-cache PATH="$HOME/.local/bin:$PATH"
 log() { echo "[$(date '+%F %T')] $*"; }
 
@@ -49,12 +52,16 @@ fi
 log "torch $(uv run python -c 'import torch; print(torch.__version__, torch.cuda.get_device_capability())')"
 
 log "Downloading weights"
-uv run hf download deepseek-ai/DeepSeek-R1 --max-workers 32 > /workspace/download.log 2>&1
+uv run hf download "$MODEL" --max-workers 32 > /workspace/download.log 2>&1
+if [ "$MODEL" = QuixiAI/DeepSeek-R1-AWQ ]; then  # official R1 chat template, used via --tokenizer_name
+    uv run hf download deepseek-ai/DeepSeek-R1 config.json configuration_deepseek.py generation_config.json \
+        tokenizer.json tokenizer_config.json --revision 56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad >> /workspace/download.log 2>&1
+fi
 uv run hf download openai/gpt-oss-20b --max-workers 16 >> /workspace/download.log 2>&1
 log "Weights: $(du -sh "$HF_HOME/hub" | cut -f1)"
 
-log "Pipeline"
-MODEL=deepseek-ai/DeepSeek-R1 TP=8 bash bash_scripts/r1_quadrants.sbatch
-tar czf /workspace/r1_results.tgz results/deepseek-ai/DeepSeek-R1/dataset logs/r1_quadrants logs/score_quadrants
+log "Pipeline: $MODEL, TP=$TP"
+MODEL=$MODEL TP=$TP bash bash_scripts/r1_quadrants.sbatch
+tar czf /workspace/r1_results.tgz "results/$MODEL/dataset" logs/r1_quadrants logs/score_quadrants
 trap - ERR
 finish DONE

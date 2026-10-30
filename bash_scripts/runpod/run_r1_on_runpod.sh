@@ -8,22 +8,27 @@
 # Spend is capped at CAP_USD by a watchdog on the pod itself, so it holds even if this dies.
 #
 # Usage (repo root, in tmux): CAP_USD=450 bash bash_scripts/runpod/run_r1_on_runpod.sh
+# 4-bit AWQ on 4xH200: MODEL=QuixiAI/DeepSeek-R1-AWQ TP=4 COUNT=4 GPU='NVIDIA H200' VOLUME_GB=800 CAP_USD=250 bash ...
 set -euo pipefail
 CAP_USD=${CAP_USD:-450}
 MAX_WAIT_H=${MAX_WAIT_H:-24}
 POLL_S=${POLL_S:-10}  # on-demand capacity is first come, first served; free 8-GPU machines go fast
 # First in stock wins; on Blackwell (B200/B300) pod_bootstrap.sh swaps in torch cu128
 GPU=${GPU:-NVIDIA H200,NVIDIA H200 NVL,NVIDIA B200,NVIDIA B300 SXM6 AC}
+MODEL=${MODEL:-deepseek-ai/DeepSeek-R1}
+TP=${TP:-8}
+COUNT=${COUNT:-8}
+VOLUME_GB=${VOLUME_GB:-1400}
 TS=$(date +%Y%m%d_%H%M%S)
 STATE=results/runpod/${TS}_r1_pod.json
 LOGS=logs/runpod/$TS
-mkdir -p results/runpod "$LOGS" results/deepseek-ai/DeepSeek-R1
+mkdir -p results/runpod "$LOGS" "results/$MODEL"
 log() { echo "[$(date '+%F %T')] $*"; }
 
 SHA=$(git rev-parse HEAD)
 git fetch -q origin && git branch -r --contains "$SHA" | grep -q . || { log "HEAD $SHA is not pushed"; exit 1; }
 
-uv run python -m utils.runpod_pod launch --gpu "$GPU" --count 8 --state "$STATE" --max_wait_h "$MAX_WAIT_H" --poll_s "$POLL_S"
+uv run python -m utils.runpod_pod launch --gpu "$GPU" --count "$COUNT" --volume_gb "$VOLUME_GB" --state "$STATE" --max_wait_h "$MAX_WAIT_H" --poll_s "$POLL_S"
 COST=$(python3 -c "import json; print(json.load(open('$STATE'))['cost_per_hr'])")
 CAP_SECONDS=$(python3 -c "print(int($CAP_USD / $COST * 3600))")
 log "Pod $(python3 -c "import json; print(json.load(open('$STATE'))['pod_id'])") at \$$COST/h; cap \$$CAP_USD = $((CAP_SECONDS / 3600)) h"
@@ -36,11 +41,11 @@ log "SSH up: root@$IP -p $PORT"
 
 pod "cat > /workspace/.rp_key && chmod 600 /workspace/.rp_key" < ~/.config/runpod/api_key
 scp -q -P "$PORT" -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new bash_scripts/runpod/pod_bootstrap.sh "root@$IP:/workspace/"
-pod "cd /workspace && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &"
+pod "cd /workspace && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS MODEL=$MODEL TP=$TP setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &"
 log "Bootstrap started (commit $SHA)"
 
 pull() {
-    rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/repo/results/deepseek-ai/DeepSeek-R1/" results/deepseek-ai/DeepSeek-R1/ 2> /dev/null || true
+    rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/repo/results/$MODEL/" "results/$MODEL/" 2> /dev/null || true
     rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/repo/logs/" "root@$IP:/workspace/"{bootstrap,download,watchdog}.log "$LOGS/" 2> /dev/null || true
 }
 stop() { uv run python -m utils.runpod_pod stop --state "$STATE"; }
@@ -52,7 +57,7 @@ while true; do
         pull
         rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/r1_results.tgz" "$LOGS/"
         tar tzf "$LOGS/r1_results.tgz" > /dev/null && pod "touch /workspace/PULLED"
-        log "DONE: results in results/deepseek-ai/DeepSeek-R1, tarball in $LOGS"; stop; exit 0
+        log "DONE: results in results/$MODEL, tarball in $LOGS"; stop; exit 0
     fi
     if pod "test -f /workspace/FAILED" 2> /dev/null; then
         pull; log "FAILED: see $LOGS/bootstrap.log"; stop; exit 1
