@@ -5,7 +5,7 @@ The API key is read from $RUNPOD_API_KEY or ~/.config/runpod/api_key and never w
 Pod metadata (id, price, ssh endpoint) goes to --state, a JSON file.
 
 uv run python -m utils.runpod_pod price  --gpu "NVIDIA H200" --count 8
-uv run python -m utils.runpod_pod launch --gpu "NVIDIA H200" --count 8 --state S --max_wait_h 24
+uv run python -m utils.runpod_pod launch --gpu "NVIDIA H200,NVIDIA H200 NVL" --count 8 --state S --max_wait_h 24
 uv run python -m utils.runpod_pod ssh    --state S        # prints "ip port" once SSH is reachable
 uv run python -m utils.runpod_pod status --state S
 uv run python -m utils.runpod_pod stop   --state S        # keeps the volume
@@ -69,7 +69,7 @@ def pod(pod_id: str) -> dict | None:
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('cmd', choices=['price', 'launch', 'ssh', 'status', 'stop'])
-    parser.add_argument('--gpu', default='NVIDIA H200')
+    parser.add_argument('--gpu', default='NVIDIA H200', help='Comma list for launch: first type in stock wins')
     parser.add_argument('--count', type=int, default=8)
     parser.add_argument('--state', default=None)
     parser.add_argument('--name', default='r1-quadrants')
@@ -86,12 +86,12 @@ def main():
             public_key = f.read().strip()
         deadline = time.time() + args.max_wait_h * 3600
         while True:
-            lp = price(args.gpu, args.count)
+            gpu, lp = next(((g, p) for g in args.gpu.split(',') if (p := price(g, args.count))), (None, None))
             if lp:
-                print(f'{time.strftime("%F %T")} {args.count}x {args.gpu} in stock ({lp}); deploying', flush=True)
+                print(f'{time.strftime("%F %T")} {args.count}x {gpu} in stock ({lp}); deploying', flush=True)
                 try:
-                    created = deploy(args.gpu, args.count, args.name, args.volume_gb, public_key)
-                    state = {'pod_id': created['id'], 'cost_per_hr': created['costPerHr'], 'gpu': args.gpu,
+                    created = deploy(gpu, args.count, args.name, args.volume_gb, public_key)
+                    state = {'pod_id': created['id'], 'cost_per_hr': created['costPerHr'], 'gpu': gpu,
                              'count': args.count, 'created': time.time(), 'image': IMAGE}
                     with open(args.state, 'w') as f:
                         json.dump(state, f, indent=2)
