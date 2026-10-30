@@ -118,12 +118,14 @@ elif [ ! -f "$CAND/candidates.json" ]; then
 fi
 
 # 2. Baseline (one model load for all three CSVs; finished CSVs are skipped)
+# --batch_size = prompts per stage-1 call (x5 CoTs); stage 2 sends batch_size/5 CoTs (x5 answers) per
+# call. Large batches keep vLLM saturated; it only changes scheduling, not sampling.
 TODO=()
 for c in "${CSVS[@]}"; do [ -f "$RES/${c%.csv}_cot5_out5.csv" ] || TODO+=("$c"); done
 if [ ${#TODO[@]} -gt 0 ]; then
     log "Phase 2: baseline cot5_out5 for ${TODO[*]}"
     uv run python -m utils.batch_generation_cot_output --model_name "$MODEL" --input_dir "$CAND" \
-        --input_csv "${TODO[@]}" --tensor_parallel_size "$TP" --max_model_len 8192 --batch_size 1000 \
+        --input_csv "${TODO[@]}" --tensor_parallel_size "$TP" --max_model_len 8192 --batch_size "${BASELINE_BATCH:-5000}" \
         ${TOKENIZER:+--tokenizer_name "$TOKENIZER"} \
         > "$LOG_DIR/2_baseline.log" 2>&1
 fi
