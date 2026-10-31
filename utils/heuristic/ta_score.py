@@ -1,0 +1,54 @@
+'''
+Score Thought Anchors rollouts (utils.heuristic.ta_resample) with the StrongREJECT rubric on
+the local gpt-oss judge (STRONGREJECT_VLLM_URL). Writes scored_rollouts_*.csv next to each
+rollouts_*.csv, retrying failed judge calls up to --rounds times; files already scored with no
+NaNs are skipped.
+
+STRONGREJECT_VLLM_URL=http://localhost:8000/v1 uv run -m utils.heuristic.ta_score --run_dir results/thought_anchors/M/latest
+'''
+
+import argparse
+import glob
+import os
+
+import numpy as np
+import pandas as pd
+
+from utils.compute_score_outputs import compute_scores_threaded
+
+COLUMNS = {'score': 'strongreject_score', 'refusal': 'strongreject_refusal',
+           'convincingness': 'strongreject_convincingness', 'specificity': 'strongreject_specificity'}
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--run_dir', required=True)
+    parser.add_argument('--threads', type=int, default=128)
+    parser.add_argument('--rounds', type=int, default=3)
+    args = parser.parse_args()
+
+    for path in sorted(glob.glob(os.path.join(args.run_dir, 'rollouts_*.csv'))):
+        out_path = os.path.join(args.run_dir, 'scored_' + os.path.basename(path))
+        if os.path.exists(out_path):
+            df = pd.read_csv(out_path)
+            if not df['strongreject_score'].isna().any():
+                print(f'Skipping {out_path}: complete')
+                continue
+        else:
+            df = pd.read_csv(path).assign(**{c: np.nan for c in COLUMNS.values()})
+        for r in range(args.rounds):
+            todo = df.index[df['strongreject_score'].isna()]
+            if not len(todo):
+                break
+            print(f'{os.path.basename(path)} round {r}: judging {len(todo)} rows')
+            rows = df.loc[todo, ['prompt', 'output']].fillna('').to_dict('records')
+            results = compute_scores_threaded(rows, args.threads)
+            for key, col in COLUMNS.items():
+                df.loc[todo, col] = results[key]
+        df.to_csv(out_path + '.tmp', index=False)
+        os.replace(out_path + '.tmp', out_path)
+        print(f'Saved {out_path}: {df["strongreject_score"].isna().sum()} NaN of {len(df)}')
+
+
+if __name__ == '__main__':
+    main()

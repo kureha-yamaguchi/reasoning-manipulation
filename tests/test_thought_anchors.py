@@ -62,3 +62,20 @@ def test_ta_importance_pools_similar_resamples_with_next_chunk():
     assert out.loc[0, 'n_dissimilar'] == 2
     assert out.loc[1, 'counterfactual_importance'] == 0.0  # no dissimilar resamples
     assert out.loc[2, 'resampling_importance'] == 0.0  # last chunk
+
+
+def test_ta_importance_extensions():
+    answers = {0: ['refuse'] * 3 + ['comply'] * 3, 1: ['refuse'] * 4}
+    similarity = {0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.9], 1: [0.9] * 4}
+    # Rollouts 0-2 restate S_0 later; 3-4 never do
+    later = {0: [0.9, 0.9, 0.9, 0.1, 0.1, 0.9], 1: [0.9] * 4}
+    out = ta_importance(answers, similarity, later_similarity=later, target='refuse', n_boot=200).set_index('chunk_idx')
+    r = out.loc[0]
+    assert r['p_target'] == pytest.approx(0.5)
+    kept = ['refuse'] * 4 + ['comply']  # chunk-1 rollouts + the similar resample
+    assert r['counterfactual_delta'] == pytest.approx(4 / 5 - 3 / 5)
+    assert r['counterfactual_pp_importance'] == pytest.approx(ta_kl(['comply'] * 2, kept))
+    assert r['counterfactual_pp_delta'] == pytest.approx(4 / 5 - 0)
+    assert r['reappearance'] == pytest.approx(3 / 5)
+    assert r['counterfactual_delta_lo'] <= r['counterfactual_delta'] <= r['counterfactual_delta_hi']
+    assert out.loc[1, 'counterfactual_pp_importance'] == 0.0

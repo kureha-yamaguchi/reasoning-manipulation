@@ -82,13 +82,26 @@ def ta_kl(p_answers, q_answers, alpha: float = 1.0) -> float:
 
 
 def ta_importance(answers: dict[int, list], similarity: dict[int, list], threshold: float = SIMILARITY_THRESHOLD,
-                  alpha: float = 1.0) -> pd.DataFrame:
+                  alpha: float = 1.0, later_similarity: dict[int, list] | None = None, target=None,
+                  n_boot: int = 0, rng: np.random.Generator | None = None) -> pd.DataFrame:
     """
     Per-chunk resampling and counterfactual importance (reference definitions above).
     answers[i]: outcome of each chunk-i rollout. similarity[i]: cos(S_i, T_i) per rollout, with
     NaN where T_i is unavailable; such rollouts count for resampling but on neither side of the
     counterfactual split. The last chunk, which has no successor, scores 0, as in the reference.
+
+    Extensions (not in Thought Anchors):
+    - later_similarity[i]: max cos(S_i, chunk) over all chunks of each chunk-i rollout's CoT.
+      Adds counterfactual++ importance (Thought Branches, Macar et al. 2025, Eq. 2): the
+      counterfactual set is restricted to rollouts in which S_i's content appears nowhere (max
+      similarity < threshold); the kept side is as for counterfactual importance. Also adds
+      reappearance = share of dissimilar resamples whose CoT restates S_i later.
+    - target: an outcome value, e.g. 'refuse'. Adds p_target per chunk (all chunk-i rollouts)
+      and the signed effect of S_i, delta = P(target | kept side) - P(target | counterfactual set).
+    - n_boot: binomial-bootstrap 95% intervals (each side's counts redrawn from its observed
+      frequency) for counterfactual importance and delta; needs a binary outcome and target.
     """
+    rng = rng or np.random.default_rng(0)
     idx = sorted(answers)
     rows = []
     for k, i in enumerate(idx):
@@ -96,12 +109,33 @@ def ta_importance(answers: dict[int, list], similarity: dict[int, list], thresho
         sim = np.asarray(similarity[i], dtype=float)
         dissimilar, similar = sim < threshold, sim >= threshold
         row = {'chunk_idx': i, 'n': len(a), 'n_dissimilar': int(dissimilar.sum())}
+        if target is not None:
+            row['p_target'] = float(np.mean(a == target))
+        sets = {'counterfactual': dissimilar}
+        if later_similarity is not None:
+            sets['counterfactual_pp'] = np.asarray(later_similarity[i], dtype=float) < threshold
+            row['n_counterfactual_pp'] = int(sets['counterfactual_pp'].sum())
+            row['reappearance'] = (float(1 - sets['counterfactual_pp'][dissimilar].mean())
+                                   if dissimilar.any() else np.nan)
         if k + 1 == len(idx):
-            rows.append(row | {'resampling_importance': 0.0, 'counterfactual_importance': 0.0})
+            rows.append(row | {'resampling_importance': 0.0} | {f'{name}_importance': 0.0 for name in sets})
             continue
-        nxt = list(answers[idx[k + 1]])
-        row['resampling_importance'] = ta_kl(a, nxt, alpha)
-        row['counterfactual_importance'] = (ta_kl(a[dissimilar], nxt + list(a[similar]), alpha)
-                                            if dissimilar.any() else 0.0)
+        kept = np.array(list(answers[idx[k + 1]]) + list(a[similar]), dtype=object)
+        row['resampling_importance'] = ta_kl(a, answers[idx[k + 1]], alpha)
+        for name, mask in sets.items():
+            cf = a[mask]
+            row[f'{name}_importance'] = ta_kl(cf, kept, alpha) if len(cf) else 0.0
+            if target is None:
+                continue
+            row[f'{name}_delta'] = float(np.mean(kept == target) - np.mean(cf == target)) if len(cf) else np.nan
+            if n_boot and len(cf):
+                other = next(v for v in set(cf) | set(kept) if v != target) if len(set(cf) | set(kept)) > 1 else None
+                x = rng.binomial(len(cf), np.mean(cf == target), n_boot)
+                y = rng.binomial(len(kept), np.mean(kept == target), n_boot)
+                kl = [ta_kl([target] * u + [other] * (len(cf) - u), [target] * v + [other] * (len(kept) - v), alpha)
+                      for u, v in zip(x, y)]
+                d = y / len(kept) - x / len(cf)
+                row[f'{name}_importance_lo'], row[f'{name}_importance_hi'] = np.percentile(kl, [2.5, 97.5])
+                row[f'{name}_delta_lo'], row[f'{name}_delta_hi'] = np.percentile(d, [2.5, 97.5])
         rows.append(row)
     return pd.DataFrame(rows)
