@@ -1,0 +1,76 @@
+{
+  "script": "ta_resample",
+  "args": {
+    "model_name": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    "prompts": "806,963,1073",
+    "results_dir": "results/",
+    "out_root": "results/thought_anchors",
+    "run_dir": null,
+    "n": 100,
+    "seed": 2000,
+    "temperature": 0.6,
+    "top_p": 1.0,
+    "max_new_tokens": 16384,
+    "max_model_len": 32768,
+    "max_attempts": 10,
+    "max_chunks": null
+  },
+  "git_sha": "76e9db17dce855c59fe597b1b94bb39d994d64b1",
+  "git_dirty": false,
+  "vllm": "0.10.1",
+  "host": "htc-g055",
+  "started": "2026-10-31T12:26:35.138853",
+  "selection": {
+    "806": {
+      "refusing": 2,
+      "complying": 1
+    },
+    "963": {
+      "refusing": 1,
+      "complying": 3
+    },
+    "1073": {
+      "refusing": 2,
+      "complying": 3
+    }
+  },
+  "resumed": [
+    {
+      "script": "ta_resample",
+      "args": {
+        "model_name": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+        "prompts": "806,963,1073",
+        "results_dir": "results/",
+        "out_root": "results/thought_anchors",
+        "run_dir": "results/thought_anchors/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/20261031-122629-76e9db1",
+        "n": 100,
+        "seed": 2000,
+        "temperature": 0.6,
+        "top_p": 1.0,
+        "max_new_tokens": 16384,
+        "max_model_len": 32768,
+        "max_attempts": 10,
+        "max_chunks": null
+      },
+      "git_sha": "584912d092f6aa2cc7459659c7c0f2ab1c01afd1",
+      "git_dirty": false,
+      "vllm": "0.10.1",
+      "host": "htc-g055",
+      "started": "2026-10-31T13:23:58.379018",
+      "selection": {
+        "806": {
+          "refusing": 2,
+          "complying": 1
+        },
+        "963": {
+          "refusing": 1,
+          "complying": 3
+        },
+        "1073": {
+          "refusing": 2,
+          "complying": 3
+        }
+      }
+    }
+  ]
+}
