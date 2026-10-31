@@ -242,3 +242,30 @@ Untested before launch: vLLM 0.10.1 + FP8 R1 on H200 with the runpod/pytorch ima
   thresholds), but roll out a seeded random sample of **15** R1-eligible prompts (the paper's
   original runs also sampled; cost: R1-AWQ generates ~1k output tok/s on 4×H200, ~30–45 min per
   prompt). Budget cap $450 total (on-pod watchdog). Baseline scoring now threaded (128 threads).
+
+### R1 (4-bit AWQ) results — full protocol (2026-10-31, 00:50)
+
+Run (pod qedecnajie02z7, 4×H200, ~11.7 h, ~$246; terminated after verifying local data): baseline
+on all 2,446 prompts (60,395 answers; 16 missing judge scores), **31 prompts R1-eligible** (1.3%;
+cf. Llama 33, Qwen 34, GPT-OSS 94), seeded random 15 rolled out (29,300 rollouts, 0 BOS-degenerate,
+10 valid per depth everywhere). Rollout scoring failed on the pod (judge servers inherited
+`VLLM_PORT`, which vLLM reads internally → EADDRINUSE; fixed in `score_quadrants.sh`) and was run
+on ARC with the same judge: 0 missing after repair. Prefix caching off for all R1 generation (see
+diagnosis above). Known issue shared by all models: `split_cot_into_sentences` drops lines without
+terminal punctuation (e.g. "In summary, the email should:"), so rebuilt prefixes omit ~1% of CoT text.
+
+Commitment (δ=0.2; 95% cluster bootstrap) — `results/commitment/commitment_summary_with_r1.json`:
+
+| | Llama-8B (33) | Qwen-7B (34) | R1-AWQ (15) | GPT-OSS (94) |
+|---|---|---|---|---|
+| first entry, normalised | 0.050 [0.038, 0.064] | 0.071 [0.054, 0.089] | 0.090 [0.056, 0.128] | 0.142 [0.128, 0.157] |
+| last exit, normalised | 0.215 [0.161, 0.274] | 0.322 [0.249, 0.398] | 0.324 [0.220, 0.431] | 0.235 [0.217, 0.254] |
+
+**The teacher looks like its students, not like GPT-OSS**
+(`figures/std_overlay_rep10_sentences25_with_r1.pdf`): sharp drop by sentence 1, then a plateau at
+std ≈ 0.15–0.19 (≈ Qwen-7B; Llama ≈ 0.10), whereas GPT-OSS falls steadily to ≈ 0.05. The
+"settles early but stays re-openable" pattern is therefore an R1-family property inherited by the
+distills, not produced by distillation. Caveats: 4-bit quant (vLLM loading patch, prefix caching
+off), N=15 with wide CIs, scale/architecture still confounded with GPT-OSS. Fig 3 panel:
+`results/QuixiAI/DeepSeek-R1-AWQ/figures/heatmap_quadrant_rep10_bins30_sampled.pdf` (heatmap prompts
+1200/1258/2003, seed 0).
