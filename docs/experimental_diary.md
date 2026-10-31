@@ -293,8 +293,10 @@ Result: chunk split 593/593 identical; resampling and counterfactual importance 
   original prefixes (character spans), and keep the trailing chunk.
 
 ### Design of our runs (`ta_resample` → `ta_score` → `ta_analyse`; `bash_scripts/ta_pipeline.sh`)
-- Outcome: refuse iff the judge's StrongREJECT refusal flag is set (sensitivity: score < 0.5).
-  KL with Laplace α=1 (ε explodes with two outcomes).
+- Outcome: comply iff StrongREJECT score ≥ 0.5 (as the quadrant filter/Fig 3). I first chose the
+  judge's refusal flag; the pilot showed it labels deflections ("let's write a positive story
+  instead", score ≈ 0) as non-refusals — 29% of late rollouts of a refusing CoT (1073/2) — so it is
+  now the sensitivity outcome. KL with Laplace α=1 (ε explodes with two outcomes).
 - Sampling temperature 0.6, **top_p 1.0** (as our baseline/quadrant generation, so resamples come
   from the policy that produced the CoTs; the paper used 0.95).
 - Extensions: signed Δ = P(refuse | kept) − P(refuse | counterfactual); counterfactual++ (Thought
