@@ -60,7 +60,7 @@ def label_cot(client: OpenAI, request: str, chunks: list[str], retries: int = 4)
             out = [labels.get(str(i)) for i in range(len(chunks))]
             if all(lab in CATEGORIES for lab in out):
                 return out
-        except Exception as e:  # malformed JSON or server error: retry
+        except Exception as e:  # noqa: BLE001 -- malformed JSON or any server error: retry
             print(f'label_cot retry: {e!r}')
     return None
 
