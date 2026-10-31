@@ -43,6 +43,8 @@ def parse_args():
                         help="Number of bins for normalised sentence position")
     parser.add_argument("--no_colorbar", action="store_true",
                         help="Omit the colorbar from the figure")
+    parser.add_argument("--all_files", action="store_true",
+                        help="Use every rollout file, not only prompts in the latest run's eligible set")
     parser.add_argument("--random_sample", action="store_true",
                         help="Trim heatmap to ~3 random examples per model")
     parser.add_argument("--seed", type=int, default=0,
@@ -318,6 +320,13 @@ def main():
         args.results_dir, args.model_name, 'dataset', 'quadrants', input_csv
     )
     input_paths_quadrant = sorted(glob.glob(pattern_quadrant))
+    if not args.all_files:  # same eligible-prompt restriction as the overlays and commitment analysis
+        from utils.heuristic.commitment import scored_paths
+        eligible = set(scored_paths(args.model_name, args.results_dir, args.repetitions))
+        excluded = sorted({extract_prompt_cot(p)[0] for p in input_paths_quadrant if p not in eligible})
+        input_paths_quadrant = [p for p in input_paths_quadrant if p in eligible]
+        if excluded:
+            print(f"Excluding prompts outside the current eligible set: {excluded}")
 
     if not input_paths_quadrant:
         print(f"No files found matching: {pattern_quadrant}")
