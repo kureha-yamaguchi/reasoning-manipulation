@@ -516,3 +516,6 @@ scored_ortho_output_subset_5_test_harmful_prompts_*.csv
 .nfs*
 
 resample/
+# Thought Anchors rollouts (large); metadata and analysis outputs stay tracked
+results/thought_anchors/**/rollouts_*.csv
+results/thought_anchors/**/scored_rollouts_*.csv

@@ -1,0 +1,107 @@
+'''
+Core of the Thought Anchors counterfactual-importance analysis (Bogdan et al. 2025,
+arXiv:2506.19143), matched to the reference implementation at
+github.com/interp-reasoning/thought-anchors, commit b53ed8c (analyze_rollouts.py, utils.py).
+
+Conventions follow the reference:
+- Chunk i's rollouts restart from the CoT prefix *without* chunk i, so their first chunk T_i
+  resamples S_i. The rollouts of the next chunk (i+1) keep S_i.
+- resampling importance      = KL[ p(A | chunk i rollouts) || p(A | chunk i+1 rollouts) ]
+- counterfactual importance  = KL[ p(A | chunk i rollouts, T_i ≉ S_i)
+                                 || p(A | chunk i+1 rollouts ∪ chunk i rollouts with T_i ≈ S_i) ]
+  The similar resamples join the "kept" side (reference default use_similar_chunks=True), and
+  T_i ≉ S_i means cosine < 0.8 under all-MiniLM-L6-v2.
+- KL estimator (reference calculate_kl_divergence): Σ_a p̂(a) log(p_α(a) / q_α(a)), where p̂ is
+  the unsmoothed frequency and p_α, q_α are add-α smoothed over the union of observed answers.
+  The result is clipped at 0, and is 0 if either side is empty. This is not the plain smoothed
+  KL; the paper (App. A) does not say so.
+
+Deviation, for generation only: chunk_spans returns character spans, so prefixes are exact
+substrings of the CoT. The reference rebuilds prefixes from stripped chunks joined by spaces,
+which loses newlines.
+'''
+
+import math
+import re
+from collections import Counter
+from itertools import pairwise
+
+import numpy as np
+import pandas as pd
+
+SIMILARITY_THRESHOLD = 0.8
+
+
+def chunk_spans(text: str, min_chars: int = 10) -> list[tuple[int, int]]:
+    """
+    (start, end) character spans of the reference split_solution_into_chunks chunks.
+    Boundaries come after '\\n\\n', or after '.', '?' or '!' followed by a space or newline.
+    Chunks whose stripped text has fewer than min_chars characters merge into the next chunk,
+    or into the previous one if last. Unlike the reference, the trailing unterminated chunk is
+    kept, so the spans tile the text. text[s:e].strip() equals the reference chunk up to
+    whitespace (the reference joins merged chunks with a single space).
+    """
+    cuts = [m.end() for m in re.finditer(r'\n\n|[.?!](?=[ \n])', text)]
+    edges = [0] + [c for c in cuts if c < len(text)] + [len(text)]
+    spans = []
+    for s, e in pairwise(edges):
+        if spans and not text[s:e].strip():
+            spans[-1] = (spans[-1][0], e)  # whitespace-only piece: attach to the previous chunk
+        elif spans and not text[spans[-1][0]:spans[-1][1]].strip():
+            spans[-1] = (spans[-1][0], e)  # leading whitespace: attach to the first real chunk
+        else:
+            spans.append((s, e))
+    i = 0
+    while i < len(spans):
+        if len(text[spans[i][0]:spans[i][1]].strip()) < min_chars and len(spans) > 1:
+            if i == len(spans) - 1:
+                spans[i - 1:] = [(spans[i - 1][0], spans[i][1])]
+            else:
+                spans[i:i + 2] = [(spans[i][0], spans[i + 1][1])]
+            continue
+        i += 1
+    return spans
+
+
+def first_chunk(text: str) -> str:
+    spans = chunk_spans(text)
+    return text[spans[0][0]:spans[0][1]].strip() if spans else text.strip()
+
+
+def ta_kl(p_answers, q_answers, alpha: float = 1.0) -> float:
+    """Reference KL estimator between two samples of discrete answers (empty answers dropped)."""
+    cp = Counter(a for a in p_answers if a)
+    cq = Counter(a for a in q_answers if a)
+    if not cp or not cq:
+        return 0.0
+    vocab = cp.keys() | cq.keys()
+    n_p, n_q, v = sum(cp.values()), sum(cq.values()), len(vocab)
+    kl = sum(cp[a] / n_p * math.log(((cp[a] + alpha) / (n_p + alpha * v)) / ((cq[a] + alpha) / (n_q + alpha * v)))
+             for a in vocab)
+    return max(0.0, kl)
+
+
+def ta_importance(answers: dict[int, list], similarity: dict[int, list], threshold: float = SIMILARITY_THRESHOLD,
+                  alpha: float = 1.0) -> pd.DataFrame:
+    """
+    Per-chunk resampling and counterfactual importance (reference definitions above).
+    answers[i]: outcome of each chunk-i rollout. similarity[i]: cos(S_i, T_i) per rollout, with
+    NaN where T_i is unavailable; such rollouts count for resampling but on neither side of the
+    counterfactual split. The last chunk, which has no successor, scores 0, as in the reference.
+    """
+    idx = sorted(answers)
+    rows = []
+    for k, i in enumerate(idx):
+        a = np.asarray(answers[i], dtype=object)
+        sim = np.asarray(similarity[i], dtype=float)
+        dissimilar, similar = sim < threshold, sim >= threshold
+        row = {'chunk_idx': i, 'n': len(a), 'n_dissimilar': int(dissimilar.sum())}
+        if k + 1 == len(idx):
+            rows.append(row | {'resampling_importance': 0.0, 'counterfactual_importance': 0.0})
+            continue
+        nxt = list(answers[idx[k + 1]])
+        row['resampling_importance'] = ta_kl(a, nxt, alpha)
+        row['counterfactual_importance'] = (ta_kl(a[dissimilar], nxt + list(a[similar]), alpha)
+                                            if dissimilar.any() else 0.0)
+        rows.append(row)
+    return pd.DataFrame(rows)
