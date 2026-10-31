@@ -269,3 +269,39 @@ distills, not produced by distillation. Caveats: 4-bit quant (vLLM loading patch
 off), N=15 with wide CIs, scale/architecture still confounded with GPT-OSS. Fig 3 panel:
 `results/QuixiAI/DeepSeek-R1-AWQ/figures/heatmap_quadrant_rep10_bins30_sampled.pdf` (heatmap prompts
 1200/1258/2003, seed 0).
+
+## 2026-10-31 — Thought Anchors counterfactual importance, done properly
+
+Why: the 10-29 demo used the quadrant k=10 rollouts (≈5 per sentence after the dissimilarity filter:
+noise-dominated) and a cosine threshold of 0.47 (our dataset median) instead of the paper's 0.8.
+Plan agreed with Ben: replicate the reference first, then 100 rollouts at every chunk on 2 CoTs per
+prompt (one refusing, one complying, mirroring their correct/incorrect pair), pilot on Llama-8B,
+then Llama/Qwen/GPT-OSS; sentence taxonomy labelled with gpt-oss-20b (not GPT-4o) for now.
+
+### Step 0: exact replication of the reference (no GPU)
+`utils/heuristic/thought_anchors.py` (core) + `replicate_thought_anchors.py`, against
+github.com/interp-reasoning/thought-anchors @ b53ed8c and HF `uzaymacar/math-rollouts`
+(snapshot a3a2fe1e), R1-Distill-Llama-8B problems 1591 and 2050, correct + incorrect (4 CoTs).
+Result: chunk split 593/593 identical; resampling and counterfactual importance (KL) identical on
+593/593 chunks (max |diff| 3e-7). Undocumented details needed to get there (none in the paper):
+- KL estimator is Σ p̂_raw · log(p_α / q_α), not the plain smoothed KL; clipped at 0.
+- The CF "kept" side pools chunk i+1 rollouts with the *similar* (cos ≥ 0.8) chunk-i resamples.
+- Stored values use the ε=1e-9 floor (their code now defaults to Laplace α=1), and answers are
+  LaTeX-normalised before counting.
+- Their generator rebuilds prefixes from stripped chunks joined by spaces (newlines lost) and
+  never resamples a trailing unterminated chunk. We keep their chunk boundaries but use exact
+  original prefixes (character spans), and keep the trailing chunk.
+
+### Design of our runs (`ta_resample` → `ta_score` → `ta_analyse`; `bash_scripts/ta_pipeline.sh`)
+- Outcome: refuse iff the judge's StrongREJECT refusal flag is set (sensitivity: score < 0.5).
+  KL with Laplace α=1 (ε explodes with two outcomes).
+- Sampling temperature 0.6, **top_p 1.0** (as our baseline/quadrant generation, so resamples come
+  from the policy that produced the CoTs; the paper used 0.95).
+- Extensions: signed Δ = P(refuse | kept) − P(refuse | counterfactual); counterfactual++ (Thought
+  Branches, Macar et al. 2025: counterfactual set restricted to resamples whose CoT never restates
+  S_i) and reappearance rate — directly tests "settles early but re-openable"; binomial-bootstrap
+  95% CIs per chunk.
+- CoT choice: seeded (2000) random refusing and complying CoT per prompt from the baseline.
+
+### Pilot: Llama-8B, prompts 806/963/1073 (the Fig 3 heatmap prompts), 6 CoTs, 183 chunks
+Run dir `results/thought_anchors/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/20261031-122629-76e9db1`.
