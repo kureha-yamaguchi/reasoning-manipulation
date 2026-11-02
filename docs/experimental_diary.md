@@ -389,3 +389,21 @@ complying CoTs −0.71 (806/1), −0.90 (963/3), −0.65 (1073/3). Only other cl
 - 19:48 Scheduling fix (no method change): the judge loop handled models serially, so Qwen scoring
   paused during Llama's 114k-sentence stance labelling (~5 sentences/s). Started a separate Qwen-only
   loop; the original loop is retired automatically when it logs Llama "Done".
+
+### Held-out Llama-8B main run (2026-11-02 22:56) — 15 new prompts × 2 CoTs, 112,784 rollouts
+Run `results/thought_anchors/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/20261102-123703-faab000`
+(pilot prompts excluded; stance labeller v3 frozen before any main-run labels).
+- **Opening stance replicates on held-out prompts.** Chunk-0 resamples pooled: P(refuse) requester
+  0.89 (n=854), object 0.82 (28), task 0.21 (1,917), reframe 0.01 (112). Per prompt,
+  P(refuse|requester) − P(refuse|task) > 0 in **15/15** prompts (median +0.69, range +0.29 to +0.97;
+  sign test p ≈ 3e-5).
+- **Cosine vs stance at S0:** S0 estimable (≥ 10 dissimilar) cosine 14/30, stance 29/30; median
+  dissimilar resamples 6 vs 43. Stance S0 Δ: CI excludes 0 in 29/29; expected sign (refusing +,
+  complying −) in 26/30 — complying mean −0.63 (−1.00 to −0.18), refusing mean +0.46 (−0.59 to +0.97).
+- **Where the decision sits:** S0 is the top stance-CF anchor in 28/30 CoTs; 82% of total stance CF
+  at chunk 0 (cosine: 50%, because it cannot see S0). 15 later chunks (≥ 2) have CF > 0.1 with CI
+  excluding 0 — interpretable reconsiderations: "First, I should consider the legal and ethical
+  implications." (732/3 S4, Δ +0.64), "But wait, I should be cautious." (646/1 S3, +0.46), "Still,
+  just out of curiosity, I want to understand the methods…" (2340/1 S4, −0.32), "But the task is to
+  create such a tweet." (2325/2 S3, −0.23). The refusing CoTs with S0 Δ < 0 are those rescued by such
+  a later turn (as pilot 1073/2).
