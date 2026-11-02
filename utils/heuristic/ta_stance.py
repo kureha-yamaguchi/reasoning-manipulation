@@ -81,6 +81,20 @@ Notes: a sentence that plans, proposes or describes a safer or alternative answe
 Reply with only the label.'''
 
 
+def healthy_urls(urls: list[str]) -> list[str]:
+    """The OpenAI-compatible base URLs (…/v1) whose vLLM server answers /health."""
+    import urllib.request
+    ok = []
+    for u in urls:
+        try:
+            with urllib.request.urlopen(u.rstrip('/').removesuffix('/v1') + '/health', timeout=5) as r:
+                if r.status == 200:
+                    ok.append(u)
+        except OSError:
+            pass
+    return ok
+
+
 def context_tail(text: str, max_chars: int = 1500) -> str:
     text = text.strip()
     return ('…' + text[-max_chars:]) if len(text) > max_chars else (text or '(none: this is the first sentence)')
@@ -114,8 +128,10 @@ def main():
     parser.add_argument('--pre_convergence_only', action='store_true',
                         help='Label only pre-convergence chunks, as Thought Anchors analyses (default: all chunks)')
     args = parser.parse_args()
-    urls = os.environ.get('STANCE_JUDGE_URLS', os.environ.get('STRONGREJECT_VLLM_URL', '')).split(',')
-    clients = itertools.cycle([OpenAI(base_url=u, api_key='EMPTY') for u in urls if u])
+    urls = healthy_urls([u for u in os.environ.get('STANCE_JUDGE_URLS',
+                                                   os.environ.get('STRONGREJECT_VLLM_URL', '')).split(',') if u])
+    assert urls, 'no judge server is up'
+    clients = itertools.cycle([OpenAI(base_url=u, api_key='EMPTY') for u in urls])
 
     items = []  # (key, request, context, sentence)
     for path in sorted(glob.glob(os.path.join(args.run_dir, 'rollouts_*.csv'))):

@@ -3,6 +3,7 @@
 # and once a run's generation has finished (its log says so), labels stance and taxonomy, then runs
 # both importance analyses and figures. Needs judge server(s) up (JUDGE_URLS, comma-separated).
 #
+# JUDGE_URLS may list several servers; each step uses whichever are up when it starts.
 # Usage: JUDGE_URLS=http://localhost:8000/v1 bash bash_scripts/ta_judge_loop.sh <run_dir>:<gen_log> [...]
 set -uo pipefail
 URLS=${JUDGE_URLS:?set JUDGE_URLS}
@@ -19,7 +20,7 @@ while true; do
         finished=0; pgrep -f "[t]a_resample.*$(jq -r .args.model_name "$RUN/metadata.json")" > /dev/null || finished=1
         grep -q "Saved" "$GEN" 2>/dev/null || continue
         log "Scoring $RUN"
-        STRONGREJECT_VLLM_URL=${URLS%%,*} uv run python -m utils.heuristic.ta_score --run_dir "$RUN" --threads 512 \
+        STRONGREJECT_VLLM_URLS=$URLS uv run python -m utils.heuristic.ta_score --run_dir "$RUN" --threads 512 \
             >> "$LOG_DIR/$(basename "$RUN")_score.log" 2>&1
         if [ $finished = 1 ]; then
             log "Generation finished for $RUN: stance, taxonomy, analysis"

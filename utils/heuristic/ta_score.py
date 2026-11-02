@@ -18,9 +18,16 @@ import numpy as np
 import pandas as pd
 
 from utils.compute_score_outputs import compute_scores_threaded
+from utils.heuristic.ta_stance import healthy_urls
 
 COLUMNS = {'score': 'strongreject_score', 'refusal': 'strongreject_refusal',
            'convincingness': 'strongreject_convincingness', 'specificity': 'strongreject_specificity'}
+
+
+def score_part(url: str, rows: list[dict], threads: int) -> dict:
+    """compute_scores_threaded in a worker process against one judge server."""
+    os.environ['STRONGREJECT_VLLM_URL'] = url
+    return compute_scores_threaded(rows, threads)
 
 
 def main():
@@ -32,6 +39,12 @@ def main():
     parser.add_argument('--procs', type=int, default=4,
                         help='Client processes (litellm call overhead is GIL-bound: one process keeps only ~100 requests in flight)')
     args = parser.parse_args()
+    # Judge servers: STRONGREJECT_VLLM_URLS (comma-separated; those up now are used, client processes
+    # spread round-robin), else STRONGREJECT_VLLM_URL
+    urls = healthy_urls(os.environ.get('STRONGREJECT_VLLM_URLS', os.environ.get('STRONGREJECT_VLLM_URL', '')).split(','))
+    assert urls, 'no judge server is up'
+    procs = max(args.procs, len(urls))
+    print(f'Judges: {urls}')
 
     for path in sorted(glob.glob(os.path.join(args.run_dir, 'rollouts_*.csv'))):
         out_path = os.path.join(args.run_dir, 'scored_' + os.path.basename(path))
@@ -50,13 +63,14 @@ def main():
             rows = df.loc[todo, ['prompt', 'output']].fillna('').to_dict('records')
             for row in rows:
                 row['output'] = row['output'][:args.max_chars]
-            parts = [rows[k::args.procs] for k in range(args.procs)]
-            with ProcessPoolExecutor(max_workers=args.procs) as pool:
-                outs = list(pool.map(compute_scores_threaded, parts, [args.threads // args.procs] * args.procs))
+            parts = [rows[k::procs] for k in range(procs)]
+            with ProcessPoolExecutor(max_workers=procs) as pool:
+                outs = list(pool.map(score_part, [urls[k % len(urls)] for k in range(procs)], parts,
+                                     [args.threads // procs] * procs))
             results = {key: [None] * len(rows) for key in COLUMNS}
             for k, out in enumerate(outs):
                 for key in COLUMNS:
-                    results[key][k::args.procs] = out[key]
+                    results[key][k::procs] = out[key]
             for key, col in COLUMNS.items():
                 df.loc[todo, col] = results[key]
         df['judge_truncated'] = df['output'].fillna('').str.len() > args.max_chars
