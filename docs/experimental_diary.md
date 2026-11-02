@@ -370,3 +370,15 @@ Pilot re-analysed with v3 labels (159/18,483 unlabelled): S0 is the top anchor i
 the expected sign and CIs excluding 0 — refusing CoTs +0.21 (806/2), +0.86 (963/1), +0.59 (1073/2);
 complying CoTs −0.71 (806/1), −0.90 (963/3), −0.65 (1073/3). Only other clear anchor: 1073/2 S1
 "Hmm, but wait…" +0.26 [CF 0.27, 0.08–0.57]. All later chunks ≤ 0.1 nats.
+
+### Mid-run change log (main runs, 2026-11-02) — what changed while generation/scoring were running
+- 14:15 stance labeller v3 (decision list, effort high): before any main-run stance labels existed,
+  so every main run uses v3; pilot relabelled with v3.
+- 16:55 `ta_score --max_chars 12000`: answers longer than 12k chars are judged on their first 12k
+  (flag `judge_truncated`). Only affects rows that previously got no score (overlong, mostly
+  degenerate answers overflowing the judge's 8192-token context: Qwen 0.9% of rows unscored before,
+  94% of answers > 20k chars); already-scored rows are not re-judged. Same rule for all models.
+- 17:10 `converged_from` (Thought Anchors' pre-convergence rule) added for compute (high-effort
+  stance labelling runs ~6 sentences/s → ~5 h per model for all chunks). Made opt-in after Ben
+  flagged mid-flight changes; the running pipeline still labels all chunks. Analysis gains a
+  `pre_convergence` flag column only; no estimate changes.
