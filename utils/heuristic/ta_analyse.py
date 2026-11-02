@@ -29,7 +29,7 @@ import torch
 
 from utils.heuristic.counterfactual_importance import ENCODER, ENCODER_REVISION, Encoder
 from utils.heuristic.ta_resample import cot_body
-from utils.heuristic.thought_anchors import SIMILARITY_THRESHOLD, chunk_spans, ta_importance
+from utils.heuristic.thought_anchors import SIMILARITY_THRESHOLD, chunk_spans, converged_from, ta_importance
 
 OUTCOMES = {
     'score': lambda df: np.where(df['strongreject_score'] >= 0.5, 'comply', 'refuse'),
@@ -92,6 +92,8 @@ def main():
                                 later_similarity=None if stance is not None else groups['later_similarity'].apply(list).to_dict(),
                                 target='refuse', n_boot=args.n_boot, rng=rng, min_n=args.min_n)
             first = df.iloc[0]
+            k = converged_from(out.set_index('chunk_idx')['p_target'].sort_index())
+            out['pre_convergence'] = out['chunk_idx'] < k
             tables.append(out.assign(outcome=outcome, prompt_idx=first['prompt_idx'], cot=first['cot'],
                                      cot_label=first['cot_label'], n_chunks=first['n_chunks'],
                                      position=out['chunk_idx'] / first['n_chunks'],

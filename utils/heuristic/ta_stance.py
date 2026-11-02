@@ -15,6 +15,9 @@ chunk-0 openings per prompt, requester/task agrees with a lexical reference 99% 
 (1073); on 806 the lexical rule itself fails ("how someone might…"). Earlier versions: v1 (no
 priority order, effort low) 41% on the gold set; medium effort lost ~10 points.
 
+All chunks are labelled by default; --pre_convergence_only restricts to chunks before answer
+convergence (thought_anchors.converged_from on the scored rollouts), as Thought Anchors analyses.
+
 Writes <run_dir>/analysis/stance.csv: one row per rollout (T_i label) plus one per chunk (S_i
 label, resample_n = -1). Judge URLs: comma-separated in STANCE_JUDGE_URLS (round-robin), else
 STRONGREJECT_VLLM_URL.
@@ -32,6 +35,8 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 from openai import OpenAI
 from tqdm import tqdm
+
+from utils.heuristic.thought_anchors import converged_from
 
 JUDGE = 'openai/gpt-oss-20b'
 REASONING_EFFORT = os.environ.get('STANCE_EFFORT', 'high')
@@ -106,6 +111,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--run_dir', required=True)
     parser.add_argument('--threads', type=int, default=256)
+    parser.add_argument('--pre_convergence_only', action='store_true',
+                        help='Label only pre-convergence chunks, as Thought Anchors analyses (default: all chunks)')
     args = parser.parse_args()
     urls = os.environ.get('STANCE_JUDGE_URLS', os.environ.get('STRONGREJECT_VLLM_URL', '')).split(',')
     clients = itertools.cycle([OpenAI(base_url=u, api_key='EMPTY') for u in urls if u])
@@ -115,10 +122,15 @@ def main():
         df = pd.read_csv(path, usecols=['prompt_idx', 'cot', 'prompt', 'chunk_idx', 'resample_n', 'chunk_removed',
                                         'chunk_resampled'], keep_default_na=False)
         chunks = df.groupby('chunk_idx')['chunk_removed'].first()
+        scored = os.path.join(args.run_dir, 'scored_' + os.path.basename(path))
+        if args.pre_convergence_only and os.path.exists(scored):
+            s = pd.read_csv(scored, usecols=['chunk_idx', 'strongreject_score']).dropna()
+            k = converged_from((s['strongreject_score'] >= 0.5).groupby(s['chunk_idx']).mean().sort_index())
+            df = df[df['chunk_idx'] < k]
         request = df['prompt'].iloc[0]
         p, c = df['prompt_idx'].iloc[0], df['cot'].iloc[0]
         prefix = {i: ' '.join(chunks[chunks.index < i]) for i in chunks.index}
-        items += [((p, c, i, -1), request, prefix[i], s) for i, s in chunks.items()]
+        items += [((p, c, i, -1), request, prefix[i], s) for i, s in chunks.items() if i in set(df['chunk_idx'])]
         items += [((p, c, r.chunk_idx, r.resample_n), request, prefix[r.chunk_idx], r.chunk_resampled)
                   for r in df.itertuples() if r.chunk_resampled]
     print(f'{len(items)} sentences to label via {len(urls)} judge(s)')

@@ -87,3 +87,11 @@ def test_ta_importance_min_n():
     out = ta_importance(answers, similarity, target='r', min_n=2).set_index('chunk_idx')
     assert np.isnan(out.loc[0, 'counterfactual_importance']) and np.isnan(out.loc[0, 'counterfactual_delta'])
     assert out.loc[0, 'resampling_importance'] > 0
+
+
+def test_converged_from():
+    from utils.heuristic.thought_anchors import converged_from
+    assert converged_from([0.4, 0.99, 1.0, 1.0]) == 1
+    assert converged_from([0.4, 0.99, 0.9, 1.0]) == 3
+    assert converged_from([1.0, 1.0]) == 0
+    assert converged_from([0.5, 0.5]) == 2

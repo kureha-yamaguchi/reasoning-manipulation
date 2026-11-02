@@ -81,6 +81,21 @@ def ta_kl(p_answers, q_answers, alpha: float = 1.0) -> float:
     return max(0.0, kl)
 
 
+def converged_from(p_target, level: float = 0.98) -> int:
+    """
+    First chunk index k from which every chunk's rollouts agree on the outcome more than `level`
+    (max(p, 1 - p) > level for all chunks >= k), given P(target) per chunk in chunk order. Thought
+    Anchors analyses only chunks before answer convergence (>98% identical answers); chunks i < k
+    are pre-convergence. Returns len(p_target) if the last chunk has not converged.
+    """
+    p = np.asarray(p_target, dtype=float)
+    agree = np.maximum(p, 1 - p) > level
+    k = len(p)
+    while k > 0 and agree[k - 1]:
+        k -= 1
+    return k
+
+
 def ta_importance(answers: dict[int, list], similarity: dict[int, list], threshold: float = SIMILARITY_THRESHOLD,
                   alpha: float = 1.0, later_similarity: dict[int, list] | None = None, target=None,
                   n_boot: int = 0, rng: np.random.Generator | None = None, min_n: int = 0) -> pd.DataFrame:

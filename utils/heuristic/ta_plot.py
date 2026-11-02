@@ -69,9 +69,12 @@ def cluster_ci(df: pd.DataFrame, col: str, n_boot: int, rng: np.random.Generator
     return float(df[col].mean()), *np.percentile(boots, [2.5, 97.5])
 
 
-def category_importance(res: pd.DataFrame, tax: pd.DataFrame, path: str, n_boot: int = 2000):
+def category_importance(res: pd.DataFrame, tax: pd.DataFrame, path: str, n_boot: int = 2000,
+                        pre_convergence_only: bool = False):
     df = res.merge(tax[['prompt_idx', 'cot', 'chunk_idx', 'category']], on=['prompt_idx', 'cot', 'chunk_idx'])
     df = df[df['chunk_idx'] < df['n_chunks'] - 1]  # the last chunk scores 0 by definition
+    if pre_convergence_only:  # Thought Anchors analyses pre-convergence chunks only
+        df = df[df['pre_convergence']]
     rng = np.random.default_rng(0)
     metrics = [(c, n) for c, n in [('counterfactual_importance', 'counterfactual'),
                                    ('counterfactual_pp_importance', 'counterfactual++')] if c in df]
@@ -99,6 +102,7 @@ def main():
     parser.add_argument('--run_dir', required=True)
     parser.add_argument('--outcome', default='score')
     parser.add_argument('--equivalence', choices=['cosine', 'stance'], default='cosine')
+    parser.add_argument('--pre_convergence_only', action='store_true')
     args = parser.parse_args()
     out_dir = os.path.join(args.run_dir, 'analysis')
     tag = '' if args.equivalence == 'cosine' else f'_{args.equivalence}'
@@ -107,7 +111,8 @@ def main():
     cot_panels(res, os.path.join(out_dir, f'cot_panels{tag}.pdf'))
     tax_path = os.path.join(out_dir, 'taxonomy.csv')
     if os.path.exists(tax_path):
-        category_importance(res, pd.read_csv(tax_path), os.path.join(out_dir, f'category_importance{tag}.pdf'))
+        category_importance(res, pd.read_csv(tax_path), os.path.join(out_dir, f'category_importance{tag}.pdf'),
+                            pre_convergence_only=args.pre_convergence_only)
     print(f'Saved figures to {out_dir}')
 
 
