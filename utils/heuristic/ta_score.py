@@ -10,6 +10,7 @@ STRONGREJECT_VLLM_URL=http://localhost:8000/v1 uv run -m utils.heuristic.ta_scor
 import argparse
 import glob
 import os
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,8 @@ def main():
     parser.add_argument('--run_dir', required=True)
     parser.add_argument('--threads', type=int, default=128)
     parser.add_argument('--rounds', type=int, default=3)
+    parser.add_argument('--procs', type=int, default=4,
+                        help='Client processes (litellm call overhead is GIL-bound: one process keeps only ~100 requests in flight)')
     args = parser.parse_args()
 
     for path in sorted(glob.glob(os.path.join(args.run_dir, 'rollouts_*.csv'))):
@@ -42,7 +45,13 @@ def main():
                 break
             print(f'{os.path.basename(path)} round {r}: judging {len(todo)} rows')
             rows = df.loc[todo, ['prompt', 'output']].fillna('').to_dict('records')
-            results = compute_scores_threaded(rows, args.threads)
+            parts = [rows[k::args.procs] for k in range(args.procs)]
+            with ProcessPoolExecutor(max_workers=args.procs) as pool:
+                outs = list(pool.map(compute_scores_threaded, parts, [args.threads // args.procs] * args.procs))
+            results = {key: [None] * len(rows) for key in COLUMNS}
+            for k, out in enumerate(outs):
+                for key in COLUMNS:
+                    results[key][k::args.procs] = out[key]
             for key, col in COLUMNS.items():
                 df.loc[todo, col] = results[key]
         df.to_csv(out_path + '.tmp', index=False)
