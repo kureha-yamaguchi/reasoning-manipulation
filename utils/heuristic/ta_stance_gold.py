@@ -25,5 +25,6 @@ for k in range(reps):
     ok=g[f'v2_{k}']==g.gold
     print(f'run {k}: agreement {ok.mean():.2f} (unambiguous {ok[~g.ambiguous].mean():.2f})')
 print(pd.crosstab(g.gold,g.v2_0))
-if reps>1: print('test-retest agreement: %.2f'%(g.v2_0==g.v2_1).mean())
+if reps > 1:
+    print(f'test-retest agreement: {(g.v2_0 == g.v2_1).mean():.2f}')
 for r in g[(g.v2_0!=g.gold)&~g.ambiguous].itertuples(): print(f'  gold={r.gold} got={r.v2_0} | {r.sentence[:120]}')
