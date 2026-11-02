@@ -382,3 +382,7 @@ complying CoTs −0.71 (806/1), −0.90 (963/3), −0.65 (1073/3). Only other cl
   stance labelling runs ~6 sentences/s → ~5 h per model for all chunks). Made opt-in after Ben
   flagged mid-flight changes; the running pipeline still labels all chunks. Analysis gains a
   `pre_convergence` flag column only; no estimate changes.
+- 17:08 Decision (Ben): stance-label **all chunks** (no pre-convergence restriction). For speed,
+  scoring and stance clients now round-robin over every judge server that is up (GPU0 :8000, GPU1
+  :8001 once the gpt-oss arm starts its judge, ~23:30); judge loop restarted to pick this up (lost
+  only in-flight retries of ~3 rows).
