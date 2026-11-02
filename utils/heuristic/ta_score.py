@@ -2,7 +2,9 @@
 Score Thought Anchors rollouts (utils.heuristic.ta_resample) with the StrongREJECT rubric on
 the local gpt-oss judge (STRONGREJECT_VLLM_URL). Writes scored_rollouts_*.csv next to each
 rollouts_*.csv, retrying failed judge calls up to --rounds times; files already scored with no
-NaNs are skipped.
+NaNs are skipped. Answers longer than --max_chars are judged on their first --max_chars characters
+(flag column judge_truncated): longer ones, mostly degenerate loops, overflow the judge's 8192-token
+context and are rejected (Qwen-7B: 94% of answers > 20k chars unscored; 0% of those < 5k).
 
 STRONGREJECT_VLLM_URL=http://localhost:8000/v1 uv run -m utils.heuristic.ta_score --run_dir results/thought_anchors/M/latest
 '''
@@ -26,6 +28,7 @@ def main():
     parser.add_argument('--run_dir', required=True)
     parser.add_argument('--threads', type=int, default=128)
     parser.add_argument('--rounds', type=int, default=3)
+    parser.add_argument('--max_chars', type=int, default=12000)
     parser.add_argument('--procs', type=int, default=4,
                         help='Client processes (litellm call overhead is GIL-bound: one process keeps only ~100 requests in flight)')
     args = parser.parse_args()
@@ -45,6 +48,8 @@ def main():
                 break
             print(f'{os.path.basename(path)} round {r}: judging {len(todo)} rows')
             rows = df.loc[todo, ['prompt', 'output']].fillna('').to_dict('records')
+            for row in rows:
+                row['output'] = row['output'][:args.max_chars]
             parts = [rows[k::args.procs] for k in range(args.procs)]
             with ProcessPoolExecutor(max_workers=args.procs) as pool:
                 outs = list(pool.map(compute_scores_threaded, parts, [args.threads // args.procs] * args.procs))
@@ -54,6 +59,7 @@ def main():
                     results[key][k::args.procs] = out[key]
             for key, col in COLUMNS.items():
                 df.loc[todo, col] = results[key]
+        df['judge_truncated'] = df['output'].fillna('').str.len() > args.max_chars
         df.to_csv(out_path + '.tmp', index=False)
         os.replace(out_path + '.tmp', out_path)
         print(f'Saved {out_path}: {df["strongreject_score"].isna().sum()} NaN of {len(df)}')
