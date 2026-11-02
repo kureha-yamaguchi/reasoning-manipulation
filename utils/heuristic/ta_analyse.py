@@ -10,7 +10,10 @@ paper's App. A choice; with two outcomes the epsilon floor makes KL explode). Si
 all-MiniLM-L6-v2 cosine, T_i ≉ S_i iff < 0.8. Counterfactual++ compares S_i with every chunk
 of each resampled CoT. See thought_anchors.ta_importance for definitions.
 
-Writes <run_dir>/analysis/per_chunk.csv (one row per CoT chunk and outcome definition).
+--equivalence stance replaces the cosine criterion with stance labels (utils.heuristic.ta_stance):
+T_i ≉ S_i iff their labels differ. Counterfactual++ is then not computed (stances recur by design).
+
+Writes <run_dir>/analysis/per_chunk[_stance].csv (one row per CoT chunk and outcome definition).
 
 uv run -m utils.heuristic.ta_analyse --run_dir results/thought_anchors/M/latest
 '''
@@ -46,6 +49,7 @@ def main():
     parser.add_argument('--alpha', type=float, default=1.0)
     parser.add_argument('--n_boot', type=int, default=1000)
     parser.add_argument('--seed', type=int, default=0)
+    parser.add_argument('--equivalence', choices=['cosine', 'stance'], default='cosine')
     args = parser.parse_args()
 
     with open(os.path.join(args.run_dir, 'metadata.json')) as f:
@@ -54,6 +58,10 @@ def main():
     rng = np.random.default_rng(args.seed)
 
     tables = []
+    stance = None
+    if args.equivalence == 'stance':
+        st = pd.read_csv(os.path.join(args.run_dir, 'analysis', 'stance.csv'))
+        stance = st.set_index(['prompt_idx', 'cot', 'chunk_idx', 'resample_n'])['stance']
     for path in sorted(glob.glob(os.path.join(args.run_dir, 'scored_rollouts_*.csv'))):
         df = pd.read_csv(path, keep_default_na=False, na_values=[''])
         n_nan = df['strongreject_score'].isna().sum()
@@ -68,13 +76,19 @@ def main():
         df['similarity'] = [float(e @ emb[t]) if t else np.nan for e, t in zip(s_emb, df['chunk_resampled'])]
         df['later_similarity'] = [max((float(e @ emb[c]) for c in cs if c), default=np.nan)
                                   for e, cs in zip(s_emb, chunks)]
+        if stance is not None:  # similarity := 1 if same stance, 0 if different, NaN if unlabelled
+            t = stance.reindex(pd.MultiIndex.from_frame(df[['prompt_idx', 'cot', 'chunk_idx', 'resample_n']])).to_numpy()
+            s_lab = stance.reindex(pd.MultiIndex.from_arrays(
+                [df['prompt_idx'], df['cot'], df['chunk_idx'], np.full(len(df), -1)])).to_numpy()
+            df['similarity'] = np.where(pd.isna(t) | pd.isna(s_lab), np.nan, (t == s_lab).astype(float))
+            df['stance_S'], df['stance_T'] = s_lab, t
         groups = df.groupby('chunk_idx')
         sentences = groups['chunk_removed'].first()
         for outcome, fn in OUTCOMES.items():
             df['A'] = fn(df)
             out = ta_importance(groups['A'].apply(list).to_dict(), groups['similarity'].apply(list).to_dict(),
                                 threshold=args.threshold, alpha=args.alpha,
-                                later_similarity=groups['later_similarity'].apply(list).to_dict(),
+                                later_similarity=None if stance is not None else groups['later_similarity'].apply(list).to_dict(),
                                 target='refuse', n_boot=args.n_boot, rng=rng)
             first = df.iloc[0]
             tables.append(out.assign(outcome=outcome, prompt_idx=first['prompt_idx'], cot=first['cot'],
@@ -87,8 +101,9 @@ def main():
     res = pd.concat(tables, ignore_index=True)
     out_dir = os.path.join(args.run_dir, 'analysis')
     os.makedirs(out_dir, exist_ok=True)
-    res.to_csv(os.path.join(out_dir, 'per_chunk.csv'), index=False)
-    with open(os.path.join(out_dir, 'analysis_config.json'), 'w') as f:
+    tag = '' if args.equivalence == 'cosine' else f'_{args.equivalence}'
+    res.to_csv(os.path.join(out_dir, f'per_chunk{tag}.csv'), index=False)
+    with open(os.path.join(out_dir, f'analysis_config{tag}.json'), 'w') as f:
         json.dump(vars(args) | {'encoder': ENCODER, 'encoder_revision': ENCODER_REVISION}, f, indent=2)
 
     prim = res[res['outcome'] == 'score']
@@ -99,9 +114,9 @@ def main():
         for _, r in top.iterrows():
             print(f'  CF {r.counterfactual_importance:.3f} [{r.counterfactual_importance_lo:.3f}, '
                   f'{r.counterfactual_importance_hi:.3f}] delta {r.counterfactual_delta:+.2f} '
-                  f'CF++ {r.counterfactual_pp_importance:.3f} reappear {r.reappearance:.2f} '
+                  f'n_diff {r.n_dissimilar} CF++ {r.get("counterfactual_pp_importance", np.nan):.3f} '
                   f'S{r.chunk_idx}: {r.sentence[:90]!r}')
-    print(f'\nSaved {out_dir}/per_chunk.csv')
+    print(f'\nSaved {out_dir}/per_chunk{tag}.csv')
 
 
 if __name__ == '__main__':

@@ -73,9 +73,12 @@ def category_importance(res: pd.DataFrame, tax: pd.DataFrame, path: str, n_boot:
     df = res.merge(tax[['prompt_idx', 'cot', 'chunk_idx', 'category']], on=['prompt_idx', 'cot', 'chunk_idx'])
     df = df[df['chunk_idx'] < df['n_chunks'] - 1]  # the last chunk scores 0 by definition
     rng = np.random.default_rng(0)
-    metrics = [('counterfactual_importance', 'counterfactual'), ('counterfactual_pp_importance', 'counterfactual++')]
+    metrics = [(c, n) for c, n in [('counterfactual_importance', 'counterfactual'),
+                                   ('counterfactual_pp_importance', 'counterfactual++')] if c in df]
     order = df.groupby('category')['counterfactual_importance'].mean().sort_values().index
-    fig, axes = plt.subplots(1, 2, figsize=(9, 0.35 * len(order) + 1.2), sharey=True)
+    fig, axes = plt.subplots(1, len(metrics), figsize=(4.5 * len(metrics), 0.35 * len(order) + 1.2), sharey=True,
+                             squeeze=False)
+    axes = axes[0]
     for ax, (col, name) in zip(axes, metrics):
         for y, cat in enumerate(order):
             sub = df[df['category'] == cat]
@@ -95,14 +98,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--run_dir', required=True)
     parser.add_argument('--outcome', default='score')
+    parser.add_argument('--equivalence', choices=['cosine', 'stance'], default='cosine')
     args = parser.parse_args()
     out_dir = os.path.join(args.run_dir, 'analysis')
-    res = pd.read_csv(os.path.join(out_dir, 'per_chunk.csv'))
+    tag = '' if args.equivalence == 'cosine' else f'_{args.equivalence}'
+    res = pd.read_csv(os.path.join(out_dir, f'per_chunk{tag}.csv'))
     res = res[res['outcome'] == args.outcome]
-    cot_panels(res, os.path.join(out_dir, 'cot_panels.pdf'))
+    cot_panels(res, os.path.join(out_dir, f'cot_panels{tag}.pdf'))
     tax_path = os.path.join(out_dir, 'taxonomy.csv')
     if os.path.exists(tax_path):
-        category_importance(res, pd.read_csv(tax_path), os.path.join(out_dir, 'category_importance.pdf'))
+        category_importance(res, pd.read_csv(tax_path), os.path.join(out_dir, f'category_importance{tag}.pdf'))
     print(f'Saved figures to {out_dir}')
 
 
