@@ -83,7 +83,7 @@ def ta_kl(p_answers, q_answers, alpha: float = 1.0) -> float:
 
 def ta_importance(answers: dict[int, list], similarity: dict[int, list], threshold: float = SIMILARITY_THRESHOLD,
                   alpha: float = 1.0, later_similarity: dict[int, list] | None = None, target=None,
-                  n_boot: int = 0, rng: np.random.Generator | None = None) -> pd.DataFrame:
+                  n_boot: int = 0, rng: np.random.Generator | None = None, min_n: int = 0) -> pd.DataFrame:
     """
     Per-chunk resampling and counterfactual importance (reference definitions above).
     answers[i]: outcome of each chunk-i rollout. similarity[i]: cos(S_i, T_i) per rollout, with
@@ -98,6 +98,8 @@ def ta_importance(answers: dict[int, list], similarity: dict[int, list], thresho
       reappearance = share of dissimilar resamples whose CoT restates S_i later.
     - target: an outcome value, e.g. 'refuse'. Adds p_target per chunk (all chunk-i rollouts)
       and the signed effect of S_i, delta = P(target | kept side) - P(target | counterfactual set).
+    - min_n: counterfactual sets smaller than this give NaN instead of a value (the reference reports
+      any n, e.g. a KL from a single dissimilar rollout).
     - n_boot: binomial-bootstrap 95% intervals (each side's counts redrawn from its observed
       frequency) for counterfactual importance and delta; needs a binary outcome and target.
     """
@@ -124,6 +126,9 @@ def ta_importance(answers: dict[int, list], similarity: dict[int, list], thresho
         row['resampling_importance'] = ta_kl(a, answers[idx[k + 1]], alpha)
         for name, mask in sets.items():
             cf = a[mask]
+            if min_n and len(cf) < min_n:
+                row[f'{name}_importance'] = row[f'{name}_delta'] = np.nan
+                continue
             row[f'{name}_importance'] = ta_kl(cf, kept, alpha) if len(cf) else 0.0
             if target is None:
                 continue

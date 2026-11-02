@@ -50,6 +50,7 @@ def main():
     parser.add_argument('--n_boot', type=int, default=1000)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--equivalence', choices=['cosine', 'stance'], default='cosine')
+    parser.add_argument('--min_n', type=int, default=10, help='Smallest counterfactual set reported (else NaN)')
     args = parser.parse_args()
 
     with open(os.path.join(args.run_dir, 'metadata.json')) as f:
@@ -89,7 +90,7 @@ def main():
             out = ta_importance(groups['A'].apply(list).to_dict(), groups['similarity'].apply(list).to_dict(),
                                 threshold=args.threshold, alpha=args.alpha,
                                 later_similarity=None if stance is not None else groups['later_similarity'].apply(list).to_dict(),
-                                target='refuse', n_boot=args.n_boot, rng=rng)
+                                target='refuse', n_boot=args.n_boot, rng=rng, min_n=args.min_n)
             first = df.iloc[0]
             tables.append(out.assign(outcome=outcome, prompt_idx=first['prompt_idx'], cot=first['cot'],
                                      cot_label=first['cot_label'], n_chunks=first['n_chunks'],

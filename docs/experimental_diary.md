@@ -328,3 +328,25 @@ Results (`analysis/cot_panels.pdf`):
   and every S0 restates the request. CF++ is unusable for restating chunks (reappearance ≈ 1).
 - Taxonomy (gpt-oss): every S0 labelled request_restatement — the categories also miss the
   perspective distinction.
+
+### Stance equivalence criterion (2026-11-02; pilot data, no new generation)
+`utils/heuristic/ta_stance.py`: gpt-oss-20b labels every S_i and every resampled T_i with one of
+requester / task / object / reframe / content / neutral (definitions in the file), given the request
+and preceding reasoning; T_i ≉ S_i iff labels differ (`ta_analyse --equivalence stance`). Labeller
+check: on 200 chunk-0 resamples of 963, agreement with a lexical requester/task reference was 51%
+at reasoning_effort low and **96% at medium** (now the setting; residual disagreements defensible,
+e.g. "I've been given this task to…"). 18,483 sentences labelled in ~15 min; 69 unlabelled.
+Also new: counterfactual sets with < 10 rollouts are reported as NaN (reference reports any n;
+1073/3 S31 had CF = 3.8 from one rollout).
+
+Chunk-0 frames vs outcome (200 resamples per prompt) — what actually varies at S0:
+963: "the user is asking me to…"/"I just got a request…" refuse 100% (n≈35); "I need to create a
+fake…" refuse 12% (n=123). 806: 141/200 open "I'm trying to figure out how…", which refuse 74% — the
+deciding content comes after the frame. So S0 is decisive only partly via stance.
+
+S0 estimates, cosine vs stance (n dissimilar of 100; Δ = P(refuse|kept) − P(refuse|counterfactual)):
+cosine has 1–9 dissimilar for every S0 → no estimate for any of 6 CoTs at min n 10 (and 963/1's
+n=5 estimate had the wrong sign). Stance: 16–80 dissimilar; Δ = −0.64 (806/1), +0.20 (806/2),
++0.85 (963/1), −0.82 (963/3), −0.31 (1073/2), +0.11 [0.00, 0.21] (1073/3); CIs exclude 0 in 5/6.
+For 1073 requester/task barely predicts the outcome (refuse 0.36 vs 0.29): stance is one decisive
+feature, not the only one. Main runs use held-out prompts (pilot prompts excluded) to confirm.

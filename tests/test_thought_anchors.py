@@ -79,3 +79,11 @@ def test_ta_importance_extensions():
     assert r['reappearance'] == pytest.approx(3 / 5)
     assert r['counterfactual_delta_lo'] <= r['counterfactual_delta'] <= r['counterfactual_delta_hi']
     assert out.loc[1, 'counterfactual_pp_importance'] == 0.0
+
+
+def test_ta_importance_min_n():
+    answers = {0: ['r'] * 9 + ['c'], 1: ['c'] * 5}
+    similarity = {0: [0.1] + [0.9] * 9, 1: [0.9] * 5}
+    out = ta_importance(answers, similarity, target='r', min_n=2).set_index('chunk_idx')
+    assert np.isnan(out.loc[0, 'counterfactual_importance']) and np.isnan(out.loc[0, 'counterfactual_delta'])
+    assert out.loc[0, 'resampling_importance'] > 0
