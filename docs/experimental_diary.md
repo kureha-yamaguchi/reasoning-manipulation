@@ -350,3 +350,23 @@ n=5 estimate had the wrong sign). Stance: 16–80 dissimilar; Δ = −0.64 (806/
 +0.85 (963/1), −0.82 (963/3), −0.31 (1073/2), +0.11 [0.00, 0.21] (1073/3); CIs exclude 0 in 5/6.
 For 1073 requester/task barely predicts the outcome (refuse 0.36 vs 0.29): stance is one decisive
 feature, not the only one. Main runs use held-out prompts (pilot prompts excluded) to confirm.
+
+### Stance labeller v3 (2026-11-02 afternoon)
+Audit of v1 labels: right on openings, ~60% on later sentences by eye; scored against a hand-labelled
+stratified gold set (`results/thought_anchors/stance_gold/llama_pilot_gold96.csv`, my labels, 11
+flagged ambiguous — awaiting Ben's spot-check) v1 got 41%. Main failures: redirect/safe-alternative
+sentences not counted as `object`; fictional story details labelled `reframe`. v3 = decision-list
+prompt (first applicable label in priority order object > reframe > requester > task > content >
+neutral) + boundary notes + reasoning_effort high: **80–86% on gold (84–91% unambiguous),
+test-retest 0.88, object 38/41**; requester weak on gold (1/5, small n). Openings vs a lexical
+requester/task rule: 99% (963), 88% (1073); on 806 the lexical rule is wrong ("how someone might…").
+Developed on pilot data → only the held-out main-run prompts can confirm the effect.
+
+Chunk-0 P(refuse) by v3 opening stance: 963 requester 1.00 (n=51) vs task 0.14 (n=148); 1073
+requester 0.85 (n=65) vs task 0.10 (n=125); 806 requester 0.95 (n=21), object 0.86 (14), task 0.68
+(164). The earlier "stance doesn't explain 1073" (0.36 vs 0.29) was v1 labeller noise.
+
+Pilot re-analysed with v3 labels (159/18,483 unlabelled): S0 is the top anchor in all 6 CoTs, with
+the expected sign and CIs excluding 0 — refusing CoTs +0.21 (806/2), +0.86 (963/1), +0.59 (1073/2);
+complying CoTs −0.71 (806/1), −0.90 (963/3), −0.65 (1073/3). Only other clear anchor: 1073/2 S1
+"Hmm, but wait…" +0.26 [CF 0.27, 0.08–0.57]. All later chunks ≤ 0.1 nats.
