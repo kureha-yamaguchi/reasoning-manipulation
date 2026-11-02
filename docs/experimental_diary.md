@@ -386,3 +386,6 @@ complying CoTs −0.71 (806/1), −0.90 (963/3), −0.65 (1073/3). Only other cl
   scoring and stance clients now round-robin over every judge server that is up (GPU0 :8000, GPU1
   :8001 once the gpt-oss arm starts its judge, ~23:30); judge loop restarted to pick this up (lost
   only in-flight retries of ~3 rows).
+- 19:48 Scheduling fix (no method change): the judge loop handled models serially, so Qwen scoring
+  paused during Llama's 114k-sentence stance labelling (~5 sentences/s). Started a separate Qwen-only
+  loop; the original loop is retired automatically when it logs Llama "Done".
