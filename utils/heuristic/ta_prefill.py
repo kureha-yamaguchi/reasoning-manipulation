@@ -66,6 +66,13 @@ def main():
     parser.add_argument('--max_new_tokens', type=int, default=16384)
     parser.add_argument('--max_model_len', type=int, default=32768)
     parser.add_argument('--max_attempts', type=int, default=10)
+    parser.add_argument('--points_json', default=None,
+                        help='Quadrant points exported from the baselines (prompt, CoTs, per-CoT means) instead '
+                             'of reading the baseline CSVs, e.g. on a machine without them')
+    parser.add_argument('--tensor_parallel_size', type=int, default=1)
+    parser.add_argument('--tokenizer_name', default=None, help='e.g. the official R1 snapshot for the AWQ quant')
+    parser.add_argument('--disable_prefix_caching', action='store_true',
+                        help='Needed for the R1 AWQ quant on vLLM 0.10.1 (NaN logits with caching on)')
     args = parser.parse_args()
 
     git = lambda *a: subprocess.run(['git', *a], capture_output=True, text=True, check=False).stdout.strip()
@@ -77,8 +84,12 @@ def main():
         os.remove(latest)
     os.symlink(os.path.basename(run_dir), latest)
 
-    rows = load_scored_csv([os.path.join(args.results_dir, args.model_name, 'dataset', f) for f in BASELINES])
-    points = {p['prompt_idx']: p for p in find_quadrant(rows)}
+    if args.points_json:
+        with open(args.points_json) as f:
+            points = {p['prompt_idx']: p for p in json.load(f)['points']}
+    else:
+        rows = load_scored_csv([os.path.join(args.results_dir, args.model_name, 'dataset', f) for f in BASELINES])
+        points = {p['prompt_idx']: p for p in find_quadrant(rows)}
     prompts = [int(p) for p in args.prompts.split(',')]
     assert all(p in points for p in prompts), 'not quadrant-eligible'
     conds = conditions(args.model_name)
@@ -87,7 +98,9 @@ def main():
                    'git_dirty': bool(git('status', '--porcelain', '-uno')), 'vllm': vllm.__version__,
                    'host': socket.gethostname(), 'started': datetime.now().isoformat()}, f, indent=2)
 
-    llm = LLM(model=args.model_name, max_model_len=args.max_model_len, trust_remote_code=True)
+    llm = LLM(model=args.model_name, max_model_len=args.max_model_len, trust_remote_code=True,
+              tensor_parallel_size=args.tensor_parallel_size, tokenizer=args.tokenizer_name,
+              enable_prefix_caching=not args.disable_prefix_caching)
     tokenizer = llm.get_tokenizer()
     slots = {}  # (prompt, condition) -> (full input, prefix)
     for i, p in enumerate(prompts):

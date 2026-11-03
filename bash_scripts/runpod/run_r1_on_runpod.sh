@@ -9,6 +9,7 @@
 #
 # Usage (repo root, in tmux): CAP_USD=450 bash bash_scripts/runpod/run_r1_on_runpod.sh
 # 4-bit AWQ on 4xH200: MODEL=QuixiAI/DeepSeek-R1-AWQ TP=4 COUNT=4 GPU='NVIDIA H200' VOLUME_GB=800 CAP_USD=250 bash ...
+# Thought Anchors generation instead of the quadrant pipeline: add PIPELINE=thought_anchors
 set -euo pipefail
 CAP_USD=${CAP_USD:-450}
 MAX_WAIT_H=${MAX_WAIT_H:-24}
@@ -16,13 +17,14 @@ POLL_S=${POLL_S:-10}  # on-demand capacity is first come, first served; free 8-G
 # First in stock wins; on Blackwell (B200/B300) pod_bootstrap.sh swaps in torch cu128
 GPU=${GPU:-NVIDIA H200,NVIDIA H200 NVL,NVIDIA B200,NVIDIA B300 SXM6 AC}
 MODEL=${MODEL:-deepseek-ai/DeepSeek-R1}
+PIPELINE=${PIPELINE:-quadrants}
 TP=${TP:-8}
 COUNT=${COUNT:-8}
 VOLUME_GB=${VOLUME_GB:-1400}
 TS=$(date +%Y%m%d_%H%M%S)
 STATE=results/runpod/${TS}_r1_pod.json
 LOGS=logs/runpod/$TS
-mkdir -p results/runpod "$LOGS" "results/$MODEL"
+mkdir -p results/runpod "$LOGS" "results/$MODEL" "results/thought_anchors/$MODEL" "results/thought_anchors_prefill/$MODEL"
 log() { echo "[$(date '+%F %T')] $*"; }
 
 SHA=${GIT_SHA:-$(git rev-parse HEAD)}  # commit the pod checks out (must be on origin)
@@ -48,12 +50,18 @@ log "SSH up: root@$IP -p $PORT"
 pod "cat > /workspace/.rp_key && chmod 600 /workspace/.rp_key" < ~/.config/runpod/api_key
 scp -q -P "$PORT" -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new bash_scripts/runpod/pod_bootstrap.sh "root@$IP:/workspace/"
 # A background job started over ssh can hold the session open, so bound the call and verify instead
-timeout 30 ssh -n "${SSH_OPTS[@]}" "root@$IP" "cd /workspace && rm -f DONE FAILED PULLED && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS MODEL=$MODEL TP=$TP FULL_POOL=${FULL_POOL:-} N_PROMPTS=${N_PROMPTS:-1000} setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &" || true
+timeout 30 ssh -n "${SSH_OPTS[@]}" "root@$IP" "cd /workspace && rm -f DONE FAILED PULLED && GIT_SHA=$SHA CAP_SECONDS=$CAP_SECONDS MODEL=$MODEL TP=$TP PIPELINE=$PIPELINE FULL_POOL=${FULL_POOL:-} N_PROMPTS=${N_PROMPTS:-1000} setsid nohup bash pod_bootstrap.sh > bootstrap.log 2>&1 < /dev/null &" || true
 pod "pgrep -f 'bash pod_bootstrap.sh' > /dev/null" || { log "Bootstrap did not start"; exit 1; }
 log "Bootstrap started (commit $SHA)"
 
 pull() {
-    rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/repo/results/$MODEL/" "results/$MODEL/" 2> /dev/null || true
+    if [ "$PIPELINE" = thought_anchors ]; then
+        for d in thought_anchors thought_anchors_prefill; do
+            rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/repo/results/$d/$MODEL/" "results/$d/$MODEL/" 2> /dev/null || true
+        done
+    else
+        rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/repo/results/$MODEL/" "results/$MODEL/" 2> /dev/null || true
+    fi
     rsync -az -e "ssh ${SSH_OPTS[*]}" "root@$IP:/workspace/repo/logs/" "root@$IP:/workspace/"{bootstrap,download,watchdog}.log "$LOGS/" 2> /dev/null || true
 }
 stop() { uv run python -m utils.runpod_pod stop --state "$STATE"; }

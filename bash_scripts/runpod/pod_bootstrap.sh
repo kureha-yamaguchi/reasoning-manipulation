@@ -8,12 +8,14 @@
 #   - watchdog: stops the pod (volume kept) after CAP_SECONDS from boot
 #   - on DONE, waits up to 2 h for /workspace/PULLED (results copied off) then stops the pod;
 #     on FAILED, waits 30 min then stops. The controller normally stops it sooner via the API.
-# Env: GIT_SHA, CAP_SECONDS (required); MODEL, TP (optional); RunPod key in /workspace/.rp_key.
+# Env: GIT_SHA, CAP_SECONDS (required); MODEL, TP, PIPELINE (quadrants | thought_anchors) (optional);
+# RunPod key in /workspace/.rp_key.
 set -euo pipefail
 cd /workspace
 : "${GIT_SHA:?}" "${CAP_SECONDS:?}"
 MODEL=${MODEL:-deepseek-ai/DeepSeek-R1}
 TP=${TP:-8}
+PIPELINE=${PIPELINE:-quadrants}
 export HF_HOME=/workspace/hf UV_CACHE_DIR=/workspace/uv-cache PATH="$HOME/.local/bin:$PATH"
 log() { echo "[$(date '+%F %T')] $*"; }
 
@@ -60,11 +62,18 @@ if [ "$MODEL" = QuixiAI/DeepSeek-R1-AWQ ]; then  # official R1 chat template, us
     uv run hf download deepseek-ai/DeepSeek-R1 config.json configuration_deepseek.py generation_config.json \
         tokenizer.json tokenizer_config.json --revision 56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad >> /workspace/download.log 2>&1
 fi
-uv run hf download openai/gpt-oss-20b --max-workers 16 >> /workspace/download.log 2>&1
+if [ "$PIPELINE" = quadrants ]; then  # the judge
+    uv run hf download openai/gpt-oss-20b --max-workers 16 >> /workspace/download.log 2>&1
+fi
 log "Weights: $(du -sh "$HF_HOME/hub" | cut -f1)"
 
-log "Pipeline: $MODEL, TP=$TP"
-MODEL=$MODEL TP=$TP bash bash_scripts/r1_quadrants.sbatch
-tar czf /workspace/r1_results.tgz "results/$MODEL/dataset" logs/r1_quadrants logs/score_quadrants
+log "Pipeline: $PIPELINE, $MODEL, TP=$TP"
+if [ "$PIPELINE" = thought_anchors ]; then
+    MODEL=$MODEL TP=$TP bash bash_scripts/runpod/r1_thought_anchors.sh
+    tar czf /workspace/r1_results.tgz "results/thought_anchors/$MODEL" "results/thought_anchors_prefill/$MODEL" logs/thought_anchors
+else
+    MODEL=$MODEL TP=$TP bash bash_scripts/r1_quadrants.sbatch
+    tar czf /workspace/r1_results.tgz "results/$MODEL/dataset" logs/r1_quadrants logs/score_quadrants
+fi
 trap - ERR
 finish DONE
