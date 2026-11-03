@@ -19,6 +19,10 @@ import pandas as pd
 T_CHARS, ANSWER_CHARS = 220, 240
 
 
+def label_or_none(x) -> str:
+    return x if isinstance(x, str) else 'unlabelled'
+
+
 def r3(x) -> float | None:
     return None if x is None or (isinstance(x, float) and np.isnan(x)) else round(float(x), 3)
 
@@ -55,7 +59,7 @@ def run_data(run_dir: str) -> list[dict]:
             groups.sort(key=lambda d: -d['n'])
             srow, crow = sg.loc[i] if i in sg.index else None, cg.loc[i] if i in cg.index else None
             chunks.append({
-                'text': g['chunk_removed'].iloc[0], 'stance': s_lab.get((p, c, i), 'unlabelled'),
+                'text': g['chunk_removed'].iloc[0], 'stance': label_or_none(s_lab.get((p, c, i))),
                 'p': r3(g['refuse'].mean()), 'n': len(g),
                 'd': r3(srow['counterfactual_delta']) if srow is not None else None,
                 'lo': r3(srow['counterfactual_delta_lo']) if srow is not None else None,
@@ -83,7 +87,7 @@ def main():
         data[name] = run_data(run)
         print(f'{name}: {len(data[name])} CoTs')
     with open(args.out, 'w') as f:
-        json.dump(data, f, separators=(',', ':'))
+        json.dump(data, f, separators=(',', ':'), allow_nan=False)  # NaN is not valid JSON
     print(f'Wrote {args.out}: {os.path.getsize(args.out) / 1e6:.1f} MB')
     if args.html:
         with open(args.template) as f, open(args.out) as g:
