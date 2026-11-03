@@ -70,7 +70,12 @@ h1 { font: 600 22px/1.2 var(--serif); margin: 0; text-wrap: balance }
 .sent:hover { outline: 1px solid var(--ink-3) }
 .sent.sel { outline: 2px solid var(--ink); }
 .sent sup { font: 10px var(--mono); color: var(--ink-3); margin-right: 2px }
-.detail { display: grid; gap: 12px }
+.detail { display: grid; gap: 12px; align-content: start }
+.pair { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) }
+@media (min-width: 1250px) {
+  .pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); align-items: start }
+  .pair .detail { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto }
+}
 .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
 .kv div { display: grid; gap: 2px }
 .kv b { font: 500 18px var(--mono); font-variant-numeric: tabular-nums }
@@ -123,8 +128,10 @@ h1 { font: 600 22px/1.2 var(--serif); margin: 0; text-wrap: balance }
         <svg id="chart" role="img" aria-label="P(refuse) and counterfactual effect by sentence"></svg>
         <p class="note">Δ = P(refuse | sentence kept) − P(refuse | replaced by a resample judged different). Whiskers: 95% bootstrap. Hollow marks: fewer than 10 different resamples, no estimate. Click a sentence or a bar.</p>
       </section>
-      <section class="panel sec"><div class="lbl">Reasoning, tinted by Δ</div><div class="transcript" id="transcript"></div></section>
-      <section class="panel sec detail" id="detail"></section>
+      <div class="pair">
+        <section class="panel sec"><div class="lbl">Reasoning, tinted by Δ · click a sentence</div><div class="transcript" id="transcript"></div></section>
+        <section class="panel sec detail" id="detail"></section>
+      </div>
       <p class="note">Contains model reasoning and answers to harmful prompts, shown in full. Outcome: StrongREJECT score ≥ 0.5 counts as compliance (gpt-oss-20b judge); “refusal flag” is the judge's own refusal item.</p>
     </div>
   </div>
@@ -270,7 +277,13 @@ function renderDetail() {
   loadChunk(i).then(data => { if (want !== `${state.model}|${state.cot}|${state.chunk}`) return; rows = data; drawRollouts(); })
     .catch(e => { $('rollouts').innerHTML = `<p class="note">Could not load the rollouts: ${esc(e.message)}. The page must be served over HTTP from the site folder (e.g. python -m http.server).</p>`; });
 }
-function select(i) { state.chunk = i; renderChart(); renderTranscript(); renderDetail(); setHash(); }
+function select(i) {
+  state.chunk = i; renderChart(); renderTranscript(); renderDetail(); setHash();
+  const d = $('detail'), r = d.getBoundingClientRect();
+  if (getComputedStyle(d).position !== 'sticky' && (r.top < 0 || r.top > innerHeight * 0.6))
+    d.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+  else d.scrollTop = 0;
+}
 function setHash() { try { history.replaceState(null, '', `#${slug(SHORT(state.model))}-${cur().prompt_idx}-${cur().cot}`); } catch (e) {} }
 function readHash() {
   const h = location.hash.slice(1); if (!h) return;
