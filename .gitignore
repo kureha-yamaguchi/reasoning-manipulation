@@ -523,3 +523,9 @@ results/thought_anchors/**/scored_rollouts_*.csv
 # Prefill rollouts (large)
 results/thought_anchors_prefill/**/rollouts_*.csv
 results/thought_anchors_prefill/**/scored_rollouts_*.csv
+
+# Infrastructure state, not research artefacts: RunPod pod state (IDs, IPs, ports) and machine-local
+# "latest" pointers to the newest run directory
+results/runpod/
+results/thought_anchors/**/latest
+results/thought_anchors_prefill/**/latest
