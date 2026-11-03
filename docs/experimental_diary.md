@@ -456,3 +456,25 @@ pooled; 95% cluster bootstrap; sign test.
 - gpt-oss follows a forced policy verdict: "This is disallowed content." → 0.97; "This is not
   disallowed content." → 0.25 (from 0.53 with the opening alone). Even the neutral "We need to check
   policy." raises refusal (+0.20, 11/15).
+
+### Where does the decision lock in? (2026-11-03; `utils/heuristic/ta_lockin.py`, figures/ta_lockin.pdf)
+Stance criterion, 30 held-out CoTs per model; 95% cluster bootstrap over prompts.
+| | Llama-8B | Qwen-7B | gpt-oss-20b |
+|---|---|---|---|
+| share of CoT's CF importance at sentence 0 (mean) | 0.74 [0.65, 0.83] | 0.72 [0.57, 0.85] | 0.14 [0.03, 0.28] |
+| CoTs with sentence 0 load-bearing (CF ≥ 0.1, CI excl. 0) | 93% | 90% | 17% |
+| load-bearing positions, quartiles of CoT fraction | 0 / 0 / 0.08 | 0 / 0 / 0.08 | 0.08 / 0.16 / 0.29 |
+| load-bearing sentences per CoT | 1.6 | 1.4 | 1.5 |
+| lock-in (ε = 0.1) median sentence; median fraction | 1.5; 0.07 | 1.5; 0.08 | 4; 0.24 |
+| locked in by sentence 1 (ε = 0.1 / 0.2) | 50% / 63% | 50% / 57% | 10% / 27% |
+- Distills: decision *direction* set by sentence 0 in ~90% of CoTs, but it is not irrevocable — the
+  lock-in distribution is bimodal: half lock by sentence 1, the rest (mostly complying CoTs) keep a
+  non-trivial chance of reversal deep into the CoT. Max |P(refuse) − final| after sentence 1: median
+  0.17 (Llama complying) / 0.25 (Qwen complying), up to 0.68 / 0.95 — the Fig 3 "re-openable"
+  plateau, now per CoT.
+- gpt-oss: unimodal, decides at sentences 2–8 (≈ 0.1–0.4 of a much shorter CoT, median 14 vs ~37
+  sentences) at an explicit policy verdict; rarely at sentence 0. In relative terms the mean lock-in
+  fraction is similar across models (0.20 / 0.25 / 0.27) — the difference is *shape*: distills =
+  immediate + long tail; gpt-oss = a few sentences of deliberation, then fixed.
+- Caveat: ε-lock-in is noise-sensitive where P(refuse) hovers at 0.85–0.95 (binomial SE ≈ 0.03 at
+  n = 100); ε = 0.2 shows the same pattern.
