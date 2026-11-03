@@ -478,3 +478,15 @@ Stance criterion, 30 held-out CoTs per model; 95% cluster bootstrap over prompts
   immediate + long tail; gpt-oss = a few sentences of deliberation, then fixed.
 - Caveat: ε-lock-in is noise-sensitive where P(refuse) hovers at 0.85–0.95 (binomial SE ≈ 0.03 at
   n = 100); ε = 0.2 shows the same pattern.
+
+## 2026-11-03 — Full stack for an RL-trained reasoner: AceReason-Nemotron-7B
+Why: reviewers/PAT ask whether the shallow first-sentence refusal is a distillation artefact; Ben wants a
+true RL reasoner. AceReason-Nemotron-7B (nvidia, snapshot 7d385d30) is RL only (math RL, then code RL; no
+SFT per the model card) starting from DeepSeek-R1-Distill-Qwen-7B — our existing arm — so the pair
+isolates the effect of RL with weights, architecture, tokenizer and chat template held fixed (template
+verified identical). Qwen3.5-9B considered and declined for now: post-training undocumented (likely mostly
+distilled), needs nightly vLLM and a Section 5 port to its hybrid DeltaNet architecture.
+Campaign: `bash_scripts/full_stack.sh` — stage 1 quadrants (baseline on all 2,446 prompts, FULL_POOL=1,
+TP=2), 2 refusal directions (run_pipeline phases 2–7, layers 11–23 as for Qwen-7B), 3 capability evals
+(run_evals.sh, now with EVAL_MODELS/TP_SIZE overrides), 4 Thought Anchors (15 seeded eligible prompts),
+5 prefill. Section 5 runs alone (run_pipeline's free_gpus kills every GPU process).

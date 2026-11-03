@@ -33,6 +33,7 @@ MODEL_COLOURS = {
     'openai/gpt-oss-20b': '#D55E00',
     'Qwen/Qwen3-8B': '#CC79A7',
     'QuixiAI/DeepSeek-R1-AWQ': '#000000',  # the R1 teacher (4-bit AWQ)
+    'nvidia/AceReason-Nemotron-7B': '#E69F00',  # RL on top of R1-Distill-Qwen-7B
 }
 
 

@@ -33,7 +33,7 @@ PORT=8001
 declare -a ALL_BENCHMARKS=("aime2025" "gpqa_diamond" "bbeh_mini")
 TEMPERATURE=0.6
 MAX_TOKENS=32768
-TP_SIZE=4
+TP_SIZE=${TP_SIZE:-4}
 
 # ── Model configurations ─────────────────────────────────────────────
 # Each entry: MODEL_PATH|MODEL_LABEL
@@ -45,6 +45,8 @@ declare -a MODEL_NAMES=(
     "deepseek-ai/DeepSeek-R1-Distill-Qwen-7B"
 )
 
+# Override the model list (space-separated HF ids), e.g. EVAL_MODELS="nvidia/AceReason-Nemotron-7B"
+if [[ -n "${EVAL_MODELS:-}" ]]; then read -ra MODEL_NAMES <<< "$EVAL_MODELS"; fi
 declare -a ALL_MODELS=()
 
 # basline models options
