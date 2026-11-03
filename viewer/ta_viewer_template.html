@@ -1,0 +1,249 @@
+<title>Refusal Anchors</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+/* Layout: lab-notebook tool. Header bar, then a CoT index column beside a reading column
+   (charts over the transcript), with the selected sentence's resamples in a detail panel. */
+:root {
+  --bg: #f6f7f8; --surface: #ffffff; --ink: #1c2126; --ink-2: #4d5660; --ink-3: #7c8691;
+  --rule: #dde1e5; --hover: #eef1f4;
+  --refuse: #2166ac; --comply: #b2182b; --refuse-soft: #dbe7f3; --comply-soft: #f6dcdf;
+  --accent: #2166ac; --band: rgba(28, 33, 38, 0.10);
+  --serif: "IBM Plex Serif", Georgia, serif; --sans: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171b; --surface: #1b2026; --ink: #e5e9ed; --ink-2: #aab3bc; --ink-3: #7c8691;
+  --rule: #2c333a; --hover: #232a31;
+  --refuse: #6aa6dc; --comply: #e5737f; --refuse-soft: #1d3247; --comply-soft: #45232a;
+  --accent: #6aa6dc; --band: rgba(229, 233, 237, 0.12); color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13171b; --surface: #1b2026; --ink: #e5e9ed; --ink-2: #aab3bc; --ink-3: #7c8691;
+  --rule: #2c333a; --hover: #232a31;
+  --refuse: #6aa6dc; --comply: #e5737f; --refuse-soft: #1d3247; --comply-soft: #45232a;
+  --accent: #6aa6dc; --band: rgba(229, 233, 237, 0.12); color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 40px }
+.wrap { max-width: 1400px; margin: 0 auto; display: grid; gap: 16px }
+header { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between }
+h1 { font: 600 22px/1.2 var(--serif); margin: 0; text-wrap: balance }
+.sub { color: var(--ink-2); font-size: 13px; margin: 4px 0 0; max-width: 70ch }
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--surface) }
+.seg button { font: 500 12px var(--sans); border: 0; background: transparent; color: var(--ink-2); padding: 6px 10px; cursor: pointer }
+.seg button + button { border-left: 1px solid var(--rule) }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg) }
+.seg button:focus-visible, .cot:focus-visible, .sent:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+.lbl { font: 500 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3) }
+.main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr) } .index { max-height: 260px } }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; min-width: 0 }
+.index { max-height: calc(100vh - 140px); overflow-y: auto; position: sticky; top: 12px }
+.index .head { padding: 10px 12px; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; gap: 8px }
+.cot { display: grid; gap: 4px; padding: 9px 12px; border-bottom: 1px solid var(--rule); cursor: pointer; width: 100%;
+  text-align: left; background: none; border-left: 0; border-right: 0; border-top: 0; color: inherit; font: inherit }
+.cot:hover { background: var(--hover) }
+.cot[aria-current="true"] { background: var(--hover); box-shadow: inset 3px 0 0 var(--ink) }
+.cot .q { font-size: 13px; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font: 12px var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums }
+.pill { font: 500 11px var(--sans); padding: 1px 7px; border-radius: 99px; border: 1px solid currentColor }
+.pill.refusing, .pill.refuse { color: var(--refuse) } .pill.complying, .pill.comply { color: var(--comply) }
+.chip { font: 500 11px var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--hover); color: var(--ink-2) }
+.reader { display: grid; gap: 16px; min-width: 0 }
+.sec { padding: 14px 16px; display: grid; gap: 10px; min-width: 0 }
+.prompt { font: 500 16px/1.45 var(--serif); margin: 0 }
+.charts svg { display: block; width: 100%; height: auto; overflow: visible }
+.axis text, .tick text { fill: var(--ink-3); font: 11px var(--mono) }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--ink-2) }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 5px }
+.transcript { font: 15px/1.75 var(--sans); max-width: 85ch }
+.sent { cursor: pointer; border-radius: 3px; padding: 1px 2px; box-decoration-break: clone; -webkit-box-decoration-break: clone }
+.sent:hover { outline: 1px solid var(--ink-3) }
+.sent.sel { outline: 2px solid var(--ink); }
+.sent sup { font: 10px var(--mono); color: var(--ink-3); margin-right: 2px }
+.detail { display: grid; gap: 12px }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
+.kv div { display: grid; gap: 2px }
+.kv b { font: 500 18px var(--mono); font-variant-numeric: tabular-nums }
+.quote { font: 500 16px/1.5 var(--serif); margin: 0; padding-left: 12px; border-left: 3px solid var(--rule) }
+.groups { display: grid; gap: 12px }
+.grp { border-top: 1px solid var(--rule); padding-top: 10px; display: grid; gap: 6px }
+.grp h4 { margin: 0; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font: 500 13px var(--sans) }
+.bar { height: 8px; border-radius: 4px; background: var(--comply-soft); overflow: hidden; max-width: 320px; width: 100% }
+.bar i { display: block; height: 100%; background: var(--refuse) }
+.ex { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: start; font-size: 13.5px }
+.ex .ans { grid-column: 2; color: var(--ink-2); font-size: 12.5px; border-left: 2px solid var(--rule); padding-left: 8px; white-space: pre-wrap }
+.note { font-size: 12px; color: var(--ink-3) }
+.tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); font: 12px/1.4 var(--sans);
+  padding: 6px 8px; border-radius: 6px; max-width: 320px; z-index: 20 }
+@media (prefers-reduced-motion: no-preference) { .cot, .sent { transition: background-color .12s } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Refusal Anchors</h1>
+      <p class="sub">Thought Anchors resampling on held-out quadrant prompts: 100 rollouts from every sentence of one refusing and one complying CoT per prompt. Pick a CoT, then a sentence, to see what the model wrote in its place and how those answers ended.</p>
+    </div>
+    <div class="controls">
+      <div><div class="lbl">Model</div><div class="seg" id="models" role="group" aria-label="Model"></div></div>
+      <div><div class="lbl">“Different” means</div><div class="seg" id="crit" role="group" aria-label="Equivalence criterion">
+        <button id="crit-stance" aria-pressed="true">stance differs</button><button id="crit-cosine" aria-pressed="false">cosine &lt; 0.8</button></div></div>
+    </div>
+  </header>
+  <div class="main">
+    <nav class="panel index" aria-label="CoTs"><div class="head"><span class="lbl">Prompt · CoT</span><span class="lbl">top Δ</span></div><div id="cots"></div></nav>
+    <div class="reader">
+      <section class="panel sec">
+        <div class="meta" id="cotmeta"></div>
+        <p class="prompt" id="prompt"></p>
+      </section>
+      <section class="panel sec charts">
+        <div class="legend"><span><span class="sw" style="background:var(--ink)"></span>P(refuse) after resampling from the sentence (95% Wilson band)</span>
+          <span><span class="sw" style="background:var(--refuse)"></span>sentence pushes towards refusal</span>
+          <span><span class="sw" style="background:var(--comply)"></span>towards compliance</span></div>
+        <svg id="chart" role="img" aria-label="P(refuse) and counterfactual effect by sentence"></svg>
+        <p class="note">Δ = P(refuse | sentence kept) − P(refuse | replaced by a resample judged different). Whiskers: 95% bootstrap. Hollow marks: fewer than 10 different resamples, no estimate. Click a sentence or a bar.</p>
+      </section>
+      <section class="panel sec"><div class="lbl">Reasoning, tinted by Δ</div><div class="transcript" id="transcript"></div></section>
+      <section class="panel sec detail" id="detail"></section>
+      <p class="note">Contains model reasoning and answers to harmful prompts, truncated: resampled sentences to 220 characters, answer snippets (opening sentence only) to 240. Outcome: StrongREJECT score ≥ 0.5 counts as compliance (gpt-oss-20b judge).</p>
+    </div>
+  </div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script id="data" type="application/json">/*DATA*/</script>
+<script>
+const DATA = JSON.parse(document.getElementById('data').textContent);
+const MODELS = Object.keys(DATA);
+const SHORT = m => m.replace('DeepSeek-R1-Distill-', 'R1-Distill ');
+const state = { model: MODELS[0], cot: 0, chunk: 0, crit: 'stance' };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmt = (x, d = 2, sign = false) => x == null ? '—' : (sign && x > 0 ? '+' : '') + x.toFixed(d);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const cots = () => DATA[state.model];
+const cur = () => cots()[state.cot];
+const delta = ch => state.crit === 'stance' ? ch.d : ch.dc;
+const ndiff = ch => state.crit === 'stance' ? ch.nd : ch.ndc;
+const slug = m => m.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+function topDelta(c) {
+  let best = null;
+  c.chunks.forEach((ch, i) => { const d = delta(ch); if (d != null && (best == null || Math.abs(d) > Math.abs(best.d))) best = { d, i }; });
+  return best;
+}
+function renderModels() {
+  $('models').innerHTML = MODELS.map(m => `<button data-m="${esc(m)}" aria-pressed="${m === state.model}">${esc(SHORT(m))}</button>`).join('');
+  $('models').querySelectorAll('button').forEach(b => b.onclick = () => { state.model = b.dataset.m; state.cot = 0; state.chunk = 0; render(); });
+}
+function renderIndex() {
+  $('cots').innerHTML = cots().map((c, k) => {
+    const t = topDelta(c);
+    return `<button class="cot" data-k="${k}" aria-current="${k === state.cot}">
+      <span class="q">${esc(c.prompt)}</span>
+      <span class="meta"><span class="pill ${c.label}">${c.label}</span><span>#${c.prompt_idx} · CoT ${c.cot} · ${c.chunks.length} sentences</span>
+      <span style="margin-left:auto">${t ? `S${t.i} ${fmt(t.d, 2, true)}` : '—'}</span></span></button>`;
+  }).join('');
+  $('cots').querySelectorAll('.cot').forEach(b => b.onclick = () => { state.cot = +b.dataset.k; state.chunk = 0; render(); });
+}
+function wilson(p, n) { const z = 1.96, c = (p + z * z / (2 * n)) / (1 + z * z / n), h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n); return [c - h, c + h]; }
+
+function renderChart() {
+  const c = cur(), N = c.chunks.length, svg = $('chart');
+  const W = Math.max(320, svg.clientWidth || 800), L = 44, R = 10, H1 = 120, GAP = 26, H2 = 130, T = 8;
+  const H = T + H1 + GAP + H2 + 22;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const step = (W - L - R) / N, x = i => L + step * (i + 0.5);
+  const y1 = p => T + (1 - p) * H1, y2 = d => T + H1 + GAP + (1 - (d + 1) / 2) * H2;
+  const ink = css('--ink'), ink3 = css('--ink-3'), rule = css('--rule'), ref = css('--refuse'), com = css('--comply'), band = css('--band');
+  let s = '';
+  for (const v of [0, 0.5, 1]) s += `<line x1="${L}" x2="${W - R}" y1="${y1(v)}" y2="${y1(v)}" stroke="${rule}"/><text class="tick" x="${L - 6}" y="${y1(v) + 4}" text-anchor="end" fill="${ink3}" font-size="11" font-family="IBM Plex Mono, monospace">${v}</text>`;
+  for (const v of [-1, 0, 1]) s += `<line x1="${L}" x2="${W - R}" y1="${y2(v)}" y2="${y2(v)}" stroke="${v === 0 ? ink3 : rule}"/><text x="${L - 6}" y="${y2(v) + 4}" text-anchor="end" fill="${ink3}" font-size="11" font-family="IBM Plex Mono, monospace">${v > 0 ? '+1' : v}</text>`;
+  s += `<text x="${L}" y="${T + H1 + GAP - 8}" fill="${ink3}" font-size="11" font-family="IBM Plex Sans, sans-serif">Δ P(refuse), ${state.crit === 'stance' ? 'stance' : 'cosine'} criterion</text>`;
+  const lo = [], hi = [];
+  c.chunks.forEach((ch, i) => { const [a, b] = wilson(ch.p, ch.n); lo.push(`${x(i)},${y1(a)}`); hi.unshift(`${x(i)},${y1(b)}`); });
+  s += `<polygon points="${lo.concat(hi).join(' ')}" fill="${band}"/>`;
+  s += `<polyline points="${c.chunks.map((ch, i) => `${x(i)},${y1(ch.p)}`).join(' ')}" fill="none" stroke="${ink}" stroke-width="2"/>`;
+  const bw = Math.max(2, Math.min(18, step * 0.7));
+  c.chunks.forEach((ch, i) => {
+    const d = delta(ch), sel = i === state.chunk;
+    if (sel) s += `<rect x="${x(i) - step / 2}" y="${T}" width="${step}" height="${H1 + GAP + H2}" fill="${band}"/>`;
+    if (d == null) s += `<circle cx="${x(i)}" cy="${y2(0)}" r="2.5" fill="none" stroke="${ink3}"/>`;
+    else {
+      const col = d >= 0 ? ref : com;
+      s += `<rect x="${x(i) - bw / 2}" y="${Math.min(y2(d), y2(0))}" width="${bw}" height="${Math.max(1, Math.abs(y2(d) - y2(0)))}" rx="1.5" fill="${col}"/>`;
+      if (state.crit === 'stance' && ch.lo != null) s += `<line x1="${x(i)}" x2="${x(i)}" y1="${y2(ch.lo)}" y2="${y2(ch.hi)}" stroke="${ink3}" stroke-width="1"/>`;
+    }
+    s += `<circle cx="${x(i)}" cy="${y1(ch.p)}" r="${sel ? 4 : 2}" fill="${ink}"/>`;
+    s += `<rect class="hit" data-i="${i}" x="${x(i) - step / 2}" y="${T}" width="${step}" height="${H1 + GAP + H2}" fill="transparent" style="cursor:pointer"/>`;
+  });
+  const every = Math.max(1, Math.ceil(N / Math.floor((W - L - R) / 28)));
+  for (let i = 0; i < N; i += every) s += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" fill="${ink3}" font-size="11" font-family="IBM Plex Mono, monospace">${i}</text>`;
+  svg.innerHTML = s;
+  svg.querySelectorAll('.hit').forEach(r => {
+    r.onclick = () => select(+r.dataset.i);
+    r.onmousemove = e => { const ch = c.chunks[+r.dataset.i]; showTip(e, `<b>S${r.dataset.i}</b> · ${esc(ch.stance)} · P(refuse) ${fmt(ch.p)} · Δ ${fmt(delta(ch), 2, true)}<br>${esc(ch.text.slice(0, 140))}`); };
+    r.onmouseleave = hideTip;
+  });
+}
+function showTip(e, html) { const t = $('tip'); t.innerHTML = html; t.hidden = false; const x = Math.min(e.clientX + 12, innerWidth - 336); t.style.left = x + 'px'; t.style.top = (e.clientY + 14) + 'px'; }
+function hideTip() { $('tip').hidden = true; }
+
+function tint(d) {
+  if (d == null) return 'transparent';
+  const a = Math.min(1, Math.abs(d) / 0.6);
+  return `color-mix(in srgb, ${d >= 0 ? 'var(--refuse-soft)' : 'var(--comply-soft)'} ${Math.round(a * 100)}%, transparent)`;
+}
+function renderTranscript() {
+  $('transcript').innerHTML = cur().chunks.map((ch, i) =>
+    `<span class="sent${i === state.chunk ? ' sel' : ''}" tabindex="0" data-i="${i}" style="background:${tint(delta(ch))}"><sup>${i}</sup>${esc(ch.text)}</span> `).join('');
+  $('transcript').querySelectorAll('.sent').forEach(s => { s.onclick = () => select(+s.dataset.i); s.onkeydown = e => { if (e.key === 'Enter') select(+s.dataset.i); }; });
+}
+function renderDetail() {
+  const c = cur(), i = state.chunk, ch = c.chunks[i], nxt = c.chunks[i + 1], d = delta(ch);
+  const diffNote = state.crit === 'stance' ? `resamples whose stance differs from <span class="chip">${esc(ch.stance)}</span>` : 'resamples with cosine similarity < 0.8';
+  const groups = ch.g.map(g => {
+    const pr = g.r / g.n, same = g.s === ch.stance;
+    const ex = g.ex.map(e => `<span class="pill ${e[1] ? 'refuse' : 'comply'}">${e[1] ? 'refused' : 'complied'}</span><span>${esc(e[0])}</span>${e[2] != null ? `<span class="ans">${esc(e[2])}…</span>` : ''}`).join('');
+    return `<div class="grp"><h4><span class="chip">${esc(g.s)}</span>${same ? '<span class="note">same stance as original</span>' : ''}
+      <span class="meta">${g.n} resamples · P(refuse) ${fmt(pr)}</span></h4>
+      <div class="bar" role="img" aria-label="${Math.round(pr * 100)}% refused"><i style="width:${pr * 100}%"></i></div>
+      <div class="ex">${ex}</div></div>`;
+  }).join('');
+  $('detail').innerHTML = `<div class="meta"><span class="lbl">Sentence ${i} of ${c.chunks.length}</span><span class="chip">${esc(ch.stance)}</span></div>
+    <p class="quote">${esc(ch.text)}</p>
+    <div class="kv">
+      <div><span class="lbl">P(refuse) resampling here</span><b>${fmt(ch.p)}</b></div>
+      <div><span class="lbl">P(refuse) with it kept</span><b>${nxt ? fmt(nxt.p) : '—'}</b></div>
+      <div><span class="lbl">Δ (${state.crit})</span><b style="color:${d == null ? 'inherit' : d >= 0 ? 'var(--refuse)' : 'var(--comply)'}">${fmt(d, 2, true)}</b>${state.crit === 'stance' && ch.lo != null ? `<span class="meta">95% CI [${fmt(ch.lo, 2, true)}, ${fmt(ch.hi, 2, true)}]</span>` : ''}</div>
+      <div><span class="lbl">“Different” resamples</span><b>${ndiff(ch) ?? '—'}</b><span class="meta">of ${ch.n}; Δ needs ≥ 10</span></div>
+    </div>
+    <div class="note">What the model wrote in place of this sentence, grouped by stance. Δ compares the ${diffNote} with the rollouts that keep it.${i === 0 ? ' Answer snippets shown for the opening sentence.' : ''}</div>
+    <div class="groups">${groups}</div>`;
+}
+function select(i) { state.chunk = i; renderChart(); renderTranscript(); renderDetail(); setHash(); }
+function setHash() { try { history.replaceState(null, '', `#${slug(SHORT(state.model))}-${cur().prompt_idx}-${cur().cot}`); } catch (e) {} }
+function readHash() {
+  const h = location.hash.slice(1); if (!h) return;
+  for (const m of MODELS) { const pre = slug(SHORT(m)) + '-'; if (h.startsWith(pre)) {
+    const [p, c] = h.slice(pre.length).split('-').map(Number); const k = DATA[m].findIndex(x => x.prompt_idx === p && x.cot === c);
+    if (k >= 0) { state.model = m; state.cot = k; state.chunk = 0; } } }
+}
+function render() {
+  renderModels(); renderIndex();
+  const c = cur();
+  $('cotmeta').innerHTML = `<span class="pill ${c.label}">${c.label} CoT</span><span>${esc(SHORT(state.model))} · prompt #${c.prompt_idx} · CoT ${c.cot} · ${c.chunks.length} sentences · 100 rollouts each</span>`;
+  $('prompt').textContent = c.prompt;
+  renderChart(); renderTranscript(); renderDetail(); setHash();
+}
+for (const k of ['stance', 'cosine']) $('crit-' + k).onclick = () => { state.crit = k; $('crit-stance').setAttribute('aria-pressed', k === 'stance'); $('crit-cosine').setAttribute('aria-pressed', k === 'cosine'); render(); };
+addEventListener('hashchange', () => { readHash(); render(); });
+let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(renderChart, 120); });
+readHash(); render();
+</script>
