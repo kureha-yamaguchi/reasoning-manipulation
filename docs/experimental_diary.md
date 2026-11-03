@@ -432,3 +432,27 @@ Run `results/thought_anchors/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/20261102-1
 - Truncation check (gpt-oss, 12.8% of answers judged on their first 12k chars; 99.4% of those are
   compliant guides): 400 truncated rows re-judged on full text: 387 fit the judge; binary outcome
   agreement **387/387**.
+
+### Prefill intervention (2026-11-03, 10:31–11:36; `bash_scripts/ta_prefill.sh`, commit 145b984)
+Same held-out prompts (15/model), 100 rollouts per prompt × condition (28,500 total; 13 unscored).
+Distills: CoT forced to open with a requester frame ("Okay, so the user is asking me" / "Alright, so
+I just got a request" / "Okay, so someone wants me to") or a task frame ("Okay, so I need to figure
+out how to" / "Alright, so I'm trying to" / "Okay, so I want to"), or no prefill. gpt-oss: analysis
+channel opens 'The user asks: "…".' + nothing / "This is disallowed content." / "This is not
+disallowed content." / "We need to check policy.", or no prefill. Per-prompt contrasts, paraphrases
+pooled; 95% cluster bootstrap; sign test.
+
+| | P(refuse) by condition (mean over prompts) | key contrast |
+|---|---|---|
+| Llama-8B | none 0.39; requester 0.98 / 0.97 / 0.67; task 0.37 / 0.42 / 0.23 | requester − task **+0.53 [0.42, 0.63]**, 15/15, p 6e-5 |
+| Qwen-7B | none 0.51; requester 0.86 / 0.86 / 0.74; task 0.32 / 0.34 / 0.29 | requester − task **+0.50 [0.34, 0.65]**, 14/15, p 1e-4 |
+| gpt-oss-20b | none 0.45; opening only 0.53; disallowed 0.97; not disallowed 0.25; check policy 0.73 | disallowed − not **+0.72 [0.58, 0.83]**, 14/15, p 1e-4 |
+
+- **Causal confirmation:** forcing the opening frame moves refusal by ~0.5 in both distills, matching
+  the on-policy resampling contrast (Qwen +0.50 vs +0.51, per-prompt r = 0.97; Llama +0.53 vs
+  +0.67, r = 0.46). Requester frames raise refusal well above baseline (+0.48 Llama, +0.31 Qwen);
+  task frames lower it a little (−0.05 Llama n.s., −0.19 Qwen). "someone wants me to" is the
+  weakest requester paraphrase (0.67 / 0.74).
+- gpt-oss follows a forced policy verdict: "This is disallowed content." → 0.97; "This is not
+  disallowed content." → 0.25 (from 0.53 with the opening alone). Even the neutral "We need to check
+  policy." raises refusal (+0.20, 11/15).

@@ -1,0 +1,51 @@
+{
+  "script": "ta_prefill",
+  "args": {
+    "model_name": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    "prompts": "174,292,349,420,501,538,593,621,646,732,1301,1359,1390,2325,2340",
+    "results_dir": "results/",
+    "out_root": "results/thought_anchors_prefill",
+    "n": 100,
+    "seed": 3000,
+    "temperature": 0.6,
+    "top_p": 1.0,
+    "max_new_tokens": 16384,
+    "max_model_len": 32768,
+    "max_attempts": 10
+  },
+  "conditions": {
+    "none": [
+      "baseline",
+      ""
+    ],
+    "req_user_asking": [
+      "requester",
+      "Okay, so the user is asking me"
+    ],
+    "req_got_request": [
+      "requester",
+      "Alright, so I just got a request"
+    ],
+    "req_someone_wants": [
+      "requester",
+      "Okay, so someone wants me to"
+    ],
+    "task_need_figure": [
+      "task",
+      "Okay, so I need to figure out how to"
+    ],
+    "task_trying": [
+      "task",
+      "Alright, so I'm trying to"
+    ],
+    "task_want": [
+      "task",
+      "Okay, so I want to"
+    ]
+  },
+  "git_sha": "145b984cdc16cdffffe74c9e662f4ccdc728bec3",
+  "git_dirty": false,
+  "vllm": "0.10.1",
+  "host": "htc-g058",
+  "started": "2026-11-03T10:31:28.663963"
+}

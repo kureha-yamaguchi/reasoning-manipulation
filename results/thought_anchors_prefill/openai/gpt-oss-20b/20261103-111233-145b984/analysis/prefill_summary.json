@@ -1,0 +1,56 @@
+{
+  "family": "gpt-oss",
+  "n_rollouts": 7499,
+  "contrasts": [
+    {
+      "contrast": "disallowed - not_disallowed",
+      "n_prompts": 15,
+      "mean": 0.72,
+      "ci_lo": 0.5819833333333333,
+      "ci_hi": 0.8339999999999999,
+      "median": 0.79,
+      "n_positive": 14,
+      "sign_test_p": 0.0001220703125
+    },
+    {
+      "contrast": "disallowed - opening_only",
+      "n_prompts": 15,
+      "mean": 0.44199999999999995,
+      "ci_lo": 0.34600000000000003,
+      "ci_hi": 0.5266666666666666,
+      "median": 0.48,
+      "n_positive": 14,
+      "sign_test_p": 0.0001220703125
+    },
+    {
+      "contrast": "not_disallowed - opening_only",
+      "n_prompts": 15,
+      "mean": -0.27799999999999997,
+      "ci_lo": -0.37399999999999994,
+      "ci_hi": -0.176,
+      "median": -0.30000000000000004,
+      "n_positive": 2,
+      "sign_test_p": 0.012939453125
+    },
+    {
+      "contrast": "neutral - opening_only",
+      "n_prompts": 15,
+      "mean": 0.20133333333333336,
+      "ci_lo": 0.08999999999999998,
+      "ci_hi": 0.30866666666666664,
+      "median": 0.25,
+      "n_positive": 11,
+      "sign_test_p": 0.057373046875
+    },
+    {
+      "contrast": "opening_only - baseline",
+      "n_prompts": 15,
+      "mean": 0.07373737373737374,
+      "ci_lo": 0.03133333333333334,
+      "ci_hi": 0.11880808080808085,
+      "median": 0.06999999999999995,
+      "n_positive": 12,
+      "sign_test_p": 0.012939453125
+    }
+  ]
+}
