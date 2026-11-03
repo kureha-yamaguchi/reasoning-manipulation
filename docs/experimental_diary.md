@@ -490,3 +490,20 @@ Campaign: `bash_scripts/full_stack.sh` — stage 1 quadrants (baseline on all 2,
 TP=2), 2 refusal directions (run_pipeline phases 2–7, layers 11–23 as for Qwen-7B), 3 capability evals
 (run_evals.sh, now with EVAL_MODELS/TP_SIZE overrides), 4 Thought Anchors (15 seeded eligible prompts),
 5 prefill. Section 5 runs alone (run_pipeline's free_gpus kills every GPU process).
+
+### Mediation: how much of the CoT's influence runs through opening stance? (2026-11-03; `ta_mediation.py`)
+After Thought Branches' mediation analysis. Per held-out prompt: η²_CoT = Var_C(E[S|P,C]) / Var(S|P) from the
+baseline (Section 3 / rebuttal definition); η²_open = share of outcome variance across ~200 chunk-0 resamples
+explained by their stance label, minus a within-prompt permutation null (500 perms). Means, 95% bootstrap
+over the 15 prompts per model.
+| | η²_CoT | η²_open (adjusted) | share = η²_open / η²_CoT | modal opening stance |
+|---|---|---|---|---|
+| Llama-8B | 1.00 | 0.47 [0.34, 0.59] | 0.47 [0.34, 0.59] | 69% |
+| Qwen-7B | 1.00 | 0.47 [0.33, 0.63] | 0.48 [0.32, 0.63] | 69% |
+| gpt-oss-20b | 1.00 | 0.03 [0.02, 0.04] | 0.03 [0.02, 0.05] | 91% |
+- In the distills the stance of the first sentence alone accounts for ~half of the outcome variance the CoT
+  explains; same with the binary outcome (0.46 / 0.48). gpt-oss: ~3% — its opening barely varies ("The
+  user asks: …", 91%), so its decision is mediated later (policy verdict), consistent with lock-in.
+- Caveats: η²_CoT ≈ 1 by construction on quadrant prompts (within-CoT SD < 0.03), so share ≈ η²_open here;
+  stance-label error (~15–20%) attenuates η²_open, so ~0.47 is closer to a lower bound; the rest is
+  within-stance wording ("how someone might" vs "how to") plus later sentences.
