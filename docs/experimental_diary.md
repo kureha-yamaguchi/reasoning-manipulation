@@ -537,3 +537,25 @@ audit and terminated. Cost: run ≈ $236 + orphan ≈ $245 (balance $1,645 → $
 - Caveats: R1 is 4-bit AWQ (prefix caching off); R1 CoTs shorter (median 26 sentences); N = 15 prompts.
 Outputs: figures/ta_lockin_with_r1.pdf, results/thought_anchors/{lockin_with_r1,mediation_with_r1,
 prefill_summary}, R1 run analysis/, viewer at https://robots.ox.ac.uk/~be/anchors/ (4 models).
+
+### AceReason-Nemotron-7B (RL on top of R1-Distill-Qwen-7B): Fig 3 / commitment (2026-11-04)
+Stage 1 of the full stack (baseline on 2,446 prompts; quadrant filter; 10-rollout prefix resampling; same
+judge and protocol as the other models). Commitment (δ = 0.2, 95% cluster bootstrap):
+| | eligible prompts | first entry | last exit |
+|---|---|---|---|
+| R1-Distill-Qwen-7B (pre-RL) | 34 | 0.071 [0.054, 0.089] | 0.322 [0.249, 0.398] |
+| **AceReason-7B (post-RL)** | **53** | 0.083 [0.065, 0.103] | 0.298 [0.246, 0.354] |
+| R1-Distill-Llama-8B | 33 | 0.050 | 0.215 |
+| R1 (AWQ) | 15 (sampled of 31) | 0.090 | 0.324 |
+| gpt-oss-20b | 94 | 0.142 | 0.235 |
+- RL leaves the refusal-timing profile essentially unchanged: AceReason's SD curve overlays its pre-RL base
+  (sharp drop at sentence 1, plateau ≈ 0.13–0.15 vs ≈ 0.15–0.17), commitment CIs overlap. What RL changes is
+  *how many* prompts have CoT-decided refusal (53 vs 34 eligible).
+- So "settles early but re-openable" is not removed by RL on top of distillation — consistent with R1 (itself
+  RL-trained) matching its students. gpt-oss's different profile is more plausibly due to its safety-specific
+  deliberative alignment than to "RL vs distillation". Caveat: AceReason's RL is math/code only (no safety
+  RL), so this tests capability RL, not safety RL.
+Figures: figures/std_overlay_rep10_{bins30,sentences25}_with_acereason.pdf, figures/fig3_quadrant_panels_with_acereason.pdf;
+results/commitment/commitment_summary_with_acereason.json. Pipeline fixes en route: run_pipeline judge via
+`uv run` and VLLM_TP_SIZE=1 on 2-GPU nodes; compute_layer_statistics skips NaN scores. Section 5 selected
+layers: CoT direction 23, end-of-prompt 17 (R1-Distill-Qwen-7B: 17 / 21).
