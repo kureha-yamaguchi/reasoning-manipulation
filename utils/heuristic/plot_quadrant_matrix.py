@@ -103,32 +103,17 @@ def build_matrices(input_paths: list[str],
     return mean_matrix, std_matrix
 
 
-def plot_matrix(input_paths: list[str], args):
-    if not input_paths:
-        print("No data to plot.")
-        return
-
-    # ── Parse prompt/cot indices and group by prompt ──
-    file_info = []
-    for path in input_paths:
-        prompt_idx, cot_idx = extract_prompt_cot(path)
-        file_info.append({'path': path, 'prompt_idx': prompt_idx, 'cot_idx': cot_idx})
-
-    file_info.sort(key=lambda x: (x['prompt_idx'], x['cot_idx']))
-
-
+def select_data(input_paths: list[str], args) -> dict:
+    """Prompts for the line plot (up to 32) and the heatmap (3, or args.heatmap_prompts), their binned
+    matrices and the heatmap's prompt-cluster boundaries."""
+    file_info = sorted(({'path': p, 'prompt_idx': extract_prompt_cot(p)[0], 'cot_idx': extract_prompt_cot(p)[1]}
+                        for p in input_paths), key=lambda x: (x['prompt_idx'], x['cot_idx']))
     all_prompts = list(dict.fromkeys(f['prompt_idx'] for f in file_info))
     rng = np.random.default_rng(args.seed)
-
     if args.random_sample:
         h = 0.3
-
-        # Line plot: N=32 random prompts
         sampled_line = set(rng.choice(all_prompts, size=min(32, len(all_prompts)), replace=False).tolist())
-        file_info_line = [f for f in file_info if f['prompt_idx'] in sampled_line]
-
-        # Heatmap: explicit prompts, or 3 random prompts each with exactly 5 CoTs
-        if args.heatmap_prompts:
+        if args.heatmap_prompts:  # explicit prompts, or 3 random prompts each with exactly 5 CoTs
             sampled_heat = {int(p) for p in args.heatmap_prompts.split(',')}
             missing = sampled_heat - set(all_prompts)
             if missing:
@@ -136,203 +121,141 @@ def plot_matrix(input_paths: list[str], args):
         else:
             cot_counts = Counter(f['prompt_idx'] for f in file_info)
             prompts_with_5_cots = [p for p, c in cot_counts.items() if c == 5]
-            sampled_heat = set(rng.choice(
-                prompts_with_5_cots, size=min(3, len(prompts_with_5_cots)), replace=False
-            ).tolist())
-        file_info_heat = [f for f in file_info if f['prompt_idx'] in sampled_heat]
+            sampled_heat = set(rng.choice(prompts_with_5_cots, size=min(3, len(prompts_with_5_cots)),
+                                          replace=False).tolist())
     else:
         h = 0.05
-        sampled_set = set(rng.choice(all_prompts, size=min(32, len(all_prompts)), replace=False).tolist())
-        file_info_heat = [f for f in file_info if f['prompt_idx'] in sampled_set]
-        file_info_line = file_info_heat
-        sampled_line = sampled_heat = sampled_set
-    args.sampled_line = sorted(sampled_line)
-    args.sampled_heat = sorted(sampled_heat)
-
-    sorted_paths_heat = [f['path'] for f in file_info_heat]
-    sorted_paths_line = [f['path'] for f in file_info_line]
-
-    mean_mat, _ = build_matrices(sorted_paths_heat, args.n_bins)
-    _, std_mat = build_matrices(sorted_paths_line, args.n_bins)
-
-    # Cluster boundaries (based on heatmap data)
-    prompt_indices_ordered = [f['prompt_idx'] for f in file_info_heat]
-    unique_prompts = []
-    cluster_boundaries = []
-    for i, pi in enumerate(prompt_indices_ordered):
-        if i == 0 or pi != prompt_indices_ordered[i - 1]:
+        sampled_line = sampled_heat = set(rng.choice(all_prompts, size=min(32, len(all_prompts)),
+                                                     replace=False).tolist())
+    file_info_heat = [f for f in file_info if f['prompt_idx'] in sampled_heat]
+    file_info_line = [f for f in file_info if f['prompt_idx'] in sampled_line]
+    mean_mat, _ = build_matrices([f['path'] for f in file_info_heat], args.n_bins)
+    _, std_mat = build_matrices([f['path'] for f in file_info_line], args.n_bins)
+    order = [f['prompt_idx'] for f in file_info_heat]
+    unique_prompts, bounds = [], []
+    for i, pi in enumerate(order):
+        if i == 0 or pi != order[i - 1]:
             unique_prompts.append(pi)
-            cluster_boundaries.append(i)
-    cluster_boundaries.append(len(file_info_heat))
-
-    n_rows = mean_mat.shape[0]
-    bin_centres = np.linspace(0.0, 1.0, args.n_bins)
-
-    # ── Figure layout ──
-    heatmap_height = max(3, 0.35 * n_rows)
-    line_height = 3.0
-    panel_width = 7
-    cbar_width = 0.4
-    fig_width = panel_width + (0 if args.no_colorbar else cbar_width + 1.5)
-    fig_height = heatmap_height + line_height
-    fig = plt.figure(figsize=(fig_width, fig_height))
-    if args.model_name == 'openai/gpt-oss-20b':
-        model_short = 'GPT-OSS-20B'
-    else:
-        model_short = args.model_name.split('/')[-1]
-    title_margin_inches = 0
-    top = 1.0 - title_margin_inches / fig_height
-    fig.suptitle(model_short, fontsize=22, fontweight='bold', y=top + 0.07)
-    fig.subplots_adjust(top=top)
+            bounds.append(i)
+    bounds.append(len(file_info_heat))
+    return {'mean_mat': mean_mat, 'std_mat': std_mat, 'unique_prompts': unique_prompts, 'bounds': bounds,
+            'sampled_line': sorted(sampled_line), 'sampled_heat': sorted(sampled_heat), 'hspace': h}
 
 
-
-    if args.no_colorbar:
-        gs = fig.add_gridspec(
-            2, 1,
-            height_ratios=[line_height, heatmap_height],
-            hspace=h
-        )
-    else:
-        gs = fig.add_gridspec(
-            2, 2,
-            height_ratios=[line_height, heatmap_height],
-            width_ratios=[1, cbar_width / panel_width],
-            hspace=h, wspace=0.2
-        )
-
-    # ── Row 1: Heatmap ──
-    ax_heat = fig.add_subplot(gs[1, 0])
-    im = ax_heat.imshow(mean_mat, aspect='auto',
-                        cmap='Reds', vmin=0.0, vmax=1.0,
-                        interpolation='nearest')
-
-    # X-axis
-    tick_positions_x = np.linspace(0, args.n_bins - 1, 6)
-    tick_labels_x = [f'{v:.1f}' for v in np.linspace(0, 1, 6)]
-    ax_heat.set_xticks(tick_positions_x)
-    ax_heat.set_xticklabels(tick_labels_x, fontsize=22)
-    ax_heat.set_xlabel('Normalised CoT Sentence Position', fontsize=22)
-    ax_heat.tick_params(axis='x', labelsize=22)
-
-    # Y-axis: square brackets grouping rows by prompt
-    ax_heat.set_yticks([])
-    if args.no_colorbar:
-        ax_heat.set_ylabel('Prompt Index', fontsize=22, labelpad=65)
-
-    trans = mtransforms.blended_transform_factory(ax_heat.transAxes, ax_heat.transData)
-    x_tip = -0.012
-    x_base = -0.028
-    x_text = -0.055
-
-    gap = 0.15  # half-gap in data (row) units
-
-    for g, pi in enumerate(unique_prompts):
-        start = cluster_boundaries[g] - 0.5 + gap
-        end = cluster_boundaries[g + 1] - 0.5 - gap
-        centre = (start + end) / 2.0
-
-        ax_heat.plot(
-            [x_base, x_tip, x_tip, x_base],
-            [start, start, end, end],
-            transform=trans, color='black', linewidth=1.5,
-            clip_on=False, solid_capstyle='butt',
-        )
-        ax_heat.text(
-            x_text, centre, str(pi),
-            transform=trans, ha='right', va='center', fontsize=18,
-        )
-
-    # White separators between prompt clusters
-    for boundary in cluster_boundaries[1:-1]:
-        ax_heat.axhline(y=boundary - 0.5, color='white', linewidth=5.0)
-
-    # Black border around each prompt cluster (no continuous outer spine)
-    for spine in ax_heat.spines.values():
+def draw_heatmap(ax, d: dict, n_bins: int, ylabel: bool = True, xlabel: bool = True, fs: float = 22):
+    """Per-CoT mean StrongREJECT score by normalised sentence position, rows bracketed by prompt."""
+    im = ax.imshow(d['mean_mat'], aspect='auto', cmap='Reds', vmin=0.0, vmax=1.0, interpolation='nearest')
+    ax.set_xticks(np.linspace(0, n_bins - 1, 6))
+    ax.set_xticklabels([f'{v:.1f}' for v in np.linspace(0, 1, 6)], fontsize=fs)
+    if xlabel:
+        ax.set_xlabel('Normalised CoT Sentence Position', fontsize=fs)
+    ax.set_yticks([])
+    if ylabel:
+        ax.set_ylabel('Prompt Index', fontsize=fs, labelpad=65)
+    trans = mtransforms.blended_transform_factory(ax.transAxes, ax.transData)
+    gap, bounds = 0.15, d['bounds']
+    for g, pi in enumerate(d['unique_prompts']):
+        start, end = bounds[g] - 0.5 + gap, bounds[g + 1] - 0.5 - gap
+        ax.plot([-0.028, -0.012, -0.012, -0.028], [start, start, end, end], transform=trans, color='black',
+                linewidth=1.5, clip_on=False, solid_capstyle='butt')
+        ax.text(-0.055, (start + end) / 2, str(pi), transform=trans, ha='right', va='center', fontsize=fs - 4)
+    for boundary in bounds[1:-1]:  # white separators between prompt clusters
+        ax.axhline(y=boundary - 0.5, color='white', linewidth=5.0)
+    for spine in ax.spines.values():  # black border around each cluster, no continuous outer spine
         spine.set_visible(False)
-    for g in range(len(unique_prompts)):
-        y0 = cluster_boundaries[g] - 0.5 + (gap if g > 0 else 0)
-        y1 = cluster_boundaries[g + 1] - 0.5 - (gap if g < len(unique_prompts) - 1 else 0)
-        rect = mpatches.Rectangle(
-            (-0.5, y0), args.n_bins, y1 - y0,
-            linewidth=1.5, edgecolor='black', facecolor='none'
-        )
-        ax_heat.add_patch(rect)
+    n = len(d['unique_prompts'])
+    for g in range(n):
+        y0 = bounds[g] - 0.5 + (gap if g > 0 else 0)
+        y1 = bounds[g + 1] - 0.5 - (gap if g < n - 1 else 0)
+        ax.add_patch(mpatches.Rectangle((-0.5, y0), n_bins, y1 - y0, linewidth=1.5, edgecolor='black',
+                                        facecolor='none'))
+    return im
 
-    # Colorbar
-    if not args.no_colorbar:
-        cbar_ax = fig.add_subplot(gs[1, 1])
-        cbar = fig.colorbar(im, cax=cbar_ax)
-        cbar.set_label('Mean StrongREJECT Score', fontsize=22)
-        cbar.ax.tick_params(labelsize=22)
-        cbar.ax.annotate('comply', xy=(0.5, 1.08), xycoords='axes fraction',
-                         fontsize=18, fontstyle='italic', ha='center')
-        cbar.ax.annotate('refuse', xy=(0.5, -0.08), xycoords='axes fraction',
-                         fontsize=18, fontstyle='italic', ha='center')
 
-    # ── Row 0: Std across rollouts averaged across files ──
-    ax_line = fig.add_subplot(gs[0, 0])
+def draw_std(ax, d: dict, n_bins: int, ylabel: bool = True, xlabel: bool = True, fs: float = 22):
+    """Within-prefix SD across rollouts, mean over (prompt, CoT) rows with a +/- 1 SD band."""
+    x = np.linspace(0.0, 1.0, n_bins)
+    avg, sd = np.nanmean(d['std_mat'], axis=0), np.nanstd(d['std_mat'], axis=0)
+    ax.plot(x, avg, linewidth=2, color='#2166ac')
+    ax.fill_between(x, avg - sd, avg + sd, alpha=0.25, color='#2166ac')
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 0.5)
+    if xlabel:
+        ax.set_xlabel('Normalised CoT Sentence Position', fontsize=fs)
+    if ylabel:
+        ax.set_ylabel('Mean Std Dev\n(across rollouts)', fontsize=fs - 2)
+    ax.tick_params(labelsize=fs)
+    ax.grid(True, alpha=0.3)
 
-    avg_std = np.nanmean(std_mat, axis=0)
-    std_of_std = np.nanstd(std_mat, axis=0)
 
-    ax_line.plot(bin_centres, avg_std, linewidth=2, color='#2166ac')
-    ax_line.fill_between(bin_centres,
-                         avg_std - std_of_std,
-                         avg_std + std_of_std,
-                         alpha=0.25, color='#2166ac')
-    ax_line.set_xlim(0, 1)
-    ax_line.set_ylim(0, 0.5)
-    ax_line.set_xlabel('Normalised CoT Sentence Position', fontsize=22)
+def draw_colorbar(fig, im, cax, fs: float = 22):
+    cbar = fig.colorbar(im, cax=cax)
+    cbar.set_label('Mean StrongREJECT Score', fontsize=fs)
+    cbar.ax.tick_params(labelsize=fs)
+    cbar.ax.annotate('comply', xy=(0.5, 1.08), xycoords='axes fraction', fontsize=fs - 4, fontstyle='italic',
+                     ha='center')
+    cbar.ax.annotate('refuse', xy=(0.5, -0.08), xycoords='axes fraction', fontsize=fs - 4, fontstyle='italic',
+                     ha='center')
+
+
+def model_title(model_name: str) -> str:
+    return 'GPT-OSS-20B' if model_name == 'openai/gpt-oss-20b' else model_name.split('/')[-1]
+
+
+def plot_matrix(input_paths: list[str], args):
+    if not input_paths:
+        print("No data to plot.")
+        return
+    d = select_data(input_paths, args)
+    args.sampled_line, args.sampled_heat = d['sampled_line'], d['sampled_heat']
+
+    heatmap_height, line_height, panel_width, cbar_width = max(3, 0.35 * d['mean_mat'].shape[0]), 3.0, 7, 0.4
+    fig = plt.figure(figsize=(panel_width + (0 if args.no_colorbar else cbar_width + 1.5), heatmap_height + line_height))
+    fig.suptitle(model_title(args.model_name), fontsize=22, fontweight='bold', y=1.07)
+    fig.subplots_adjust(top=1.0)
     if args.no_colorbar:
-        ax_line.set_ylabel('Mean Std Dev\n(across rollouts)', fontsize=20)
-    ax_line.tick_params(labelsize=22)
-    ax_line.grid(True, alpha=0.3)
+        gs = fig.add_gridspec(2, 1, height_ratios=[line_height, heatmap_height], hspace=d['hspace'])
+    else:
+        gs = fig.add_gridspec(2, 2, height_ratios=[line_height, heatmap_height],
+                              width_ratios=[1, cbar_width / panel_width], hspace=d['hspace'], wspace=0.2)
+    im = draw_heatmap(fig.add_subplot(gs[1, 0]), d, args.n_bins, ylabel=args.no_colorbar)
+    if not args.no_colorbar:
+        draw_colorbar(fig, im, fig.add_subplot(gs[1, 1]))
+    draw_std(fig.add_subplot(gs[0, 0]), d, args.n_bins, ylabel=args.no_colorbar)
 
-    # Save
     out_dir = os.path.join(args.results_dir, args.model_name, 'figures')
     os.makedirs(out_dir, exist_ok=True)
-    if args.random_sample:
-        output_path = os.path.join(
-            out_dir,
-            f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}_sampled.pdf'
-        )
-    else:
-        output_path = os.path.join(
-            out_dir,
-            f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}.pdf'
-        )
+    suffix = '_sampled' if args.random_sample else ''
+    output_path = os.path.join(out_dir, f'heatmap_quadrant_rep{args.repetitions}_bins{args.n_bins}{suffix}.pdf')
     plt.savefig(output_path, bbox_inches='tight')
-    # Record which prompts were drawn so the figure can be reproduced
-    with open(os.path.splitext(output_path)[0] + '_prompts.json', 'w') as f:
-        json.dump({'seed': args.seed, 'line_prompts': args.sampled_line,
-                   'heatmap_prompts': args.sampled_heat}, f, indent=2)
+    with open(os.path.splitext(output_path)[0] + '_prompts.json', 'w') as f:  # to reproduce the figure
+        json.dump({'seed': args.seed, 'line_prompts': args.sampled_line, 'heatmap_prompts': args.sampled_heat}, f,
+                  indent=2)
     plt.close()
     print(f"Heatmap saved to: {output_path}")
 
 
+def eligible_paths(model_name: str, results_dir: str, repetitions: int, all_files: bool = False) -> list[str]:
+    paths = sorted(glob.glob(os.path.join(results_dir, model_name, 'dataset', 'quadrants',
+                                          f'scored_full_resample_prompt*_cot*_rep_{repetitions}.csv')))
+    if all_files:
+        return paths
+    from utils.heuristic.commitment import scored_paths  # same eligible-prompt restriction as the overlays
+    eligible = set(scored_paths(model_name, results_dir, repetitions))
+    excluded = sorted({extract_prompt_cot(p)[0] for p in paths if p not in eligible})
+    if excluded:
+        print(f"Excluding prompts outside the current eligible set: {excluded}")
+    return [p for p in paths if p in eligible]
+
+
 def main():
     args = parse_args()
-
-    input_csv = f'scored_full_resample_prompt*_cot*_rep_{args.repetitions}.csv'
-
-    pattern_quadrant = os.path.join(
-        args.results_dir, args.model_name, 'dataset', 'quadrants', input_csv
-    )
-    input_paths_quadrant = sorted(glob.glob(pattern_quadrant))
-    if not args.all_files:  # same eligible-prompt restriction as the overlays and commitment analysis
-        from utils.heuristic.commitment import scored_paths
-        eligible = set(scored_paths(args.model_name, args.results_dir, args.repetitions))
-        excluded = sorted({extract_prompt_cot(p)[0] for p in input_paths_quadrant if p not in eligible})
-        input_paths_quadrant = [p for p in input_paths_quadrant if p in eligible]
-        if excluded:
-            print(f"Excluding prompts outside the current eligible set: {excluded}")
-
-    if not input_paths_quadrant:
-        print(f"No files found matching: {pattern_quadrant}")
+    paths = eligible_paths(args.model_name, args.results_dir, args.repetitions, args.all_files)
+    if not paths:
+        print(f"No quadrant files for {args.model_name}")
     else:
-        print(f"Found {len(input_paths_quadrant)} file(s)")
-        plot_matrix(input_paths_quadrant, args)
+        print(f"Found {len(paths)} file(s)")
+        plot_matrix(paths, args)
 
 
 if __name__ == "__main__":
