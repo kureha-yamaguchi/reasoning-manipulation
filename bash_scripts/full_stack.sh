@@ -6,7 +6,7 @@
 #      (bash_scripts/r1_quadrants.sbatch with FULL_POOL=1)
 #   2  Sec 5: filter datasets + run_pipeline.sh phases 2-7 (refusal directions, ablated models, layer
 #      selection, final generation, scores). Must run alone: its free_gpus kills every GPU process.
-#   3  Sec 5 capability evals (AIME-2025, GPQA-Diamond, BBEH-mini), base and CoT-direction ablated model
+#   3  (run last) Sec 5 capability evals (AIME-2025, GPQA-Diamond, BBEH-mini), base and CoT-direction ablated model
 #   4  Thought Anchors: 15 eligible prompts x 2 CoTs, 100 rollouts per sentence; generation on GPU 1
 #      while GPU 0 judges; then stance labels, taxonomy, both importance analyses
 #   5  Prefill intervention on the same prompts
@@ -37,11 +37,6 @@ if stage 2; then
     bash bash_scripts/run_pipeline.sh --model_name "$MODEL" --layers "$LAYERS" --start_phase 2 > "$LOG/2_directions.log" 2>&1
 fi
 
-if stage 3; then
-    log "Stage 3: capability evals"
-    printf '\n\n' | EVAL_MODELS=$MODEL TP_SIZE=2 bash bash_scripts/run_evals.sh > "$LOG/3_evals.log" 2>&1
-fi
-
 judge_up() {  # gpt-oss judge on GPU 0, port 8000
     CUDA_VISIBLE_DEVICES=0 uv run vllm serve openai/gpt-oss-20b --port 8000 --max-model-len 8192 --max-num-seqs 1024 \
         > "$LOG/judge.log" 2>&1 &
@@ -58,7 +53,7 @@ pts = find_quadrant(load_scored_csv([os.path.join('results', '$MODEL', 'dataset'
 print(','.join(map(str, sorted(random.Random(0).sample(sorted(p['prompt_idx'] for p in pts), 15)))))" 2> "$LOG/4_prompts.err" | tail -1)
     log "Thought Anchors prompts (seeded 15 of the eligible): $PROMPTS"
     judge_up
-    trap 'kill $JUDGE 2> /dev/null || true' EXIT
+    trap 'pkill -f "vllm serve openai/gpt-oss-20b --port 800[01]" || true' EXIT
 fi
 
 if stage 4; then
@@ -68,7 +63,10 @@ if stage 4; then
     GEN=$!
     until grep -q "CoTs to generate in" "$LOG/4_ta_gen.log"; do kill -0 $GEN || { log "TA generation died"; exit 1; }; sleep 10; done
     RUN=$(grep -oE "CoTs to generate in \S+" "$LOG/4_ta_gen.log" | awk '{print $NF}')
-    JUDGE_URLS=http://localhost:8000/v1 ENCODER_GPU=1 bash bash_scripts/ta_judge_loop.sh "$RUN:$LOG/4_ta_gen.log" \
+    (while kill -0 $GEN 2> /dev/null; do sleep 30; done  # GPU 1 becomes a second judge once generation ends
+     CUDA_VISIBLE_DEVICES=1 uv run vllm serve openai/gpt-oss-20b --port 8001 --max-model-len 8192 --max-num-seqs 1024 \
+         > "$LOG/judge_gpu1.log" 2>&1) &
+    JUDGE_URLS=http://localhost:8000/v1,http://localhost:8001/v1 ENCODER_GPU=0 bash bash_scripts/ta_judge_loop.sh "$RUN:$LOG/4_ta_gen.log" \
         > "$LOG/4_ta_judge_loop.log" 2>&1
     wait $GEN
     log "Thought Anchors done: $RUN/analysis"
@@ -76,13 +74,21 @@ fi
 
 if stage 5; then
     log "Stage 5: prefill"
+    pkill -f "vllm serve openai/gpt-oss-20b --port 8001" || true; sleep 10  # GPU 1 back to generation
     CUDA_VISIBLE_DEVICES=1 uv run python -m utils.heuristic.ta_prefill --model_name "$MODEL" --prompts "$PROMPTS" \
         > "$LOG/5_prefill_gen.log" 2>&1
     PRUN=$(readlink -f "results/thought_anchors_prefill/$MODEL/latest")
-    STRONGREJECT_VLLM_URLS=http://localhost:8000/v1 uv run python -m utils.heuristic.ta_score --run_dir "$PRUN" \
+    STRONGREJECT_VLLM_URLS=http://localhost:8000/v1,http://localhost:8001/v1 uv run python -m utils.heuristic.ta_score --run_dir "$PRUN" \
         --threads 512 > "$LOG/5_prefill_score.log" 2>&1
     uv run python -m utils.heuristic.ta_prefill_analyse --run_dir "$PRUN" \
         --resample_run "$(readlink -f "results/thought_anchors/$MODEL/latest")" > "$LOG/5_prefill_analyse.log" 2>&1
     log "Prefill done: $PRUN/analysis"
 fi
+pkill -f "vllm serve openai/gpt-oss-20b --port 800[01]" || true; trap - EXIT; sleep 10  # free both GPUs for the evals
+
+if stage 3; then
+    log "Stage 3: capability evals"
+    printf '\n\n' | EVAL_MODELS=$MODEL TP_SIZE=2 bash bash_scripts/run_evals.sh > "$LOG/3_evals.log" 2>&1
+fi
+
 log "All stages done"
