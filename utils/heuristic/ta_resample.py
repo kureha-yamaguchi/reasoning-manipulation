@@ -32,17 +32,23 @@ import pandas as pd
 import vllm
 from vllm import LLM, SamplingParams
 
-from utils.heuristic.resample_quadrants import extract_valid_output, find_quadrant, load_scored_csv, request_seed
+from utils.heuristic.resample_quadrants import (
+    extract_valid_output,
+    find_quadrant,
+    is_gpt_oss,
+    load_scored_csv,
+    request_seed,
+)
 from utils.heuristic.thought_anchors import chunk_spans, first_chunk
 
 BASELINES = ['scored_train_harmful_prompts_cot5_out5.csv', 'scored_orbench_extra_prompts_cot5_out5.csv',
              'scored_test_harmful_prompts_cot5_out5.csv']
-END_OF_THINKING = {'openai/gpt-oss-20b': '<|end|><|start|>assistant<|channel|>final<|message|>'}
+HARMONY_END_OF_THINKING = '<|end|><|start|>assistant<|channel|>final<|message|>'
 
 
 def cot_body(cot: str, model_name: str) -> str:
     """The reasoning text proper: the CoT up to (excluding) its end-of-thinking marker."""
-    return cot.split(END_OF_THINKING.get(model_name, '</think>'))[0]
+    return cot.split(HARMONY_END_OF_THINKING if is_gpt_oss(model_name) else '</think>')[0]
 
 
 def select_cots(point: dict, rng: random.Random) -> dict[str, int]:
@@ -126,7 +132,7 @@ def main():
         point = points[p]
         formatted = tokenizer.apply_chat_template([{'role': 'user', 'content': point['prompt']}],
                                                   add_generation_prompt=True, tokenize=False)
-        if args.model_name == 'openai/gpt-oss-20b':
+        if is_gpt_oss(args.model_name):
             formatted += '<|channel|>analysis<|message|>'
         cot = cot_body(point['cots'][c], args.model_name)
         spans = chunk_spans(cot)[:args.max_chunks]

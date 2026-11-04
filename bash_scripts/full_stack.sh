@@ -10,7 +10,8 @@
 #   4  Thought Anchors: 15 eligible prompts x 2 CoTs, 100 rollouts per sentence; generation on GPU 1
 #      while GPU 0 judges; then stance labels, taxonomy, both importance analyses
 #   5  Prefill intervention on the same prompts
-# Stages skip finished work where the underlying scripts do; START_STAGE resumes later stages.
+# Stages skip finished work where the underlying scripts do; START_STAGE resumes later stages;
+# SKIP_STAGES (space-separated) leaves stages out, e.g. Section 5 on a node with too little GPU memory.
 #
 # Usage (repo root, in tmux): MODEL=nvidia/AceReason-Nemotron-7B bash bash_scripts/full_stack.sh
 set -euo pipefail
@@ -21,7 +22,7 @@ LOG=logs/full_stack/$(basename "$MODEL")_$(date +%Y%m%d_%H%M%S)
 mkdir -p "$LOG"
 unset VLLM_PORT
 log() { echo "[$(date '+%F %T')] $*"; }
-stage() { [ "$START" -le "$1" ]; }
+stage() { [ "$START" -le "$1" ] && [[ " ${SKIP_STAGES:-} " != *" $1 "* ]]; }  # SKIP_STAGES="2 3" skips stages
 log "Full stack for $MODEL from stage $START; logs in $LOG; commit $(git rev-parse --short HEAD)"
 
 if stage 1; then

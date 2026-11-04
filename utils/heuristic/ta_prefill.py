@@ -28,7 +28,13 @@ import pandas as pd
 import vllm
 from vllm import LLM, SamplingParams
 
-from utils.heuristic.resample_quadrants import extract_valid_output, find_quadrant, load_scored_csv, request_seed
+from utils.heuristic.resample_quadrants import (
+    extract_valid_output,
+    find_quadrant,
+    is_gpt_oss,
+    load_scored_csv,
+    request_seed,
+)
 from utils.heuristic.ta_resample import BASELINES
 
 DISTILL = {  # condition -> (frame, prefix)
@@ -50,7 +56,7 @@ GPT_OSS = {  # {prompt} is replaced by the request text
 
 
 def conditions(model_name: str) -> dict[str, tuple[str, str]]:
-    return GPT_OSS if model_name == 'openai/gpt-oss-20b' else DISTILL
+    return GPT_OSS if is_gpt_oss(model_name) else DISTILL
 
 
 def main():
@@ -106,7 +112,7 @@ def main():
     for i, p in enumerate(prompts):
         formatted = tokenizer.apply_chat_template([{'role': 'user', 'content': points[p]['prompt']}],
                                                   add_generation_prompt=True, tokenize=False)
-        if args.model_name == 'openai/gpt-oss-20b':
+        if is_gpt_oss(args.model_name):
             formatted += '<|channel|>analysis<|message|>'
         for k, (cond, (_, prefix)) in enumerate(conds.items()):
             prefix = prefix.replace('{prompt}', points[p]['prompt'])

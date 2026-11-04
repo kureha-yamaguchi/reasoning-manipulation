@@ -262,6 +262,11 @@ def split_cot_into_sentences(cot: str) -> List[str]:
     return [s for s in sentences if s]
 
 
+def is_gpt_oss(model_name: str | None) -> bool:
+    """gpt-oss models (any size) use the harmony format: analysis channel, then the final channel."""
+    return bool(model_name) and model_name.startswith('openai/gpt-oss')
+
+
 def get_sentences(quadrant_points, prompt_index):
     """Extract sentences from specified quadrant point."""
     sentences = []
@@ -283,7 +288,7 @@ def extract_valid_output(generated_text: str, model_name: str = None) -> str | N
     Returns:
         The text after the thinking delimiter, or None if delimiter not found
     """
-    if model_name == "openai/gpt-oss-20b":
+    if is_gpt_oss(model_name):
         # GPT-OSS uses channel-based format
         delimiter = r'<\|end\|><\|start\|>assistant<\|channel\|>final<\|message\|>'
         pattern = rf'(.*?{delimiter})(.*)'
@@ -382,7 +387,7 @@ def save_rollouts_batched(llm, tokenizer, quadrant_points, idx, quadrants_dir, a
     if args.system_date:
         formatted_prompt = re.sub(r'Current date: \d{4}-\d{2}-\d{2}', f'Current date: {args.system_date}',
                                   formatted_prompt)
-    if args.model_name == "openai/gpt-oss-20b":
+    if is_gpt_oss(args.model_name):
         formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
 
     # (cot_number, sentence_idx) -> combined thread, is_last_sentence
@@ -391,7 +396,7 @@ def save_rollouts_batched(llm, tokenizer, quadrant_points, idx, quadrants_dir, a
         if os.path.exists(cot_output_path(quadrants_dir, idx, cot_number, args.repetitions)):
             print(f"Skipping prompt {idx} cot {cot_number}: file exists")
             continue
-        if args.model_name == "openai/gpt-oss-20b":
+        if is_gpt_oss(args.model_name):
             sentences = sentences + ["<|end|><|start|>assistant<|channel|>final<|message|>"]
         for i in range(len(sentences) + 1):
             slots[(cot_number, i)] = (formatted_prompt + "".join(sentences[:i]), i == len(sentences))
@@ -447,13 +452,13 @@ def save_rollouts(llm, tokenizer, sampling_params, quadrant_points, idx, quadran
 
     for cot_number, sentences in enumerate(sentences_list):
 
-        if args.model_name == "openai/gpt-oss-20b":
+        if is_gpt_oss(args.model_name):
             sentences.append("<|end|><|start|>assistant<|channel|>final<|message|>")
         
         chat = [{"role": "user", "content": original_prompt}]
         formatted_prompt = tokenizer.apply_chat_template(chat, add_generation_prompt=True, tokenize=False)
 
-        if args.model_name == "openai/gpt-oss-20b":
+        if is_gpt_oss(args.model_name):
             formatted_prompt = formatted_prompt + "<|channel|>analysis<|message|>"
 
         print('formatted_prompt:', repr(formatted_prompt))
