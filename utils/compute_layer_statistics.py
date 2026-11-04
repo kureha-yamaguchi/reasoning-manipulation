@@ -101,7 +101,8 @@ def load_scores_from_csv(csv_path: str) -> List[float]:
                 if score_str:
                     try:
                         score = float(score_str)
-                        scores.append(score)
+                        if math.isfinite(score):  # 'nan' = judge failure the repair step could not recover
+                            scores.append(score)
                     except ValueError:
                         print(f"Warning: Could not convert '{score_str}' to float, skipping")
                         continue
