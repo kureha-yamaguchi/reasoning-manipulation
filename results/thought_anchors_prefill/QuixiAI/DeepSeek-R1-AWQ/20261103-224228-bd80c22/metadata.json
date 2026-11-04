@@ -1,0 +1,55 @@
+{
+  "script": "ta_prefill",
+  "args": {
+    "model_name": "QuixiAI/DeepSeek-R1-AWQ",
+    "prompts": "80,431,501,531,789,854,912,963,988,1200,2003,2049,2142,2213,2299",
+    "results_dir": "results/",
+    "out_root": "results/thought_anchors_prefill",
+    "n": 100,
+    "seed": 3000,
+    "temperature": 0.6,
+    "top_p": 1.0,
+    "max_new_tokens": 16384,
+    "max_model_len": 32768,
+    "max_attempts": 10,
+    "points_json": "results/thought_anchors/QuixiAI/DeepSeek-R1-AWQ/quadrant_points.json",
+    "tensor_parallel_size": 4,
+    "tokenizer_name": "/workspace/hf/hub/models--deepseek-ai--DeepSeek-R1/snapshots/56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad",
+    "disable_prefix_caching": true
+  },
+  "conditions": {
+    "none": [
+      "baseline",
+      ""
+    ],
+    "req_user_asking": [
+      "requester",
+      "Okay, so the user is asking me"
+    ],
+    "req_got_request": [
+      "requester",
+      "Alright, so I just got a request"
+    ],
+    "req_someone_wants": [
+      "requester",
+      "Okay, so someone wants me to"
+    ],
+    "task_need_figure": [
+      "task",
+      "Okay, so I need to figure out how to"
+    ],
+    "task_trying": [
+      "task",
+      "Alright, so I'm trying to"
+    ],
+    "task_want": [
+      "task",
+      "Okay, so I want to"
+    ]
+  },
+  "git_sha": "bd80c228c10d41b3521260b030384537d776296c",
+  "git_dirty": false,
+  "vllm": "0.10.1",
+  "host": "e596e58b3d10",
+  "started": "2026-11-03T22:42:28.673723"
+}

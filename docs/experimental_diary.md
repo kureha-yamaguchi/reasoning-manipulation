@@ -519,3 +519,21 @@ volume took 24 min). (2) **Orphan pod**: my first launcher (12:29) deployed pod 
 before I killed it to widen the GPU list; it idled 11.5 h unnoticed (~$245). Found in the post-run account
 audit and terminated. Cost: run ≈ $236 + orphan ≈ $245 (balance $1,645 → $1,161). Guard added:
 `runpod_pod launch` refuses if a pod with the same name is already running.
+
+### R1 (teacher, AWQ) Thought Anchors results (2026-11-04, scored/labelled on ARC 05:26–11:07)
+| | Llama-8B | Qwen-7B | **R1 (AWQ)** | gpt-oss-20b |
+|---|---|---|---|---|
+| share of CF importance at sentence 0 | 0.74 | 0.72 | **0.55** [0.44, 0.66] | 0.14 |
+| CoTs with sentence 0 load-bearing | 93% | 90% | **77%** | 17% |
+| lock-in median sentence (ε 0.1 / 0.2) | 1.5 / 1 | 1.5 / 1 | **12 / 3.5** | 4 / 2.5 |
+| lock-in mean fraction of CoT (ε 0.1) | 0.20 | 0.25 | **0.42** | 0.27 |
+| opening-stance share of CoT effect (mediation) | 0.47 | 0.48 | **0.37** [0.25, 0.49] | 0.03 |
+| prefill requester − task | +0.53 | +0.50 | **+0.45** [0.37, 0.54], 15/15 | (verdict +0.72) |
+- The teacher shares the students' mechanism (opening stance is the main anchor; forcing it moves refusal
+  ~0.45, 15/15 prompts) but less exclusively: more importance after sentence 0, and the decision stays
+  reversible much longer (median lock-in sentence 12 vs 1.5). Distillation appears to *compress* the
+  teacher's decision into the opening. Prefill asymmetry: for R1 task framing lowers refusal more (−0.25 vs
+  baseline) and requester framing raises it less (+0.20) than for the distills.
+- Caveats: R1 is 4-bit AWQ (prefix caching off); R1 CoTs shorter (median 26 sentences); N = 15 prompts.
+Outputs: figures/ta_lockin_with_r1.pdf, results/thought_anchors/{lockin_with_r1,mediation_with_r1,
+prefill_summary}, R1 run analysis/, viewer at https://robots.ox.ac.uk/~be/anchors/ (4 models).
