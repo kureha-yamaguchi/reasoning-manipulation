@@ -150,7 +150,7 @@ free_gpus() {
 start_vllm_server() {
     echo "Starting vLLM server for ${VLLM_MODEL}..."
     VLLM_LOG="${LOG_DIR}/vllm_${TIMESTAMP}.log"
-    python -m vllm.entrypoints.openai.api_server \
+    uv run python -m vllm.entrypoints.openai.api_server \
         --model "$VLLM_MODEL" \
         --port "$VLLM_PORT" \
         --tensor-parallel-size "$VLLM_TP_SIZE" \
