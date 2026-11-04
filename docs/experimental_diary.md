@@ -507,3 +507,15 @@ over the 15 prompts per model.
 - Caveats: η²_CoT ≈ 1 by construction on quadrant prompts (within-CoT SD < 0.03), so share ≈ η²_open here;
   stance-label error (~15–20%) attenuates η²_open, so ~0.47 is closer to a lower bound; the rest is
   within-stance wording ("how someone might" vs "how to") plus later sentences.
+
+### R1 (AWQ) Thought Anchors + prefill on RunPod — done (2026-11-03 12:45 → 23:54)
+Pod 6zt2rd3k4egun8 (4xH200, $21.16/h). 104,400/104,400 TA rollouts (100 per chunk, 30 CoTs, 0 BOS-degenerate),
+10,500 prefill rollouts (100 per prompt × condition); local copy identical to the pod tarball
+(logs/runpod/20261103_191044/r1_results.tgz); pod terminated 00:05. Incidents: (1) Ben's ~/.ssh resync at
+15:42 replaced the key the pod trusted → no SSH; adding the key to the account did not reach the running pod;
+fixed by setting the pod's PUBLIC_KEY env (old + new key) via the REST API, which restarts the container
+(volume kept; the in-flight CoT redone; SSH port changed 10834 → 10824; weights re-read from the network
+volume took 24 min). (2) **Orphan pod**: my first launcher (12:29) deployed pod 8jz48p55j32zpv at 12:31 just
+before I killed it to widen the GPU list; it idled 11.5 h unnoticed (~$245). Found in the post-run account
+audit and terminated. Cost: run ≈ $236 + orphan ≈ $245 (balance $1,645 → $1,161). Guard added:
+`runpod_pod launch` refuses if a pod with the same name is already running.

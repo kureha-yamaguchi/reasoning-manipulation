@@ -16,6 +16,7 @@ uv run python -m utils.runpod_pod terminate --state S     # deletes the pod and 
 import argparse
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -92,6 +93,13 @@ def main():
             print(f'{time.strftime("%F %T")} {args.count}x stock {stock}', flush=True)
             time.sleep(args.poll_s)
     if args.cmd == 'launch':
+        # Refuse to start a second pod with the same name: a launcher killed mid-deploy can leave a running pod
+        # behind (2026-11-03: an orphan 4xH200 pod idled 11.5 h, ~$245, unnoticed).
+        live = [q for q in gql('query { myself { pods { id name desiredStatus } } }')['myself']['pods']
+                if q['name'] == args.name and q['desiredStatus'] == 'RUNNING']
+        if live:
+            sys.exit(f'A pod named {args.name!r} is already running: {[q["id"] for q in live]}. Adopt it '
+                     '(POD_STATE=...) or terminate it before launching another.')
         with open(os.path.expanduser('~/.ssh/id_ed25519.pub')) as f:
             public_key = f.read().strip()
         deadline = time.time() + args.max_wait_h * 3600
