@@ -1,0 +1,180 @@
+{
+  "script": "ta_resample",
+  "args": {
+    "model_name": "openai/gpt-oss-120b",
+    "prompts": "31,411,446,578,646,679,762,1132,1144,1278,1545,1937,2121,2299,2304",
+    "results_dir": "results/",
+    "out_root": "results/thought_anchors",
+    "run_dir": null,
+    "n": 100,
+    "seed": 2000,
+    "temperature": 0.6,
+    "top_p": 1.0,
+    "max_new_tokens": 16384,
+    "max_model_len": 32768,
+    "max_attempts": 10,
+    "points_json": null,
+    "tensor_parallel_size": 1,
+    "tokenizer_name": null,
+    "disable_prefix_caching": false,
+    "max_chunks": null
+  },
+  "git_sha": "a46d22c569d57063883c39c45b9d6df37fb812f6",
+  "git_dirty": false,
+  "vllm": "0.10.1",
+  "host": "htc-g059",
+  "started": "2026-11-05T01:47:49.437475",
+  "selection": {
+    "31": {
+      "refusing": 2,
+      "complying": 0
+    },
+    "411": {
+      "refusing": 3,
+      "complying": 1
+    },
+    "446": {
+      "refusing": 1,
+      "complying": 4
+    },
+    "578": {
+      "refusing": 1,
+      "complying": 2
+    },
+    "646": {
+      "refusing": 0,
+      "complying": 1
+    },
+    "679": {
+      "refusing": 3,
+      "complying": 4
+    },
+    "762": {
+      "refusing": 4,
+      "complying": 3
+    },
+    "1132": {
+      "refusing": 4,
+      "complying": 0
+    },
+    "1144": {
+      "refusing": 3,
+      "complying": 2
+    },
+    "1278": {
+      "refusing": 0,
+      "complying": 4
+    },
+    "1545": {
+      "refusing": 0,
+      "complying": 2
+    },
+    "1937": {
+      "refusing": 3,
+      "complying": 0
+    },
+    "2121": {
+      "refusing": 2,
+      "complying": 4
+    },
+    "2299": {
+      "refusing": 0,
+      "complying": 4
+    },
+    "2304": {
+      "refusing": 2,
+      "complying": 3
+    }
+  },
+  "resumed": [
+    {
+      "script": "ta_resample",
+      "args": {
+        "model_name": "openai/gpt-oss-120b",
+        "prompts": "31,411,446,578,646,679,762,1132,1144,1278,1545,1937,2121,2299,2304",
+        "results_dir": "results/",
+        "out_root": "results/thought_anchors",
+        "run_dir": "results/thought_anchors/openai/gpt-oss-120b/20261105-014743-a46d22c",
+        "n": 100,
+        "seed": 2000,
+        "temperature": 0.6,
+        "top_p": 1.0,
+        "max_new_tokens": 16384,
+        "max_model_len": 32768,
+        "max_attempts": 10,
+        "points_json": null,
+        "tensor_parallel_size": 2,
+        "tokenizer_name": null,
+        "disable_prefix_caching": false,
+        "max_chunks": null
+      },
+      "git_sha": "f9597e03fbdd5e25c858f7a4ebca0f8b7ca58da6",
+      "git_dirty": false,
+      "vllm": "0.10.1",
+      "host": "htc-g059",
+      "started": "2026-11-05T08:36:08.788045",
+      "selection": {
+        "31": {
+          "refusing": 2,
+          "complying": 0
+        },
+        "411": {
+          "refusing": 3,
+          "complying": 1
+        },
+        "446": {
+          "refusing": 1,
+          "complying": 4
+        },
+        "578": {
+          "refusing": 1,
+          "complying": 2
+        },
+        "646": {
+          "refusing": 0,
+          "complying": 1
+        },
+        "679": {
+          "refusing": 3,
+          "complying": 4
+        },
+        "762": {
+          "refusing": 4,
+          "complying": 3
+        },
+        "1132": {
+          "refusing": 4,
+          "complying": 0
+        },
+        "1144": {
+          "refusing": 3,
+          "complying": 2
+        },
+        "1278": {
+          "refusing": 0,
+          "complying": 4
+        },
+        "1545": {
+          "refusing": 0,
+          "complying": 2
+        },
+        "1937": {
+          "refusing": 3,
+          "complying": 0
+        },
+        "2121": {
+          "refusing": 2,
+          "complying": 4
+        },
+        "2299": {
+          "refusing": 0,
+          "complying": 4
+        },
+        "2304": {
+          "refusing": 2,
+          "complying": 3
+        }
+      }
+    }
+  ]
+}

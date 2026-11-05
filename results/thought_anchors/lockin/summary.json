@@ -308,5 +308,67 @@
       3.0,
       6.0
     ]
+  },
+  "gpt-oss-120b": {
+    "run": "results/thought_anchors/openai/gpt-oss-120b/20261105-014743-a46d22c",
+    "n_cots": 30,
+    "n_prompts": 15,
+    "median_chunks": 15.0,
+    "share_cf_chunk0": [
+      0.08370162762465594,
+      0.005228753920105296,
+      0.19236176277907072
+    ],
+    "n_load_bearing_per_cot": [
+      1.3,
+      0.9333333333333333,
+      1.6666666666666667
+    ],
+    "load_bearing_frac_quartiles": [
+      0.071,
+      0.222,
+      0.37
+    ],
+    "load_bearing_at_chunk0": 0.16666666666666666,
+    "lockin_idx_median_eps0.1": [
+      5.0,
+      3.0,
+      6.0
+    ],
+    "lockin_frac_mean_eps0.1": [
+      0.3859320350010888,
+      0.3100806232846674,
+      0.46280192746180604
+    ],
+    "lockin_idx_median_eps0.05": [
+      5.0,
+      3.5,
+      7.0
+    ],
+    "lockin_frac_mean_eps0.05": [
+      0.4404654645345183,
+      0.3475813896562138,
+      0.5392061405139571
+    ],
+    "lockin_idx_median_eps0.2": [
+      3.5,
+      3.0,
+      4.5
+    ],
+    "lockin_frac_mean_eps0.2": [
+      0.30219843976237837,
+      0.24663380962837483,
+      0.3624423221912831
+    ],
+    "lockin_idx_median_eps0.1_refusing": [
+      3.0,
+      1.0,
+      9.0
+    ],
+    "lockin_idx_median_eps0.1_complying": [
+      5.0,
+      3.0,
+      6.0
+    ]
   }
 }

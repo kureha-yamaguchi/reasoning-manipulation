@@ -1,0 +1,11 @@
+{
+  "run_dir": "results/thought_anchors/openai/gpt-oss-120b/20261105-014743-a46d22c",
+  "threshold": 0.8,
+  "alpha": 1.0,
+  "n_boot": 1000,
+  "seed": 0,
+  "equivalence": "cosine",
+  "min_n": 10,
+  "encoder": "sentence-transformers/all-MiniLM-L6-v2",
+  "encoder_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+}

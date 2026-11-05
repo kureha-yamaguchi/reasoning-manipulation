@@ -573,8 +573,7 @@ Same protocol as the others (15 seeded eligible prompts × 2 CoTs, 100 rollouts/
   than in its base (+0.60 vs +0.50; requester +0.48 vs baseline). It slightly dilutes the opening's share
   of importance (0.61 vs 0.72) and its mediation share (0.36 vs 0.48), moving AceReason towards the teacher
   R1 on those, while lock-in stays early (median sentence 2.5). Overlapping CIs throughout; N = 15.
-Figures: figures/ta_lockin_with_acereason.pdf, figures/ta_prefill_with_acereason.pdf;
-results/thought_anchors/{lockin,mediation}_with_acereason.
+Figures: figures/ta_lockin.pdf, figures/ta_prefill.pdf; results/thought_anchors/{lockin,mediation}/ (canonical, all models).
 
 Incidents (2026-11-05): (1) gpt-oss-120b TA generation could not start on one 80 GB H100 (KV cache −2.19
 GiB) at 01:54; the judge loop waited silently until 08:30 (~6.5 h lost) → rerun with the model on both GPUs
@@ -586,4 +585,31 @@ Per Ben: one canonical file per figure/table, regenerated with all current model
 Now: figures/{std_overlay_rep10_bins30,std_overlay_rep10_sentences25,fig3_quadrant_panels}.pdf and
 results/commitment/commitment_summary.json with 6 models (incl. gpt-oss-120b stage 1: 61 eligible prompts, first entry
 0.159 [0.142, 0.177], last exit 0.292 [0.257, 0.327] at delta 0.2); figures/{ta_lockin,ta_prefill}.pdf and
-results/thought_anchors/{lockin,mediation}/ with the 5 models that have Thought Anchors runs. Variants removed.
+results/thought_anchors/{lockin,mediation}/ with all 6 Thought Anchors models (gpt-oss-120b added 14:05). Variants removed.
+Prefill figure: scatter legend moved below the panel (it overlapped a tick label and points).
+
+### gpt-oss-120b Thought Anchors + prefill (2026-11-05; ARC htc-g059, TP=2; gen 08:34→10:40, judged →13:32, prefill →13:58)
+Same protocol (15 seeded eligible prompts × 2 CoTs, 100 rollouts/sentence, stance v3, min_n 10) via
+bash_scripts/ta_stage_tp.sh. TA run results/thought_anchors/openai/gpt-oss-120b/20261105-014743-a46d22c;
+prefill results/thought_anchors_prefill/openai/gpt-oss-120b/20261105-133322-9d3ddb4.
+| | gpt-oss-20b | **gpt-oss-120b** |
+|---|---|---|
+| share of CF importance at sentence 0 | 0.14 [0.02, 0.27] | **0.08** [0.01, 0.19] |
+| CoTs with sentence 0 load-bearing | 17% | **17%** |
+| lock-in (ε = 0.1) median sentence; mean fraction | 4; 0.27 | **5 [3, 6]; 0.39** [0.31, 0.46] |
+| opening-stance share of CoT effect (adj.) | 0.03 | **0.01** [0.00, 0.03] |
+| prefill disallowed − not disallowed | +0.72 | **+0.74** [0.63, 0.84], 15/15, sign p = 6e-5 |
+| prefill opening only − baseline; check-policy − opening only | | +0.08 [0.02, 0.16]; −0.07 [−0.19, 0.06] |
+- Replicates gpt-oss-20b at 6× scale: refusal is not set by the opening perspective but a few sentences
+  in, at the policy verdict. Highest mean CF importance by taxonomy: policy_ethics 0.20 (n = 100),
+  harm_recognition 0.19 (20b: benign_reframing/harm_recognition/intent_assessment 0.13–0.14, policy_ethics 0.06).
+  Forcing the verdict sentence nearly fixes the outcome (disallowed → P(refuse) ≈ 0.97; not disallowed → ≈ 0.2).
+  Lock-in is slightly later than 20b (fraction 0.39 vs 0.27; CIs touch). N = 15 prompts.
+
+### AceReason-Nemotron-7B capability evals complete (2026-11-05 14:08, allocation 9269994 / htc-g055)
+| | AIME-2025 | GPQA-Diamond | BBEH-mini |
+|---|---|---|---|
+| base | 0.600 | 0.521 | 0.141 |
+| CoT direction ablated (layer 23) | 0.433 | 0.479 | 0.102 |
+Single eval run each (temperature 0.6); no paired test yet. An earlier incomplete BBEH-mini log
+(12:01) sits beside the complete one (13:09, 460/460) in results/.../ortho_model_cot_layer_23/eval_results/.

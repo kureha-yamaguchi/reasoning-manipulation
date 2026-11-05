@@ -85,7 +85,7 @@ def main():
         col = MODEL_COLOURS.get(model_key(next(p for n, p, _ in runs if n == name)), NEUTRAL)
         r = both.corr().iloc[0, 1]
         ax.scatter(both['natural'], both['forced'], s=18, color=col, alpha=0.8, linewidths=0,
-                   label=f'{name.replace("R1-Distill-", "").replace(" (AWQ)", "")}: r = {r:.2f}')
+                   label=f'{name.replace("R1-Distill-", "").replace(" (AWQ)", "").replace("-Nemotron", "")}: r = {r:.2f}')
     ax.plot([-0.2, 1], [-0.2, 1], color=NEUTRAL, linewidth=0.8, linestyle='--')
     ax.set_xlim(-0.25, 1.05)
     ax.set_ylim(-0.25, 1.05)
@@ -94,7 +94,7 @@ def main():
     ax.set_xlabel('natural openings:\nΔP(refuse), requester − task')
     ax.set_ylabel('forced openings:\nΔP(refuse), requester − task')
     ax.set_title('forced vs natural (per prompt)', fontsize=9)
-    ax.legend(frameon=False, fontsize=7, loc='lower right', handletextpad=0.2, borderaxespad=0.2)
+    ax.legend(frameon=False, fontsize=7, loc='upper center', bbox_to_anchor=(0.5, -0.3), handletextpad=0.2)  # below: no overlap
     ax.spines[['top', 'right']].set_visible(False)
     fig.tight_layout()
     os.makedirs(os.path.dirname(args.fig), exist_ok=True)
