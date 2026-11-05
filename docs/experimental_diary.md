@@ -580,3 +580,10 @@ Incidents (2026-11-05): (1) gpt-oss-120b TA generation could not start on one 80
 GiB) at 01:54; the judge loop waited silently until 08:30 (~6.5 h lost) → rerun with the model on both GPUs
 (bash_scripts/ta_stage_tp.sh, TP=2, judges afterwards; KV 28 GiB/GPU). (2) run_pipeline left its judge
 running after Section 5, so the AceReason eval server could not start (~30 min) → killed, evals restarted.
+
+### Canonical outputs (2026-11-05)
+Per Ben: one canonical file per figure/table, regenerated with all current models (no *_with_<model> copies).
+Now: figures/{std_overlay_rep10_bins30,std_overlay_rep10_sentences25,fig3_quadrant_panels}.pdf and
+results/commitment/commitment_summary.json with 6 models (incl. gpt-oss-120b stage 1: 61 eligible prompts, first entry
+0.159 [0.142, 0.177], last exit 0.292 [0.257, 0.327] at delta 0.2); figures/{ta_lockin,ta_prefill}.pdf and
+results/thought_anchors/{lockin,mediation}/ with the 5 models that have Thought Anchors runs. Variants removed.

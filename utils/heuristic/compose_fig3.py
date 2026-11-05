@@ -27,7 +27,7 @@ from utils.heuristic.plot_quadrant_matrix import (
 SHORT = {'deepseek-ai/DeepSeek-R1-Distill-Llama-8B': 'R1-Distill-Llama-8B',
          'deepseek-ai/DeepSeek-R1-Distill-Qwen-7B': 'R1-Distill-Qwen-7B',
          'nvidia/AceReason-Nemotron-7B': 'AceReason-Nemotron-7B', 'QuixiAI/DeepSeek-R1-AWQ': 'DeepSeek-R1 (AWQ)',
-         'openai/gpt-oss-20b': 'gpt-oss-20b'}
+         'openai/gpt-oss-20b': 'gpt-oss-20b', 'openai/gpt-oss-120b': 'gpt-oss-120b'}
 
 
 def main():

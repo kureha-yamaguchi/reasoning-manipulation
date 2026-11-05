@@ -9,10 +9,10 @@ LL=results/thought_anchors/deepseek-ai/DeepSeek-R1-Distill-Llama-8B/20261102-123
 QW=results/thought_anchors/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B/20261102-153233-45cfcc6
 GO=results/thought_anchors/openai/gpt-oss-20b/$(basename "$(readlink -f results/thought_anchors/openai/gpt-oss-20b/latest)")
 uv run python -m utils.heuristic.ta_lockin --runs "R1-Distill-Llama-8B=$LL" "R1-Distill-Qwen-7B=$QW" \
-    "DeepSeek-R1 (AWQ)=$R1" "gpt-oss-20b=$GO" --fig figures/ta_lockin_with_r1.pdf --out results/thought_anchors/lockin_with_r1
+    "DeepSeek-R1 (AWQ)=$R1" "gpt-oss-20b=$GO"
 uv run python -m utils.heuristic.ta_mediation --runs "R1-Distill-Llama-8B=$LL:deepseek-ai/DeepSeek-R1-Distill-Llama-8B" \
     "R1-Distill-Qwen-7B=$QW:deepseek-ai/DeepSeek-R1-Distill-Qwen-7B" "DeepSeek-R1 (AWQ)=$R1:QuixiAI/DeepSeek-R1-AWQ" \
-    "gpt-oss-20b=$GO:openai/gpt-oss-20b" --out results/thought_anchors/mediation_with_r1
+    "gpt-oss-20b=$GO:openai/gpt-oss-20b"
 uv run python - <<'PY'
 import glob, json, os
 rows = []
