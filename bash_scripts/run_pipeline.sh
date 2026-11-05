@@ -169,6 +169,11 @@ start_vllm_server() {
     exit 1
 }
 
+stop_own_vllm_server() {  # only the judge this script started (free_gpus would kill every GPU process)
+    pkill -f "vllm.entrypoints.openai.api_server --model ${VLLM_MODEL} --port ${VLLM_PORT}" 2>/dev/null || true
+}
+trap stop_own_vllm_server EXIT
+
 ensure_vllm_server() {
     if curl -s "http://localhost:${VLLM_PORT}/health" > /dev/null 2>&1; then
         echo "vLLM server already running."

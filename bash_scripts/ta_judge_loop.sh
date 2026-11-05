@@ -18,6 +18,9 @@ while true; do
         pending=1
         [ -d "$RUN" ] || continue
         finished=0; pgrep -f "[t]a_resample.*$(jq -r .args.model_name "$RUN/metadata.json")" > /dev/null || finished=1
+        if [ $finished = 1 ] && ! grep -q "Saved" "$GEN" 2> /dev/null; then  # generator died before saving anything
+            log "ERROR: generation for $RUN exited without output (see $GEN)"; exit 1
+        fi
         grep -q "Saved" "$GEN" 2>/dev/null || continue
         log "Scoring $RUN"
         STRONGREJECT_VLLM_URLS=$URLS uv run python -m utils.heuristic.ta_score --run_dir "$RUN" --threads 512 \
