@@ -1,0 +1,55 @@
+{
+  "script": "ta_prefill",
+  "args": {
+    "model_name": "nvidia/AceReason-Nemotron-7B",
+    "prompts": "119,317,458,588,663,749,763,837,879,973,1048,1077,1310,2241,2254",
+    "results_dir": "results/",
+    "out_root": "results/thought_anchors_prefill",
+    "n": 100,
+    "seed": 3000,
+    "temperature": 0.6,
+    "top_p": 1.0,
+    "max_new_tokens": 16384,
+    "max_model_len": 32768,
+    "max_attempts": 10,
+    "points_json": null,
+    "tensor_parallel_size": 1,
+    "tokenizer_name": null,
+    "disable_prefix_caching": false
+  },
+  "conditions": {
+    "none": [
+      "baseline",
+      ""
+    ],
+    "req_user_asking": [
+      "requester",
+      "Okay, so the user is asking me"
+    ],
+    "req_got_request": [
+      "requester",
+      "Alright, so I just got a request"
+    ],
+    "req_someone_wants": [
+      "requester",
+      "Okay, so someone wants me to"
+    ],
+    "task_need_figure": [
+      "task",
+      "Okay, so I need to figure out how to"
+    ],
+    "task_trying": [
+      "task",
+      "Alright, so I'm trying to"
+    ],
+    "task_want": [
+      "task",
+      "Okay, so I want to"
+    ]
+  },
+  "git_sha": "a46d22c569d57063883c39c45b9d6df37fb812f6",
+  "git_dirty": false,
+  "vllm": "0.10.1",
+  "host": "htc-g058",
+  "started": "2026-11-05T07:36:00.553019"
+}

@@ -559,3 +559,24 @@ Figures: figures/std_overlay_rep10_{bins30,sentences25}_with_acereason.pdf, figu
 results/commitment/commitment_summary_with_acereason.json. Pipeline fixes en route: run_pipeline judge via
 `uv run` and VLLM_TP_SIZE=1 on 2-GPU nodes; compute_layer_statistics skips NaN scores. Section 5 selected
 layers: CoT direction 23, end-of-prompt 17 (R1-Distill-Qwen-7B: 17 / 21).
+
+### AceReason-Nemotron-7B Thought Anchors + prefill (2026-11-05; TA 21:27→07:32, prefill →08:13)
+Same protocol as the others (15 seeded eligible prompts × 2 CoTs, 100 rollouts/sentence, stance v3).
+| | Qwen-7B (pre-RL) | **AceReason (post-RL)** | R1 | gpt-oss-20b |
+|---|---|---|---|---|
+| share of CF importance at sentence 0 | 0.72 | **0.61** [0.45, 0.77] | 0.55 | 0.14 |
+| CoTs with sentence 0 load-bearing | 90% | **80%** | 77% | 17% |
+| lock-in median sentence; mean fraction | 1.5; 0.25 | **2.5; 0.24** | 12; 0.42 | 4; 0.27 |
+| opening-stance share of CoT effect | 0.48 | **0.36** [0.22, 0.51] | 0.37 | 0.03 |
+| prefill requester − task | +0.50 | **+0.60** [0.52, 0.68], 15/15 | +0.45 | (verdict +0.72) |
+- RL (math/code) keeps the first-sentence perspective mechanism: forcing the opening moves refusal *more*
+  than in its base (+0.60 vs +0.50; requester +0.48 vs baseline). It slightly dilutes the opening's share
+  of importance (0.61 vs 0.72) and its mediation share (0.36 vs 0.48), moving AceReason towards the teacher
+  R1 on those, while lock-in stays early (median sentence 2.5). Overlapping CIs throughout; N = 15.
+Figures: figures/ta_lockin_with_acereason.pdf, figures/ta_prefill_with_acereason.pdf;
+results/thought_anchors/{lockin,mediation}_with_acereason.
+
+Incidents (2026-11-05): (1) gpt-oss-120b TA generation could not start on one 80 GB H100 (KV cache −2.19
+GiB) at 01:54; the judge loop waited silently until 08:30 (~6.5 h lost) → rerun with the model on both GPUs
+(bash_scripts/ta_stage_tp.sh, TP=2, judges afterwards; KV 28 GiB/GPU). (2) run_pipeline left its judge
+running after Section 5, so the AceReason eval server could not start (~30 min) → killed, evals restarted.
